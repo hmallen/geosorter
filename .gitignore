@@ -22,3 +22,6 @@ __pycache__/
 *.db-shm
 *.sqlite
 *.sqlite3
+
+# Local-only real media fixtures (privacy: real GPS; size: large MP4s)
+tests/fixtures/media/local/
