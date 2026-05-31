@@ -19,6 +19,8 @@ import click
 
 from . import __version__, config, db, geonames_loader
 from .metadata import ExifToolVersionError, MetadataExtractor
+from .organize import BatchReport, run_organize
+from .organize import verify_library as _verify_library
 
 _CONFIG_OPTION = click.option(
     "--config",
@@ -123,6 +125,72 @@ def extract_test(path: Path) -> None:
     except ExifToolVersionError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(asdict(metadata), indent=2))
+
+
+def _render_report(report: BatchReport, dry_run: bool) -> None:
+    if not report.confirmed:
+        click.echo("Aborted: first-run confirmation declined. Nothing was moved.")
+        return
+    click.echo("DRY RUN — nothing moved" if dry_run else f"Batch {report.batch_id}")
+    click.echo(f"  organized:          {report.organized}")
+    for place, n in sorted(report.per_place.items()):
+        click.echo(f"      - {place}: {n}")
+    click.echo(f"  quarantined:        {report.quarantined}")
+    click.echo(f"  companions:         {report.companions}")
+    click.echo(f"  duplicates skipped: {report.duplicates_skipped}")
+    click.echo(
+        f"  codec: h264={report.codec['h264']} "
+        f"h265={report.codec['h265']} unknown={report.codec['unknown']}"
+    )
+    if report.tz_ambiguous:
+        click.echo(
+            f"  tz-ambiguous (DST fold): {report.tz_ambiguous} "
+            "— local wall-clock occurs twice; double-check if exact time matters"
+        )
+    if not dry_run:
+        click.echo(f"  undo log: {report.organized + report.quarantined} move(s) recorded in the index DB")
+    if report.aborted:
+        click.echo("  ABORTED after a verify/IO failure — remaining sources left untouched:")
+        for failure in report.failures:
+            click.echo(f"    ! {failure}")
+        raise click.ClickException("organize aborted; see the failures above.")
+
+
+@cli.command()
+@_CONFIG_OPTION
+@click.option("--dry-run", is_flag=True, help="Preview the plan without moving or deleting anything.")
+@click.option("--yes", is_flag=True, help="Skip the first-run confirmation prompt.")
+def organize(config_path: str | None, dry_run: bool, yes: bool) -> None:
+    """Scan the inbox and file each capture into the library (crash-safe move)."""
+    cfg = config.load(config_path)
+    try:
+        report = run_organize(
+            cfg,
+            dry_run=dry_run,
+            assume_yes=yes,
+            confirm=lambda preview: click.confirm(preview + "\nProceed?", default=False),
+            progress=lambda msg: click.echo(msg),
+        )
+    except (ValueError, OSError, ExifToolVersionError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_report(report, dry_run)
+
+
+@cli.command(name="verify-library")
+@_CONFIG_OPTION
+def verify_library(config_path: str | None) -> None:
+    """Recompute library hashes to detect post-move bit-rot."""
+    cfg = config.load(config_path)
+    report = _verify_library(cfg)
+    click.echo(f"verify-library: checked {report.checked}, ok {report.ok}")
+    for missing in report.missing:
+        click.echo(f"  MISSING: {missing}")
+    for mismatch in report.mismatched:
+        click.echo(f"  MISMATCH: {mismatch}")
+    if report.missing or report.mismatched:
+        raise click.ClickException(
+            f"{len(report.missing)} missing, {len(report.mismatched)} mismatched"
+        )
 
 
 @cli.command()

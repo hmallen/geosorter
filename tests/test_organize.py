@@ -1,0 +1,389 @@
+"""Tests for the organize pipeline (scan → move → quarantine → report)."""
+
+import os
+import shutil
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+from geosorter import db, geonames_loader, move_engine, organize
+from geosorter.config import Config
+from geosorter.metadata import MediaMetadata
+
+FIXTURES = Path(__file__).parent / "fixtures" / "geonames"
+MEDIA = Path(__file__).parent / "fixtures" / "media"
+
+
+def _md(
+    *,
+    media_type="photo",
+    lat=40.015,
+    lon=-105.27,
+    gps_source="exif",
+    capture_ts_raw="2024:07:04 09:15:00",
+    capture_ts_source_tag="EXIF:DateTimeOriginal",
+    width=4000,
+    height=3000,
+    duration_s=None,
+    codec=None,
+):
+    return MediaMetadata(
+        media_type, lat, lon, gps_source, capture_ts_raw, capture_ts_source_tag,
+        width, height, duration_s, codec, None, None, None,
+    )
+
+
+class _FakeExtractor:
+    def __init__(self, mapping):
+        self._mapping = mapping
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def extract(self, path):
+        return self._mapping[Path(path).name]
+
+
+def _factory(mapping):
+    return lambda: _FakeExtractor(mapping)
+
+
+def _setup(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    library = tmp_path / "library"
+    gn_db = tmp_path / "geonames.db"
+    geonames_loader.load(gn_db, FIXTURES, spatial_index="rtree")
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=gn_db,
+        spatial_index="rtree",
+    )
+    return cfg, inbox, library
+
+
+def _add(inbox, name, data=b"capture-bytes"):
+    p = inbox / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+    return p
+
+
+def _index(cfg):
+    return db.connect(cfg.index_db_path, integrity_check=False)
+
+
+# --------------------------------------------------------------------------- #
+def test_make_batch_id_and_first_run(tmp_path):
+    assert organize.make_batch_id(datetime(2026, 5, 31, 12, 0, 0), "abc123") == "20260531T120000-abc123"
+    cfg, inbox, _ = _setup(tmp_path)
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    db.init_index_schema(conn)
+    try:
+        assert organize.is_first_run(conn) is True
+    finally:
+        conn.close()
+
+
+def test_organize_photo_end_to_end(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0001.JPG")
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert report.organized == 1
+    assert report.per_place == {"Boulder, Colorado, United States": 1}
+    assert not src.exists()  # source auto-deleted
+    conn = _index(cfg)
+    try:
+        frow = conn.execute("SELECT dest_path, status, local_date FROM files").fetchone()
+        mrow = conn.execute("SELECT status FROM moves").fetchone()
+    finally:
+        conn.close()
+    assert frow[1] == "organized"
+    assert frow[2] == "2024-07-04"
+    assert "Boulder, Colorado, United States" in frow[0]
+    assert frow[0].endswith(r"2024-07-04\2024-07-04_09-15-00_DJI_0001.JPG")
+    assert os.path.exists(organize._strip(frow[0]))
+    assert mrow[0] == "source_deleted"
+
+
+def test_organize_quarantines_no_gps(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0009.JPG")
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0009.JPG": _md(lat=None, lon=None, gps_source="none")}),
+    )
+    assert report.quarantined == 1
+    assert report.organized == 0
+    assert not src.exists()
+    conn = _index(cfg)
+    try:
+        frow = conn.execute("SELECT dest_path, status FROM files").fetchone()
+    finally:
+        conn.close()
+    assert frow[1] == "quarantined"
+    assert os.path.join("_no-gps", "2024-07-04", "DJI_0009.JPG") in organize._strip(frow[0])
+    assert os.path.exists(organize._strip(frow[0]))
+
+
+def test_dedup_skips_identical_content(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"same-content")
+    organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()}))
+    # A different file (different name/path) with identical content = re-import dup.
+    dup = _add(inbox, "DJI_0002.JPG", b"same-content")
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert report.duplicates_skipped == 1
+    assert report.organized == 0
+    assert dup.exists()  # duplicate left in the inbox, NOT deleted
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
+    finally:
+        conn.close()
+
+
+def test_collision_different_content_gets_suffix(tmp_path, monkeypatch):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"content-A")
+    _add(inbox, "DJI_0002.JPG", b"content-B")
+    fixed = str(library / "Place" / "2024-07-04" / "2024-07-04_09-15-00_X.JPG")
+    monkeypatch.setattr(organize.pathing, "compute_dest_path", lambda *a, **k: fixed)
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0001.JPG": _md(), "DJI_0002.JPG": _md()}),
+    )
+    assert report.organized == 2
+    conn = _index(cfg)
+    try:
+        dests = {r[0] for r in conn.execute("SELECT dest_path FROM files")}
+    finally:
+        conn.close()
+    assert fixed in dests
+    assert any(d.endswith("_2.JPG") for d in dests)
+    assert os.path.exists(fixed)
+
+
+def test_codec_stats_written(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0007.MP4", b"video-bytes")
+    organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory(
+            {"DJI_0007.MP4": _md(media_type="video", codec="h265")}
+        ),
+    )
+    conn = _index(cfg)
+    try:
+        row = conn.execute(
+            "SELECT h264_count, h265_count, unknown_count FROM codec_stats"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row == (0, 1, 0)
+
+
+def test_dry_run_writes_nothing(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0001.JPG")
+    report = organize.run_organize(
+        cfg, dry_run=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert report.organized == 1
+    assert src.exists()  # nothing moved
+    assert not library.exists() or not any(library.rglob("*"))  # no files written
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM moves").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM geocode_cache").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_first_run_gate_declined(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0001.JPG")
+    report = organize.run_organize(
+        cfg,
+        confirm=lambda _preview: False,
+        extractor_factory=_factory({"DJI_0001.JPG": _md()}),
+    )
+    assert report.confirmed is False
+    assert src.exists()
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM moves").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_group_atomic_companion_failure_keeps_primary(tmp_path, monkeypatch):
+    cfg, inbox, library = _setup(tmp_path)
+    primary = _add(inbox, "DJI_0003.MP4", b"video")
+    companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
+    os.utime(companion, (primary.stat().st_atime, primary.stat().st_mtime))
+
+    real = move_engine.copy_and_verify
+
+    def _fail_srt(conn, batch, sp, dp):
+        if str(sp).endswith(".SRT"):
+            return move_engine.MoveOutcome("failed", "x", None, dp, "injected")
+        return real(conn, batch, sp, dp)
+
+    monkeypatch.setattr(organize.move_engine, "copy_and_verify", _fail_srt)
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0003.MP4": _md(media_type="video", codec="h264")}),
+    )
+    assert report.aborted is True
+    assert primary.exists()  # group-atomic: primary source NOT deleted on companion failure
+    assert companion.exists()
+
+
+def test_disk_preflight_raises(tmp_path, monkeypatch):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG")
+    monkeypatch.setattr(
+        organize.shutil, "disk_usage", lambda p: shutil._ntuple_diskusage(100, 100, 0)
+    )
+    with pytest.raises(OSError):
+        organize.run_organize(
+            cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+        )
+
+
+def test_verify_library_detects_bitrot(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG")
+    organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()}))
+
+    clean = organize.verify_library(cfg)
+    assert clean.checked == 1
+    assert clean.ok == 1
+    assert clean.mismatched == []
+
+    conn = _index(cfg)
+    try:
+        dest = conn.execute("SELECT dest_path FROM files").fetchone()[0]
+    finally:
+        conn.close()
+    with open(organize._strip(dest), "wb") as fh:
+        fh.write(b"bit-rotted")
+    rotted = organize.verify_library(cfg)
+    assert rotted.mismatched == [organize._strip(dest)]
+
+
+def test_partial_delete_recovers(tmp_path, monkeypatch):
+    # Crash in Phase B *after* the companion source is deleted but *before* the
+    # primary's — the primary stays the group-done sentinel and a re-run finishes
+    # cleanly with no double-copy and no orphaned companion.
+    cfg, inbox, library = _setup(tmp_path)
+    primary = _add(inbox, "DJI_0003.MP4", b"video-bytes")
+    companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
+    os.utime(companion, (primary.stat().st_atime, primary.stat().st_mtime))
+    mapping = {"DJI_0003.MP4": _md(media_type="video", codec="h264")}
+
+    real_delete = move_engine.commit_delete
+
+    def _crash_before_primary(conn, sp, sha):
+        if str(sp).endswith(".MP4"):  # primary is deleted last → crash just before it
+            raise RuntimeError("simulated crash before primary delete")
+        real_delete(conn, sp, sha)  # companion deletes normally
+
+    monkeypatch.setattr(organize.move_engine, "commit_delete", _crash_before_primary)
+    with pytest.raises(RuntimeError):
+        organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+    assert not companion.exists()  # companion source already deleted
+    assert primary.exists()  # primary not yet deleted (crash before it)
+
+    # Recovery run with the real delete restored.
+    monkeypatch.setattr(organize.move_engine, "commit_delete", real_delete)
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+    assert report.failures == [] and report.aborted is False
+    assert not any(inbox.iterdir())  # both sources now gone
+    conn = _index(cfg)
+    try:
+        deleted = conn.execute(
+            "SELECT COUNT(*) FROM moves WHERE status='source_deleted'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert deleted == 2  # primary + companion, exactly once each
+    assert organize.verify_library(cfg).ok == 2
+
+
+# --------------------------------------------------------------------------- #
+# Real-ExifTool end-to-end (Phase 0a DoD). Uses the actual MetadataExtractor.
+# --------------------------------------------------------------------------- #
+def test_committed_mixed_footage_e2e(tmp_path):
+    # Real extractor + real move engine on committed fixtures: a GPS photo
+    # organizes, a no-GPS video quarantines.
+    cfg, inbox, library = _setup(tmp_path)
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")  # EXIF GPS -> organized
+    shutil.copy(MEDIA / "h264_tiny.mp4", inbox / "DJI_0002.MP4")  # no GPS -> quarantined
+    report = organize.run_organize(cfg, assume_yes=True)  # default MetadataExtractor
+    assert report.organized == 1
+    assert report.quarantined == 1
+    assert not (inbox / "DJI_0001.JPG").exists()
+    assert not (inbox / "DJI_0002.MP4").exists()
+    conn = _index(cfg)
+    try:
+        statuses = {
+            r[0]: r[1]
+            for r in conn.execute("SELECT media_type, status FROM files")
+        }
+        moves = conn.execute("SELECT COUNT(*) FROM moves WHERE status='source_deleted'").fetchone()[0]
+    finally:
+        conn.close()
+    assert statuses.get("photo") == "organized"
+    assert statuses.get("video") == "quarantined"
+    assert moves == 2
+
+    verify = organize.verify_library(cfg)
+    assert verify.checked == 2 and verify.ok == 2
+
+
+def test_real_dji_footage_e2e(tmp_path, local_media):
+    # Richer DoD on real gitignored originals; skips cleanly when absent.
+    # dji_h265_nogps.mp4 has no EMBEDDED GPS but its .SRT sidecar supplies it, so
+    # B2's SRT fallback recovers GPS and it organizes (not quarantines) — and the
+    # .SRT rides along as a companion.
+    gps_video = local_media("dji_h264_gps.mp4")
+    srt_video = local_media("dji_h265_nogps.mp4")
+    srt_sidecar = local_media("dji_h265_nogps.SRT")
+    cfg, inbox, library = _setup(tmp_path)
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")
+    shutil.copy(gps_video, inbox / "DJI_0002.MP4")
+    shutil.copy(srt_video, inbox / "DJI_0003.MP4")
+    shutil.copy(srt_sidecar, inbox / "DJI_0003.SRT")
+    report = organize.run_organize(cfg, assume_yes=True)
+    assert report.organized == 3  # photo + embedded-GPS video + SRT-GPS video
+    assert report.companions >= 1  # the .SRT rode along with DJI_0003.MP4
+    assert report.aborted is False and report.failures == []
+    assert not any(inbox.iterdir())  # every source moved out of the inbox
+    conn = _index(cfg)
+    try:
+        moved = conn.execute(
+            "SELECT COUNT(*) FROM moves WHERE status='source_deleted'"
+        ).fetchone()[0]
+        companions = conn.execute("SELECT COUNT(*) FROM file_companions").fetchone()[0]
+    finally:
+        conn.close()
+    assert moved == 4  # 3 primaries + 1 .SRT companion
+    assert companions >= 1
+    assert organize.verify_library(cfg).ok == 4
