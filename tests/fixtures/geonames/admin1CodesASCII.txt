@@ -1,0 +1,2 @@
+US.CO	Colorado	Colorado	5417618
+GB.ENG	England	England	6269131
