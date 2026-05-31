@@ -1,0 +1,8 @@
+
+# team-management files
+/.claude/
+.venv-team-management/
+.mcp.json
+team-management/config.json
+team-management/
+CLAUDE*
