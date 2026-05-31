@@ -9,6 +9,7 @@ dependencies = [
     "click>=8.1",
     "platformdirs>=4.0",
     "httpx>=0.27",
+    "pyexiftool>=0.5",
 ]
 
 [project.scripts]

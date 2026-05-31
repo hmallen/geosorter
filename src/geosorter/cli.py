@@ -11,11 +11,14 @@ Later tasks add ``organize`` / ``verify-library`` etc.
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict
 from pathlib import Path
 
 import click
 
 from . import __version__, config, db, geonames_loader
+from .metadata import ExifToolVersionError, MetadataExtractor
 
 _CONFIG_OPTION = click.option(
     "--config",
@@ -106,6 +109,20 @@ def bootstrap(config_path: str | None, from_dir: str | None, no_download: bool) 
         f"{counts['countries']} countries "
         f"({effective} index) -> {cfg.geonames_db_path}"
     )
+
+
+@cli.command()
+@click.argument(
+    "path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+def extract_test(path: Path) -> None:
+    """Print extracted metadata for a single media file as JSON (debug)."""
+    try:
+        with MetadataExtractor() as extractor:
+            metadata = extractor.extract(path)
+    except ExifToolVersionError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(asdict(metadata), indent=2))
 
 
 @cli.command()

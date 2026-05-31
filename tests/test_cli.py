@@ -1,13 +1,16 @@
 """CLI integration tests (click CliRunner, native tmp_path)."""
 
+import json
 import sqlite3
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from geosorter.cli import cli
 
 FIXTURES = Path(__file__).parent / "fixtures" / "geonames"
+MEDIA = Path(__file__).parent / "fixtures" / "media"
 
 
 def _write_cfg(tmp_path: Path) -> Path:
@@ -25,8 +28,18 @@ def _write_cfg(tmp_path: Path) -> Path:
 def test_help_lists_commands():
     result = CliRunner().invoke(cli, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("init-config", "bootstrap", "version"):
+    for cmd in ("init-config", "bootstrap", "version", "extract-test"):
         assert cmd in result.output
+
+
+def test_extract_test_outputs_json():
+    result = CliRunner().invoke(cli, ["extract-test", str(MEDIA / "dji_photo.jpg")])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["media_type"] == "photo"
+    assert data["gps_source"] == "exif"
+    assert data["codec"] is None
+    assert data["lat"] == pytest.approx(43.0148385)
 
 
 def test_init_config_writes_and_refuses_overwrite(tmp_path):
