@@ -1,0 +1,12 @@
+# geosorter configuration
+
+# Set these before running `geosorter organize` (added in a later task):
+# inbox_path = 'D:\drone\inbox'
+# library_root = 'Z:\DroneLibrary'
+
+# Local-disk databases (kept off library_root). Defaults shown.
+index_db_path = 'C:\Users\rndmzd\AppData\Local\geosorter\index.db'
+geonames_db_path = 'C:\Users\rndmzd\AppData\Local\geosorter\geonames.db'
+
+# Spatial index for geocoding: 'rtree' (default) or 'columnar' (fallback).
+spatial_index = 'rtree'

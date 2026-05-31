@@ -1,0 +1,4 @@
+# GeoNames.org Country Information (fixture excerpt)
+# ISO	ISO3	ISO-Numeric	fips	Country	Capital	Area	Population	Continent	tld	CurrencyCode	CurrencyName	Phone	Postal	PostalRegex	Languages	geonameid	neighbours	EquivalentFipsCode
+US	USA	840	US	United States	Washington	9629091	327167434	NA	.us	USD	Dollar	1	#####-####		en-US,es-US	6252001	CA,MX,CU
+GB	GBR	826	UK	United Kingdom	London	244820	66488991	EU	.uk	GBP	Pound	44	@# #@@		en-GB,cy-GB	2635167	IE
