@@ -22,6 +22,7 @@ from . import __version__, api, config, db, geocoder, geonames_loader
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
+from .undo import UndoReport, latest_batch_id, run_undo
 
 _CONFIG_OPTION = click.option(
     "--config",
@@ -245,6 +246,69 @@ def verify_library(config_path: str | None) -> None:
     if report.missing or report.mismatched:
         raise click.ClickException(
             f"{len(report.missing)} missing, {len(report.mismatched)} mismatched"
+        )
+
+
+@cli.command()
+@_CONFIG_OPTION
+@click.option("--batch", "batch_id", default=None, help="Batch id to undo (default: the most recent).")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
+def undo(config_path: str | None, batch_id: str | None, yes: bool) -> None:
+    """Reverse an organize batch — move its files back to the inbox (most recent by default)."""
+    cfg = config.load(config_path)
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    db.init_index_schema(conn)
+    try:
+        target = batch_id or latest_batch_id(conn)
+        if target is None:
+            click.echo("Nothing to undo: the move log is empty.")
+            return
+        n = conn.execute(
+            "SELECT COUNT(*) FROM moves WHERE batch_id=?", (target,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    if not yes and not click.confirm(
+        f"Undo batch {target} ({n} file move(s))? Files move back to the inbox.",
+        default=False,
+    ):
+        click.echo("Aborted. Nothing was moved.")
+        return
+
+    try:
+        report = run_undo(cfg, batch_id=target, progress=lambda msg: click.echo(msg))
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_undo_report(report)
+
+
+def _render_undo_report(report: UndoReport) -> None:
+    if report.nothing_to_undo:
+        click.echo("Nothing to undo: the move log is empty.")
+        return
+    click.echo(f"Undo batch {report.batch_id}")
+    click.echo(f"  restored:  {report.restored}")
+    if report.missing:
+        click.echo(f"  missing:   {report.missing} (library copy gone — could not restore)")
+    if report.conflicts:
+        click.echo(
+            f"  conflicts: {len(report.conflicts)} "
+            "(inbox path occupied by different content — skipped):"
+        )
+        for c in report.conflicts:
+            click.echo(f"    ! {c}")
+    if report.failures:
+        click.echo(
+            f"  failures:  {len(report.failures)} "
+            "(reverse-copy verify failed — left in the library):"
+        )
+        for failure in report.failures:
+            click.echo(f"    ! {failure}")
+    if report.conflicts or report.failures:
+        raise click.ClickException(
+            f"{len(report.conflicts)} conflict(s), {len(report.failures)} failure(s); "
+            "some files were not restored."
         )
 
 

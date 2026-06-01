@@ -9,6 +9,9 @@ Exposes the organized library over HTTP for the B7 frontend:
 * ``POST /api/organize`` / ``GET /api/organize/status/{id}`` /
   ``POST /api/organize/cancel/{id}`` — run the Phase 0 pipeline as a cancellable
   background job (see :mod:`geosorter.jobs`).
+* ``POST /api/undo`` / ``GET /api/undo/status/{id}`` / ``POST /api/undo/cancel/{id}``
+  — reverse the most recent organize batch as a cancellable background job (B8;
+  see :mod:`geosorter.undo`). Shares the single-worker pool with organize.
 * ``GET  /api/media/{relpath}`` — original file, range-capable (video seek),
   path-traversal-guarded.
 * ``GET  /api/thumb/{relpath}`` / ``GET /api/poster/{relpath}`` — lazily generated,
@@ -116,7 +119,24 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
 
     @app.post("/api/organize/cancel/{job_id}")
     def organize_cancel(job_id: str) -> dict:
-        if not jobs.cancel(job_id):
+        if jobs.status(job_id) is None or not jobs.cancel(job_id):
+            raise HTTPException(status_code=404, detail="unknown job")
+        return {"cancelled": True}
+
+    @app.post("/api/undo")
+    def undo_start() -> dict:
+        return {"job_id": jobs.submit_undo()}
+
+    @app.get("/api/undo/status/{job_id}")
+    def undo_status(job_id: str) -> dict:
+        state = jobs.undo_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
+
+    @app.post("/api/undo/cancel/{job_id}")
+    def undo_cancel(job_id: str) -> dict:
+        if jobs.undo_status(job_id) is None or not jobs.cancel(job_id):
             raise HTTPException(status_code=404, detail="unknown job")
         return {"cancelled": True}
 
