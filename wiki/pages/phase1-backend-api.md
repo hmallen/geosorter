@@ -1,9 +1,9 @@
 ---
 title: Phase 1 Backend — HTTP API Contract & Derived Assets
-tags: [api, fastapi, geojson, hevc, architecture, phase-1]
+tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
 created: 2026-06-01
 updated: 2026-06-01
-sources: [dji-media-organizer.md, h-api-backend.md]
+sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -37,6 +37,11 @@ frontend (and any other client) builds against.
 - `POST /api/organize` → `{job_id}`; `GET /api/organize/status/{id}` → the job
   snapshot; `POST /api/organize/cancel/{id}` → sets the cancel flag. See
   *Background jobs* below.
+- `POST /api/undo` → `{job_id}`; `GET /api/undo/status/{id}` → the undo-job
+  snapshot; `POST /api/undo/cancel/{id}` → sets the cancel flag (B8). Reverses the
+  most recent `organize` batch back to the inbox; see the
+  [undo section](crash-safe-move-engine.md) for the reverse-move model. The two
+  cancel routes are partitioned by job kind (a route 404s on the other kind's id).
 - `GET /api/media/{relpath}` → the original file via range-capable
   `starlette.responses.FileResponse` (HTTP 206 for `Range` requests → video seek,
   large-photo download). **Not** a bare `StreamingResponse`.
@@ -95,6 +100,12 @@ only — never mid-group — so the group-atomic copy→verify→delete invarian
 unprocessed captures in the inbox. This is deliberately **not** FastAPI
 `BackgroundTasks` (those have no id, status, or cancellation). API-triggered jobs
 run with `assume_yes=True` (the interactive first-run gate cannot prompt over HTTP).
+
+The B8 **undo** job (`submit_undo`/`undo_status`/`_run_undo`, `UndoJobState`) is a
+second job kind on the **same** `JobManager` — it shares that one `max_workers=1`
+executor and the cancel-event table, so an organize and an undo can never run
+concurrently against the same library/inbox. Its `cancel` is polled **between
+files**.
 
 ## Source of the GeoJSON
 
