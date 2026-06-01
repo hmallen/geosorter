@@ -135,6 +135,50 @@ def test_organize_quarantines_no_gps(tmp_path):
     assert os.path.exists(organize._strip(frow[0]))
 
 
+def test_neighbor_gps_inference_files_no_gps_capture(tmp_path):
+    # A no-GPS photo shot 5 min after a GPS photo borrows its location (within the
+    # default 30-min window); a no-GPS photo 10h later has no neighbor -> quarantine.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"gps-capture")
+    near = _add(inbox, "DJI_0002.JPG", b"near-no-gps")
+    far = _add(inbox, "DJI_0003.JPG", b"far-no-gps")
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory(
+            {
+                "DJI_0001.JPG": _md(capture_ts_raw="2024:07:04 09:15:00"),
+                "DJI_0002.JPG": _md(
+                    lat=None, lon=None, gps_source="none",
+                    capture_ts_raw="2024:07:04 09:20:00",
+                ),
+                "DJI_0003.JPG": _md(
+                    lat=None, lon=None, gps_source="none",
+                    capture_ts_raw="2024:07:04 19:15:00",
+                ),
+            }
+        ),
+    )
+    assert report.organized == 2  # the GPS photo + the inferred one
+    assert report.inferred == 1
+    assert report.quarantined == 1
+    assert not near.exists() and not far.exists()
+    conn = _index(cfg)
+    try:
+        inferred = conn.execute(
+            "SELECT lat, lon, status, gps_source FROM files WHERE filename LIKE '%DJI_0002%'"
+        ).fetchone()
+        far_row = conn.execute(
+            "SELECT status FROM files WHERE filename LIKE '%DJI_0003%'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert inferred[2] == "organized"
+    assert inferred[3] == "inferred"
+    assert inferred[0] == 40.015 and inferred[1] == -105.27
+    assert far_row[0] == "quarantined"
+
+
 def test_dedup_skips_identical_content(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
     _add(inbox, "DJI_0001.JPG", b"same-content")

@@ -42,6 +42,12 @@ spatial_index = 'rtree'
 # radius and resolve to a town instead. Raise it to favour feature names, lower
 # it to favour towns. Requires `bootstrap --features` to have loaded L/T/H data.
 # feature_proximity_km = 5.0
+
+# Neighbor-GPS inference window (minutes). A capture missing GPS but carrying a
+# timestamp borrows the location of the nearest-in-time GPS-tagged capture in the
+# same `organize` run, but only when that capture is within this many minutes.
+# Beyond the window the no-GPS file is quarantined as usual (never relocated far).
+# inference_max_gap_minutes = 30.0
 """
 
 
@@ -55,6 +61,7 @@ class Config:
     geonames_db_path: Path
     spatial_index: str = "rtree"
     feature_proximity_km: float = 5.0
+    inference_max_gap_minutes: float = 30.0
 
 
 def default_data_dir() -> Path:
@@ -111,6 +118,7 @@ def load(path: str | Path | None = None) -> Config:
         geonames_db_path=Path(str(geonames_db)).expanduser(),
         spatial_index=spatial_index,
         feature_proximity_km=float(data.get("feature_proximity_km", 5.0)),
+        inference_max_gap_minutes=float(data.get("inference_max_gap_minutes", 30.0)),
     )
 
 

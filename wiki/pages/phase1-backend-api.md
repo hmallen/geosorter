@@ -3,7 +3,7 @@ title: Phase 1 Backend — HTTP API Contract & Derived Assets
 tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
 created: 2026-06-01
 updated: 2026-06-01
-sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch]
+sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -31,9 +31,10 @@ frontend (and any other client) builds against.
   bbox/viewport endpoint — clustering is the client's job, via supercluster in
   B7). One `Point` feature per **organized, geolocated** file; quarantined/no-GPS
   files are excluded (they have no coordinate to place). Feature `properties`:
-  `id`, `filename`, `place_string`, `local_date`, `media_type`, `codec`, and
-  `path` (library-relative POSIX path used to build media URLs). Coordinates are
-  `[lon, lat]` (GeoJSON order).
+  `id`, `filename`, `place_string`, `local_date`, `media_type`, `codec`,
+  `gps_source` (`exif`|`srt`|`srt_partial`|`inferred`|`none`|null — B8; the map UI
+  styles `inferred` markers distinctly), and `path` (library-relative POSIX path
+  used to build media URLs). Coordinates are `[lon, lat]` (GeoJSON order).
 - `GET /api/inbox` → `{files, captures}` — how much is waiting for the next
   `organize` run (B8). `files` = recursive file count under `inbox_path` (what
   `organize` scans); `captures` = DJI capture-group count (`group_companions`, what

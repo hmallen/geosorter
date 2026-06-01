@@ -1,20 +1,17 @@
 import { useOrganizeJob } from '../useOrganizeJob'
+import { useUndoJob } from '../useUndoJob'
 import { useInboxCount } from '../useInboxCount'
 
 export default function Toolbar({ onDone }: { onDone: () => void }) {
   const { count, refresh } = useInboxCount()
-  // After an organize run, reload the library AND refresh the inbox badge (it should
-  // drop to empty without waiting for the next poll tick).
+  // After an organize OR undo run, reload the library AND refresh the inbox badge
+  // (organize empties the inbox, undo refills it) without waiting for the next poll.
   const afterRun = () => {
     onDone()
     refresh()
   }
   const { job, running, start } = useOrganizeJob(afterRun)
-import { useUndoJob } from '../useUndoJob'
-
-export default function Toolbar({ onDone }: { onDone: () => void }) {
-  const { job, running, start } = useOrganizeJob(onDone)
-  const { undo, undoing, startUndo } = useUndoJob(onDone)
+  const { undo, undoing, startUndo } = useUndoJob(afterRun)
   const busy = running || undoing
 
   return (
