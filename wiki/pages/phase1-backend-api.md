@@ -1,9 +1,9 @@
 ---
 title: Phase 1 Backend — HTTP API Contract & Derived Assets
-tags: [api, fastapi, geojson, hevc, architecture, phase-1]
+tags: [api, fastapi, geojson, hevc, architecture, phase-1, inbox-counter, phase-2]
 created: 2026-06-01
 updated: 2026-06-01
-sources: [dji-media-organizer.md, h-api-backend.md]
+sources: [dji-media-organizer.md, h-api-backend.md, task:m-inbox-counter]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -34,6 +34,11 @@ frontend (and any other client) builds against.
   `id`, `filename`, `place_string`, `local_date`, `media_type`, `codec`, and
   `path` (library-relative POSIX path used to build media URLs). Coordinates are
   `[lon, lat]` (GeoJSON order).
+- `GET /api/inbox` → `{files, captures}` — how much is waiting for the next
+  `organize` run (B8). `files` = recursive file count under `inbox_path` (what
+  `organize` scans); `captures` = DJI capture-group count (`group_companions`, what
+  `organize` processes). Scan-on-request (no `watchdog` observer); the frontend polls
+  it for a toolbar badge. Returns `{0, 0}` when the inbox is unset/missing/empty.
 - `POST /api/organize` → `{job_id}`; `GET /api/organize/status/{id}` → the job
   snapshot; `POST /api/organize/cancel/{id}` → sets the cancel flag. See
   *Background jobs* below.

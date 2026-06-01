@@ -54,3 +54,11 @@ and a **Frontend SPA** section — the Vite + React + TS app (`react-map-gl`/Map
 offline pmtiles deferred to Phase 2) and the client-side clustering design (whole
 `/api/library` loaded once; `supercluster.getClusters(bbox, zoom)` returns only visible
 clusters/points), with pure logic Vitest-tested and the UI verified by manual smoke.
+
+## [2026-06-01] update | Phase 1 Backend — HTTP API Contract (B8 inbox counter)
+Added the `GET /api/inbox` endpoint (task m-inbox-counter, Phase 2/B8): scan-on-request
+`{files, captures}` counts for the next `organize` run — `files` = recursive file count
+the pipeline scans, `captures` = DJI capture-group count (`group_companions`) it
+processes; `{0,0}` for an unset/missing/empty inbox. Deliberately no `watchdog` observer
+(drone inboxes are small; the frontend polls for a toolbar badge). Backed by the new
+pure `geosorter.inbox.count_inbox`.
