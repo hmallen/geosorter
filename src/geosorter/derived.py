@@ -24,6 +24,7 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 THUMB_MAX = 512
+PREVIEW_MAX = 1920
 CACHE_DIRNAME = ".geosorter-cache"
 
 
@@ -74,21 +75,30 @@ def _atomic_write(out: Path, produce: Callable[[Path], None]) -> None:
         raise
 
 
-def thumbnail(library_root: Path | str, source: Path | str) -> Path:
-    """Return a cached 512px JPEG thumbnail of an image, generating it if stale."""
-    source = Path(source)
-    out = _cache_path(library_root, source, "thumbs", ".jpg")
+def _resize_jpeg(library_root: Path | str, source: Path, kind: str, max_px: int, quality: int) -> Path:
+    """Return a cached downscaled JPEG of an image (long edge <= ``max_px``)."""
+    out = _cache_path(library_root, source, kind, ".jpg")
     if _is_fresh(out, source):
         return out
 
     def _produce(dest: Path) -> None:
         with Image.open(source) as img:
             img = ImageOps.exif_transpose(img)  # honour camera orientation
-            img.thumbnail((THUMB_MAX, THUMB_MAX))
-            img.convert("RGB").save(dest, "JPEG", quality=85)
+            img.thumbnail((max_px, max_px))  # downscale only; never upscales
+            img.convert("RGB").save(dest, "JPEG", quality=quality)
 
     _atomic_write(out, _produce)
     return out
+
+
+def thumbnail(library_root: Path | str, source: Path | str) -> Path:
+    """Return a cached 512px JPEG thumbnail of an image, generating it if stale."""
+    return _resize_jpeg(library_root, Path(source), "thumbs", THUMB_MAX, quality=85)
+
+
+def preview(library_root: Path | str, source: Path | str) -> Path:
+    """Return a cached 1080p (1920px long-edge) JPEG preview for the lightbox."""
+    return _resize_jpeg(library_root, Path(source), "previews", PREVIEW_MAX, quality=88)
 
 
 def poster(library_root: Path | str, source: Path | str) -> Path:
