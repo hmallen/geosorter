@@ -327,6 +327,30 @@ def test_partial_delete_recovers(tmp_path, monkeypatch):
     assert organize.verify_library(cfg).ok == 2
 
 
+def test_cancel_between_groups_leaves_remaining(tmp_path):
+    # Cooperative cancel (checked between groups) finishes the in-flight group
+    # atomically, marks the report cancelled, and leaves later captures untouched.
+    cfg, inbox, library = _setup(tmp_path)
+    first = _add(inbox, "DJI_0001.JPG", b"first")
+    _add(inbox, "DJI_0002.JPG", b"second")
+    calls = {"n": 0}
+
+    def cancel():
+        calls["n"] += 1
+        return calls["n"] > 1  # allow the first group, cancel before the second
+
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        cancel=cancel,
+        extractor_factory=_factory({"DJI_0001.JPG": _md(), "DJI_0002.JPG": _md()}),
+    )
+    assert report.cancelled is True
+    assert report.organized == 1
+    assert not first.exists()  # first group fully organized
+    assert sorted(p.name for p in inbox.iterdir()) == ["DJI_0002.JPG"]  # rest untouched
+
+
 # --------------------------------------------------------------------------- #
 # Real-ExifTool end-to-end (Phase 0a DoD). Uses the actual MetadataExtractor.
 # --------------------------------------------------------------------------- #
