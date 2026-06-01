@@ -206,7 +206,8 @@ def run_organize(
             for group in groups:
                 if report.aborted:
                     break
-                _process_group(group, extractor, index, geonames, library, report, dry_run, progress)
+                _process_group(group, extractor, index, geonames, library, report,
+                               dry_run, progress, cfg.feature_proximity_km)
 
         if not dry_run:
             index.execute(
@@ -221,7 +222,8 @@ def run_organize(
         index.close()
 
 
-def _process_group(group, extractor, index, geonames, library, report, dry_run, progress) -> None:
+def _process_group(group, extractor, index, geonames, library, report, dry_run,
+                   progress, feature_proximity_km=5.0) -> None:
     primary = group.primary
 
     # Group fully done in a prior run (primary is deleted last → reliable sentinel).
@@ -245,7 +247,8 @@ def _process_group(group, extractor, index, geonames, library, report, dry_run, 
         primary_dest = os.path.join(str(library), "_no-gps", qdate, primary.name)
     else:
         geo = geocoder.reverse_geocode(
-            geonames, md.lat, md.lon, cache_conn=(None if dry_run else index)
+            geonames, md.lat, md.lon, cache_conn=(None if dry_run else index),
+            feature_proximity_km=feature_proximity_km,
         )
         primary_dest = pathing.compute_dest_path(library, geo, local, primary.stem, primary.suffix)
 

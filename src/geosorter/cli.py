@@ -17,7 +17,7 @@ from pathlib import Path
 
 import click
 
-from . import __version__, config, db, geonames_loader
+from . import __version__, config, db, geocoder, geonames_loader
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
@@ -65,8 +65,20 @@ def init_config(config_path: str | None, force: bool) -> None:
     is_flag=True,
     help="Do not fetch from geonames.org; requires --from.",
 )
-def bootstrap(config_path: str | None, from_dir: str | None, no_download: bool) -> None:
-    """Load GeoNames cities + admin/country data into the geonames database."""
+@click.option(
+    "--features",
+    is_flag=True,
+    help="Also load parks/peaks/hydro (L/T/H) features from allCountries "
+    "(a much larger ~400 MB download).",
+)
+def bootstrap(
+    config_path: str | None, from_dir: str | None, no_download: bool, features: bool
+) -> None:
+    """Load GeoNames cities + admin/country data into the geonames database.
+
+    With ``--features`` it additionally loads curated parks/peaks/hydro features
+    so wilderness captures fold under a named feature instead of a distant town.
+    """
     cfg = config.load(config_path)
 
     # Decide the spatial-index mode: honour config, but fall back to columnar
@@ -95,20 +107,22 @@ def bootstrap(config_path: str | None, from_dir: str | None, no_download: bool) 
             click.echo(f"  {name}: {pct}", nl=False)
             click.echo("\r", nl=False)
 
-        src = geonames_loader.download(cache, progress=_progress)
+        src = geonames_loader.download(cache, progress=_progress, features=features)
         click.echo("")
 
     counts = geonames_loader.load(
-        cfg.geonames_db_path, src, spatial_index=effective
+        cfg.geonames_db_path, src, spatial_index=effective, features=features
     )
     config.update_spatial_index(config_path, effective)
 
+    feature_note = f", {counts['features']} features" if "features" in counts else ""
     click.echo(
         "Bootstrap complete: "
         f"{counts['geonames']} places, "
         f"{counts['admin1']} admin1, "
         f"{counts['admin2']} admin2, "
-        f"{counts['countries']} countries "
+        f"{counts['countries']} countries"
+        f"{feature_note} "
         f"({effective} index) -> {cfg.geonames_db_path}"
     )
 
@@ -125,6 +139,46 @@ def extract_test(path: Path) -> None:
     except ExifToolVersionError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(asdict(metadata), indent=2))
+
+
+@cli.command(name="geocode-test")
+@_CONFIG_OPTION
+@click.argument("lat", type=float)
+@click.argument("lon", type=float)
+def geocode_test(config_path: str | None, lat: float, lon: float) -> None:
+    """Print the geocode candidates and the chosen place for one coordinate.
+
+    A negative longitude is parsed as an option unless you separate it with ``--``:
+    ``geosorter geocode-test -- 40.4 -105.6``.
+    """
+    cfg = config.load(config_path)
+    if not Path(cfg.geonames_db_path).exists():
+        raise click.ClickException(
+            f"no geonames database at {cfg.geonames_db_path}; run `geosorter bootstrap` first."
+        )
+    conn = db.connect(cfg.geonames_db_path, integrity_check=False)
+    try:
+        cands = geocoder.candidates(conn, lat, lon)
+        chosen = geocoder.reverse_geocode(
+            conn, lat, lon, feature_proximity_km=cfg.feature_proximity_km
+        )
+    finally:
+        conn.close()
+
+    click.echo(
+        f"Candidates near ({lat}, {lon}) "
+        f"[feature-preference radius {cfg.feature_proximity_km} km]:"
+    )
+    if not cands:
+        click.echo("  (none in search window)")
+    for c in cands:
+        click.echo(
+            f"  [{c.feature_class}] {c.ascii_name} (id {c.geonameid}) — {c.dist_km:.2f} km"
+        )
+    click.echo(
+        f"Chosen: {chosen.place_string or '(none)'} "
+        f"[{chosen.geocode_confidence}]"
+    )
 
 
 def _render_report(report: BatchReport, dry_run: bool) -> None:

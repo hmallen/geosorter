@@ -22,3 +22,13 @@ state machine, idempotent crash recovery keyed on `moves.UNIQUE(source_path, sou
 group-atomic deletes (companions-first/primary-last, primary `source_deleted` = group-done
 sentinel), dedup-by-hash-then-suffix collision policy, quarantine routing, video-only
 codec stats, the first-run confirm gate (D22), and `verify-library` bit-rot detection.
+
+## [2026-05-31] update | DJI Capture Time & Offline Geocoding (B5 feature geocoding)
+Updated the geocoding section for B5 (h-feature-geocoding), Phase 0b: the
+prefer-nearest-feature heuristic (`_choose` priority order, opt-in `bootstrap
+--features`, curated `DEFAULT_FEATURE_CODES` allowlist over the `allCountries` dump,
+`feature_proximity_km` default 5.0, `geocode_confidence` values
+nearest_feature/nearest_city/fallback), the point-centroid edge-of-feature
+limitation, the `geocode-test` verb, the geocode_cache key caveat, and the
+real-coordinate tuning results (Denver→city, Vail Mountain/Yosemite→feature). No
+schema migration. Added a key-decisions bullet.

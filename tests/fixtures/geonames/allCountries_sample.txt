@@ -1,0 +1,6 @@
+5439343	Rocky Mountain National Park	Rocky Mountain National Park		40.4	-105.6	L	PRK	US		CO			0	0	0	America/Denver	2019-09-05	
+5436540	Longs Peak	Longs Peak		40.255	-105.615	T	PK	US		CO			0	0	0	America/Denver	2019-09-05	
+5577313	Grand Lake	Grand Lake		40.25	-105.82	H	LK	US		CO			0	0	0	America/Denver	2019-09-05	
+5436538	Some Hill	Some Hill		40.30	-105.50	T	HLL	US		CO			0	0	0	America/Denver	2019-09-05	
+5436539	Some Area	Some Area		40.31	-105.51	L	AREA	US		CO			0	0	0	America/Denver	2019-09-05	
+5574991	Boulder	Boulder		40.01499	-105.27055	P	PPL	US		CO			0	0	0	America/Denver	2019-09-05	

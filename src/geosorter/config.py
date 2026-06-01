@@ -34,6 +34,14 @@ geonames_db_path = '{geonames_db}'
 
 # Spatial index for geocoding: 'rtree' (default) or 'columnar' (fallback).
 spatial_index = 'rtree'
+
+# Prefer-nearest-feature radius (km). A named park/peak/hydro feature wins over
+# the nearest town when it lies within this distance of the capture coordinate.
+# GeoNames features are point centroids, not polygons, so this is an
+# approximation: a capture near the edge of a large park may fall outside the
+# radius and resolve to a town instead. Raise it to favour feature names, lower
+# it to favour towns. Requires `bootstrap --features` to have loaded L/T/H data.
+# feature_proximity_km = 5.0
 """
 
 
@@ -46,6 +54,7 @@ class Config:
     index_db_path: Path
     geonames_db_path: Path
     spatial_index: str = "rtree"
+    feature_proximity_km: float = 5.0
 
 
 def default_data_dir() -> Path:
@@ -101,6 +110,7 @@ def load(path: str | Path | None = None) -> Config:
         index_db_path=Path(str(index_db)).expanduser(),
         geonames_db_path=Path(str(geonames_db)).expanduser(),
         spatial_index=spatial_index,
+        feature_proximity_km=float(data.get("feature_proximity_km", 5.0)),
     )
 
 
