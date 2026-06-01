@@ -63,6 +63,29 @@ def client_and_lib(tmp_path):
     return TestClient(api.create_app(cfg)), library
 
 
+def test_inbox_count_empty(client_and_lib):
+    client, _ = client_and_lib  # fixture inbox is created empty
+    resp = client.get("/api/inbox")
+    assert resp.status_code == 200
+    assert resp.json() == {"files": 0, "captures": 0}
+
+
+def test_inbox_count_populated(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "DJI_0001.JPG").write_bytes(b"x")
+    (inbox / "notes.txt").write_bytes(b"y")  # non-DJI: a file, not a capture
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=tmp_path / "library",
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    client = TestClient(api.create_app(cfg))
+    assert client.get("/api/inbox").json() == {"files": 2, "captures": 1}
+
+
 def test_library_returns_geojson_excluding_quarantined(client_and_lib):
     client, _ = client_and_lib
     resp = client.get("/api/library")
