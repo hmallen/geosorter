@@ -1,4 +1,15 @@
 import { useOrganizeJob } from '../useOrganizeJob'
+import { useInboxCount } from '../useInboxCount'
+
+export default function Toolbar({ onDone }: { onDone: () => void }) {
+  const { count, refresh } = useInboxCount()
+  // After an organize run, reload the library AND refresh the inbox badge (it should
+  // drop to empty without waiting for the next poll tick).
+  const afterRun = () => {
+    onDone()
+    refresh()
+  }
+  const { job, running, start } = useOrganizeJob(afterRun)
 import { useUndoJob } from '../useUndoJob'
 
 export default function Toolbar({ onDone }: { onDone: () => void }) {
@@ -11,6 +22,12 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
       <button onClick={start} disabled={busy}>
         {running ? 'Processing…' : 'Process Inbox'}
       </button>
+      <span className="inbox">
+        {count.files > 0
+          ? `inbox: ${count.captures} capture${count.captures === 1 ? '' : 's'} ` +
+            `(${count.files} file${count.files === 1 ? '' : 's'})`
+          : 'inbox empty'}
+      </span>
       <button onClick={startUndo} disabled={busy}>
         {undoing ? 'Undoing…' : 'Undo Last Batch'}
       </button>

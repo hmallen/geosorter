@@ -4,6 +4,8 @@ Exposes the organized library over HTTP for the B7 frontend:
 
 * ``GET  /api/library`` — the whole library as a GeoJSON ``FeatureCollection``
   (one ``Point`` per organized, geolocated file), loaded once.
+* ``GET  /api/inbox`` — ``{files, captures}`` counts of what is waiting in the
+  inbox for the next ``organize`` run (B8; see :mod:`geosorter.inbox`).
 * ``POST /api/organize`` / ``GET /api/organize/status/{id}`` /
   ``POST /api/organize/cancel/{id}`` — run the Phase 0 pipeline as a cancellable
   background job (see :mod:`geosorter.jobs`).
@@ -32,7 +34,7 @@ from fastapi import FastAPI, HTTPException
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
-from . import db, derived
+from . import db, derived, inbox
 from .jobs import JobManager
 
 
@@ -99,6 +101,10 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
             for r in rows
         ]
         return {"type": "FeatureCollection", "features": features}
+
+    @app.get("/api/inbox")
+    def inbox_count() -> dict:
+        return asdict(inbox.count_inbox(cfg.inbox_path))
 
     @app.post("/api/organize")
     def organize_start() -> dict:

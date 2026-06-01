@@ -17,3 +17,15 @@ export async function fetchLibrary(fetchFn: typeof fetch = fetch): Promise<Libra
   if (!resp.ok) throw new Error(`library fetch failed: ${resp.status}`)
   return (await resp.json()) as LibraryFC
 }
+
+// Inbox counter (B8): how much is waiting for the next organize run.
+export interface InboxCount {
+  files: number
+  captures: number
+}
+
+export async function fetchInbox(fetchFn: typeof fetch = fetch): Promise<InboxCount> {
+  const resp = await fetchFn('/api/inbox')
+  if (!resp.ok) throw new Error(`inbox fetch failed: ${resp.status}`)
+  return (await resp.json()) as InboxCount
+}
