@@ -181,3 +181,33 @@ def test_organize_job_lifecycle(client_and_lib):
 
     assert client.get("/api/organize/status/does-not-exist").status_code == 404
     assert client.post("/api/organize/cancel/does-not-exist").status_code == 404
+
+
+def test_undo_job_lifecycle(client_and_lib):
+    client, _ = client_and_lib
+    resp = client.post("/api/undo")
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    st = None
+    for _ in range(300):
+        st = client.get(f"/api/undo/status/{job_id}").json()
+        if st["state"] in ("done", "error", "cancelled"):
+            break
+        time.sleep(0.02)
+    assert st["state"] == "done"  # no moves rows seeded -> nothing to undo
+    assert st["nothing_to_undo"] is True
+    assert st["restored"] == 0
+
+    assert client.get("/api/undo/status/does-not-exist").status_code == 404
+    assert client.post("/api/undo/cancel/does-not-exist").status_code == 404
+
+
+def test_cancel_routes_are_partitioned_by_job_kind(client_and_lib):
+    # A cancel route must not accept the other kind's job id (job ids never migrate
+    # between the organize and undo tables, so this is timing-independent).
+    client, _ = client_and_lib
+    undo_id = client.post("/api/undo").json()["job_id"]
+    org_id = client.post("/api/organize").json()["job_id"]
+    assert client.post(f"/api/organize/cancel/{undo_id}").status_code == 404
+    assert client.post(f"/api/undo/cancel/{org_id}").status_code == 404

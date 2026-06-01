@@ -2,6 +2,15 @@
 
 Chronological record of wiki operations.
 
+## [2026-06-01] update | Crash-Safe Move Engine & Phase 1 Backend (B8 undo)
+Documented the Phase 2 (B8) batch-undo feature from task h-undo-batch: added an
+"Undo a batch" section to [Crash-Safe Move Engine](pages/crash-safe-move-engine.md)
+(bespoke reverse copy→verify→delete, disk-state idempotency, skip-on-conflict,
+incremental row cleanup + per-batch codec_stats drop) and extended
+[Phase 1 Backend](pages/phase1-backend-api.md) with the `/api/undo*` endpoints and
+the shared single-worker executor (organize/undo mutual exclusion). Updated the
+index entry and both pages' front-matter.
+
 ## [2026-05-31] create | DJI SRT Telemetry Formats
 Captured DJI `.SRT` telemetry domain knowledge from task B2 (h-extract-srt-codec):
 bracket vs paren payload families, longitude-first ordering in `GPS(...)`,
