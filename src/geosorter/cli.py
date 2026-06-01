@@ -16,8 +16,9 @@ from dataclasses import asdict
 from pathlib import Path
 
 import click
+import uvicorn
 
-from . import __version__, config, db, geocoder, geonames_loader
+from . import __version__, api, config, db, geocoder, geonames_loader
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
@@ -245,6 +246,41 @@ def verify_library(config_path: str | None) -> None:
         raise click.ClickException(
             f"{len(report.missing)} missing, {len(report.mismatched)} mismatched"
         )
+
+
+_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
+def _resolve_host(host: str | None) -> tuple[str, bool]:
+    """Resolve the bind address and whether it warrants an exposure warning.
+
+    Default (``None``) binds loopback silently. An explicit non-loopback host
+    opts into exposing the library (home GPS, no auth) and warrants a warning.
+    """
+    if host is None:
+        return "127.0.0.1", False
+    return host, host not in _LOOPBACK
+
+
+@cli.command()
+@_CONFIG_OPTION
+@click.option(
+    "--host",
+    default=None,
+    help="Bind address (default 127.0.0.1; a non-loopback host exposes home GPS).",
+)
+@click.option("--port", default=8000, show_default=True, type=int, help="Bind port.")
+def serve(config_path: str | None, host: str | None, port: int) -> None:
+    """Run the map-viewer HTTP server (binds 127.0.0.1 by default)."""
+    cfg = config.load(config_path)
+    bind, warn = _resolve_host(host)
+    if warn:
+        click.echo(
+            f"WARNING: binding to {bind} exposes the library (home GPS locations) "
+            "with no authentication. Use only on a trusted network."
+        )
+    click.echo(f"geosorter serving on http://{bind}:{port}")
+    uvicorn.run(api.create_app(cfg), host=bind, port=port)
 
 
 @cli.command()
