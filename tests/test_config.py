@@ -50,3 +50,14 @@ def test_feature_proximity_km_override(tmp_path):
     cfg_path = tmp_path / "geosorter.toml"
     cfg_path.write_text("feature_proximity_km = 3.0\n", encoding="utf-8")
     assert config.load(cfg_path).feature_proximity_km == 3.0
+
+
+def test_inference_max_gap_minutes_default(tmp_path):
+    # No config file → the neighbor-GPS time window defaults to 30 minutes.
+    assert config.load(tmp_path / "nope.toml").inference_max_gap_minutes == 30.0
+
+
+def test_inference_max_gap_minutes_override(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("inference_max_gap_minutes = 45\n", encoding="utf-8")
+    assert config.load(cfg_path).inference_max_gap_minutes == 45.0

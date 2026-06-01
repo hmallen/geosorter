@@ -191,6 +191,8 @@ def _render_report(report: BatchReport, dry_run: bool) -> None:
     click.echo(f"  organized:          {report.organized}")
     for place, n in sorted(report.per_place.items()):
         click.echo(f"      - {place}: {n}")
+    if report.inferred:
+        click.echo(f"  inferred location:  {report.inferred} (GPS borrowed from a time-adjacent capture)")
     click.echo(f"  quarantined:        {report.quarantined}")
     click.echo(f"  companions:         {report.companions}")
     click.echo(f"  duplicates skipped: {report.duplicates_skipped}")

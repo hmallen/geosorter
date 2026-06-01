@@ -1,9 +1,9 @@
 ---
 title: Crash-Safe Move Engine & Organize Pipeline
-tags: [move-engine, organize, undo, crash-safety, sqlite, geosorter, phase-0a, phase-2]
+tags: [move-engine, organize, undo, inference, crash-safety, sqlite, geosorter, phase-0a, phase-2]
 created: 2026-05-31
 updated: 2026-06-01
-sources: [task:h-move-engine-cli, task:h-undo-batch]
+sources: [task:h-move-engine-cli, task:h-undo-batch, task:h-neighbor-gps-inference]
 ---
 
 # Crash-Safe Move Engine & Organize Pipeline
@@ -91,6 +91,34 @@ never mistakes its own partially-committed work for a duplicate.
   library (detected by zero `moves` rows) prints source→dest→count and requires an
   explicit confirm defaulting to **No**; `--yes` bypasses it. `--dry-run` performs
   zero filesystem and zero DB writes but prints the identical summary.
+
+## Time-clustered neighbor-GPS inference (`inference.py`, task B8 — Phase 2)
+
+To rescue captures that would otherwise quarantine for a missing GPS lock,
+`run_organize` runs in **two passes**:
+
+1. **Extract-all** — every capture group's metadata is read up front (groups a
+   prior run already moved are skipped), releasing the ExifTool daemon before any
+   move. `_infer_batch` then builds a **within-run pool** of
+   `(idx, timestamp, coord)` and calls `inference.infer_locations`.
+2. **Move-all** — each group is geocoded and group-atomically moved (the cancel
+   predicate is polled here, between groups, preserving the documented contract).
+
+`infer_locations` is a **pure** function: a no-coordinate but timestamped capture
+borrows the `(lat, lon)` of the **nearest-in-time** capture that *has* a
+coordinate, but only within `cfg.inference_max_gap_minutes` (default 30). The
+borrowed coordinate is stamped `gps_source='inferred'` and flows through
+tz→geocode→path exactly like real GPS, so the file organizes (and the map UI marks
+it distinctly) instead of quarantining. Out-of-window or timestamp-less captures
+are omitted → they still quarantine.
+
+Design choices (all deliberately conservative):
+- **Within-run only** — the pool is the current scan, never the existing index.
+- **Clusters on the raw naive `capture_ts_raw`** (same clock for sources and
+  targets). A cross-media photo (local wall-clock) vs video (UTC) match is skewed
+  by the local UTC offset and usually falls outside the window — so the worst case
+  is a *missed* match (→ quarantine), never a *wrong* far-off location.
+- **No schema change** — `files.gps_source` already enumerated `'inferred'`.
 
 ## `verify-library`
 

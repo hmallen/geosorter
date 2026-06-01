@@ -71,3 +71,18 @@ the pipeline scans, `captures` = DJI capture-group count (`group_companions`) it
 processes; `{0,0}` for an unset/missing/empty inbox. Deliberately no `watchdog` observer
 (drone inboxes are small; the frontend polls for a toolbar badge). Backed by the new
 pure `geosorter.inbox.count_inbox`.
+
+## [2026-06-01] update | Crash-Safe Move Engine & Organize Pipeline (B8 neighbor-GPS inference)
+Documented the B8 two-pass `organize` restructure (extract-all → infer → move-all) and
+the new pure `geosorter.inference` layer (task h-neighbor-gps-inference, Phase 2/B8): a
+no-coordinate but timestamped capture borrows the location of its nearest-in-time
+GPS-bearing capture within `inference_max_gap_minutes` (default 30), stamped
+`gps_source='inferred'`, instead of quarantining. Clusters on raw naive `capture_ts_raw`
+(conservative: cross-media UTC/local skew misses → quarantine, never a wrong location);
+within-run pool only; no schema change (`files.gps_source` already enumerated `inferred`).
+
+## [2026-06-01] update | Phase 1 Backend — HTTP API Contract (B8 gps_source property)
+The `GET /api/library` GeoJSON feature `properties` now include `gps_source`
+(`exif`|`srt`|`srt_partial`|`inferred`|`none`|null), so the B7 map UI can render
+`inferred`-location markers with a distinct amber/dashed pin + legend (task
+h-neighbor-gps-inference). Additive, non-breaking contract change.
