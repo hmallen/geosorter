@@ -25,3 +25,7 @@ __pycache__/
 
 # Local-only real media fixtures (privacy: real GPS; size: large MP4s)
 tests/fixtures/media/local/
+
+# Frontend (B7): node deps + the on-demand SPA build output served by the backend
+frontend/node_modules/
+src/geosorter/webui/

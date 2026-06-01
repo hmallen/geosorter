@@ -81,6 +81,24 @@ def test_proxy_cache_hit_does_not_regenerate(tmp_path):
     assert again.stat().st_mtime_ns == first
 
 
+def test_preview_caps_long_edge_at_1920(tmp_path):
+    src = tmp_path / "big.jpg"
+    Image.new("RGB", (4000, 3000), "red").save(src)
+    out = derived.preview(tmp_path, src)
+    assert out.exists()
+    with Image.open(out) as img:
+        assert img.format == "JPEG"
+        assert max(img.size) == 1920  # 4000x3000 -> 1920x1440
+    assert out.is_relative_to(tmp_path / ".geosorter-cache" / "previews")
+
+
+def test_preview_passthrough_small(tmp_path):
+    # An 800px source is already under the 1920 cap; no upscale.
+    out = derived.preview(tmp_path, FIXTURES / "dji_photo.jpg")
+    with Image.open(out) as img:
+        assert max(img.size) == 800
+
+
 def test_atomic_write_failure_publishes_nothing(tmp_path):
     # A failed generation must never leave a half-written cache file at `out`,
     # nor a leftover temp in the cache dir (concurrent-request corruption guard).

@@ -10,6 +10,6 @@ Pages are listed below by category.
 - [DJI SRT Telemetry Formats](pages/dji-srt-telemetry-formats.md) — how DJI encodes per-frame GPS in `.SRT` sidecars (bracket vs paren families, lon-first gotcha, null-island frames)
 - [DJI Capture Time & Offline Geocoding](pages/capture-time-and-geocoding.md) — per-source UTC/local timestamp semantics, GPS-derived local time, GeoNames nearest-place lookup + prefer-nearest-feature heuristic (geonameid canonical), Windows foldering
 - [Crash-Safe Move Engine & Organize Pipeline](pages/crash-safe-move-engine.md) — the irreversible auto-delete made survivable: copy→verify→delete state machine, idempotent recovery, group-atomic deletes, dedup/collision policy, quarantine, first-run gate, verify-library
-- [Phase 1 Backend — HTTP API Contract & Derived Assets](pages/phase1-backend-api.md) — the B6 FastAPI contract for B7: GeoJSON library feed, range-capable media serving + traversal guard, the on-demand HEVC→H.264 proxy decision, lazy/atomic derived-asset cache, and the cancellable single-worker organize job
+- [Phase 1 Backend — HTTP API Contract & Derived Assets](pages/phase1-backend-api.md) — the B6 FastAPI contract + B7 frontend: GeoJSON library feed, range-capable media serving + traversal guard, the on-demand HEVC→H.264 proxy + 1080p preview, lazy/atomic derived-asset cache, the cancellable single-worker organize job, and the React/MapLibre/supercluster SPA (OpenFreeMap tiles)
 
 ## Analysis
