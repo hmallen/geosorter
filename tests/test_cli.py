@@ -205,6 +205,50 @@ def test_geocode_test_prints_candidates_and_choice(tmp_path):
     assert "nearest_feature" in result.output
 
 
+def test_resolve_host_default_is_loopback_no_warn():
+    from geosorter.cli import _resolve_host
+
+    assert _resolve_host(None) == ("127.0.0.1", False)
+
+
+def test_resolve_host_nonloopback_warns():
+    from geosorter.cli import _resolve_host
+
+    assert _resolve_host("0.0.0.0") == ("0.0.0.0", True)
+
+
+def test_resolve_host_explicit_loopback_no_warn():
+    from geosorter.cli import _resolve_host
+
+    assert _resolve_host("127.0.0.1") == ("127.0.0.1", False)
+
+
+def test_serve_binds_loopback_by_default(tmp_path, monkeypatch):
+    cfg = _write_cfg(tmp_path)
+    captured = {}
+    monkeypatch.setattr("geosorter.cli.api.create_app", lambda c: "APP")
+    monkeypatch.setattr(
+        "geosorter.cli.uvicorn.run",
+        lambda app, host, port: captured.update(app=app, host=host, port=port),
+    )
+    result = CliRunner().invoke(cli, ["serve", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert captured == {"app": "APP", "host": "127.0.0.1", "port": 8000}
+    assert "WARNING" not in result.output
+
+
+def test_serve_explicit_host_warns(tmp_path, monkeypatch):
+    cfg = _write_cfg(tmp_path)
+    monkeypatch.setattr("geosorter.cli.api.create_app", lambda c: "APP")
+    monkeypatch.setattr("geosorter.cli.uvicorn.run", lambda app, host, port: None)
+    result = CliRunner().invoke(
+        cli, ["serve", "--host", "0.0.0.0", "--config", str(cfg)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "WARNING" in result.output
+    assert "0.0.0.0" in result.output
+
+
 def test_geocode_test_without_bootstrap_is_clean_error(tmp_path):
     cfg = tmp_path / "geosorter.toml"
     cfg.write_text(f"geonames_db_path = '{tmp_path / 'absent.db'}'\n", encoding="utf-8")

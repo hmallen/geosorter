@@ -1,0 +1,104 @@
+---
+title: Phase 1 Backend — HTTP API Contract & Derived Assets
+tags: [api, fastapi, geojson, hevc, architecture, phase-1]
+created: 2026-06-01
+updated: 2026-06-01
+sources: [dji-media-organizer.md, h-api-backend.md]
+---
+
+# Phase 1 Backend — HTTP API Contract & Derived Assets
+
+The B6 FastAPI backend (`geosorter.api`) exposes the organized library over HTTP
+for the B7 map-viewer frontend. It is built by `create_app(cfg, *, spa_dir=None)`
+and launched by the `geosorter serve` CLI verb. This page is the **contract** the
+frontend (and any other client) builds against.
+
+## Security posture
+
+- **Binds `127.0.0.1` by default.** The library's GeoJSON embeds *home GPS
+  coordinates* and there is **no authentication**. `serve --host <addr>` is an
+  explicit opt-in; any non-loopback host prints a no-auth/home-GPS exposure
+  warning (`cli._resolve_host`). Loopback values (`127.0.0.1`, `localhost`, `::1`)
+  do not warn.
+- **Path-traversal guard.** `/api/media`, `/api/thumb`, `/api/poster`, `/api/video`
+  resolve the request path under `library_root` and reject anything that escapes:
+  `(library_root / relpath).resolve()` must be `is_relative_to(library_root)`,
+  else HTTP 403. A missing file is 404.
+
+## Endpoints
+
+- `GET /api/library` → GeoJSON `FeatureCollection`, **loaded once** (no
+  bbox/viewport endpoint — clustering is the client's job, via supercluster in
+  B7). One `Point` feature per **organized, geolocated** file; quarantined/no-GPS
+  files are excluded (they have no coordinate to place). Feature `properties`:
+  `id`, `filename`, `place_string`, `local_date`, `media_type`, `codec`, and
+  `path` (library-relative POSIX path used to build media URLs). Coordinates are
+  `[lon, lat]` (GeoJSON order).
+- `POST /api/organize` → `{job_id}`; `GET /api/organize/status/{id}` → the job
+  snapshot; `POST /api/organize/cancel/{id}` → sets the cancel flag. See
+  *Background jobs* below.
+- `GET /api/media/{relpath}` → the original file via range-capable
+  `starlette.responses.FileResponse` (HTTP 206 for `Range` requests → video seek,
+  large-photo download). **Not** a bare `StreamingResponse`.
+- `GET /api/thumb/{relpath}` / `GET /api/poster/{relpath}` → derived JPEG images.
+- `GET /api/video/{relpath}` → a **browser-playable** video (range-capable). H.264
+  originals are served directly; HEVC is served as a cached H.264 proxy. The
+  frontend points every `<video>` here regardless of source codec.
+- Static SPA: when a build directory exists, `create_app` mounts it at `/` (after
+  the `/api` routes) so the frontend is served same-origin (no CORS). B6 ships the
+  mount point; B7 fills the directory.
+
+The stored `files.dest_path` is an absolute Windows path with a `\\?\` long-path
+prefix; `api._strip`/`api._relpath` convert it to the library-relative POSIX
+`path` used in URLs, and `_safe_path` reverses that for serving.
+
+## HEVC strategy (the gating decision)
+
+DJI codec mix, probed from real footage: the **current drone (Mini 4 Pro) records
+HEVC/H.265**, an older drone records H.264 — ~60% HEVC and rising. Browsers
+(Chrome/Firefox on Windows) do **not** reliably play HEVC in a `<video>` element.
+
+Chosen strategy: **on-demand H.264 proxy transcode.** `/api/video` looks up the
+file's codec in the `files` table; H.264 streams the original, HEVC triggers an
+ffmpeg `libx264` transcode cached under `.geosorter-cache/proxies/`. Rejected
+alternatives: direct-stream (majority of videos silently fail) and
+poster-plus-"coming soon" (majority unplayable in Phase 1).
+
+## Derived assets — lazy, cached, atomic
+
+`geosorter.derived` generates thumbnails (512px JPEG, Pillow
+`ImageOps.exif_transpose`), video poster frames (ffmpeg first frame), and HEVC
+proxies **on first request**, caching them under
+`library_root/.geosorter-cache/{thumbs,posters,proxies}/` (the source's
+library-relative path is mirrored under each kind dir). This keeps the crash-safe
+Phase 0 `organize` pipeline free of any Pillow/ffmpeg dependency.
+
+- **Freshness** is mtime-based (`_is_fresh` = cache mtime ≥ source mtime); no
+  hashing. A re-organized source regenerates.
+- **Atomicity**: every asset is produced via `_atomic_write` — a unique
+  `mkstemp` temp in the cache dir, then `os.replace` into place — so a concurrent
+  first-request never observes a half-written file. This mirrors the
+  partial→replace discipline of the [crash-safe move engine](crash-safe-move-engine.md).
+- ffmpeg/ffprobe are invoked list-form (never `shell=True`), matching `metadata.py`.
+
+## Background jobs (`geosorter.jobs`)
+
+`JobManager` runs `organize` off the request cycle on a `ThreadPoolExecutor(
+max_workers=1)` — only one destructive pass at a time. `submit()` returns a uuid4
+job id; per-job state is polled via `status()` (a `dataclasses.replace()` snapshot
+taken under lock). Cancellation is a per-job `threading.Event` wired into
+`run_organize`'s `cancel` predicate, which is polled **between capture groups**
+only — never mid-group — so the group-atomic copy→verify→delete invariant of the
+[move engine](crash-safe-move-engine.md) is preserved; a cancelled run leaves
+unprocessed captures in the inbox. This is deliberately **not** FastAPI
+`BackgroundTasks` (those have no id, status, or cancellation). API-triggered jobs
+run with `assume_yes=True` (the interactive first-run gate cannot prompt over HTTP).
+
+## Source of the GeoJSON
+
+The feed reads the index DB `files` table populated by the
+[organize pipeline](crash-safe-move-engine.md); `lat`/`lon`/`place_string`/
+`local_date`/`codec` come straight from columns written at organize time (see
+[capture time & geocoding](capture-time-and-geocoding.md) for how those values are
+derived). The two-database split (decision D24) is unchanged — the API only reads
+the index DB plus, for the codec lookup, the same table.

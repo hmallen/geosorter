@@ -12,6 +12,9 @@ dependencies = [
     "pyexiftool>=0.5",
     "timezonefinder>=6.5",
     "tzdata",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pillow>=10.0",
 ]
 
 [project.scripts]
@@ -31,3 +34,6 @@ packages = ["src/geosorter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:Warning",
+]
