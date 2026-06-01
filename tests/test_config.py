@@ -39,3 +39,14 @@ def test_env_var_resolution(tmp_path, monkeypatch):
     monkeypatch.setenv("GEOSORTER_CONFIG", str(cfg_path))
     assert config.resolve_config_path() == cfg_path
     assert config.load().spatial_index == "columnar"
+
+
+def test_feature_proximity_km_default(tmp_path):
+    # No config file → the prefer-nearest-feature radius defaults to 5.0 km.
+    assert config.load(tmp_path / "nope.toml").feature_proximity_km == 5.0
+
+
+def test_feature_proximity_km_override(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("feature_proximity_km = 3.0\n", encoding="utf-8")
+    assert config.load(cfg_path).feature_proximity_km == 3.0

@@ -3,7 +3,7 @@ title: DJI Capture Time & Offline Geocoding
 tags: [dji, metadata, timezone, geocoding, geonames, geosorter]
 created: 2026-05-31
 updated: 2026-05-31
-sources: [task:h-geocode-tz-path]
+sources: [task:h-geocode-tz-path, task:h-feature-geocoding]
 ---
 
 # DJI Capture Time & Offline Geocoding
@@ -44,30 +44,67 @@ a DST fall-back overlap (the same local time occurs twice) is flagged
 `tzdata` is a hard dependency: Windows ships no system IANA database, so
 `zoneinfo` needs the pip-installed copy.
 
-## Offline reverse geocoding (GeoNames, cities-only in Phase 0a)
+## Offline reverse geocoding (GeoNames)
 
-`geocoder.reverse_geocode` resolves a coordinate to the nearest **populated place**
-(`feature_class='P'`; parks/peaks/hydro classes L/T/H and the prefer-nearest-feature
-heuristic are deferred to B5):
+`geocoder.reverse_geocode` resolves a coordinate to a place — the nearest populated
+place by default, or a nearby named feature when feature data is loaded (see the
+prefer-nearest-feature heuristic below):
 
 - **Bounding-box pre-filter** narrows to a handful of candidates before exact
   ranking. Uses the SQLite **R-tree** when present, else a columnar `(lat, lon)`
-  index — auto-detected by probing `sqlite_master` (not by trusting config).
+  index — auto-detected by probing `sqlite_master` (not by trusting config). The
+  candidate set spans all classes (cities `P` plus features `L`/`T`/`H`); the
+  heuristic splits them downstream.
 - The longitude half-width is widened by **`1/cos(lat)`** so the box stays roughly
   square in real distance; a degree of longitude shrinks toward the poles, and a
   fixed-degree window would otherwise miss the true-nearest city at high latitude.
-- Exact **Haversine** distance ranks the candidates; nearest wins.
+- Exact **Haversine** distance ranks the candidates; the prefer-nearest-feature
+  rule (`_choose`) picks the winner.
 - The `"City, Region, Country"` display string is built with a **LEFT JOIN** to
   `admin1_codes` (`country_code || '.' || admin1_code`, e.g. `US.CO`) and
   `country_info`. LEFT (not inner) JOIN matters: some places — capitals especially
   — lack admin codes, and an inner join would drop the row entirely.
+
+### Prefer-nearest-feature heuristic (Phase 0b, B5)
+
+Beyond populated places (`feature_class='P'`, from `cities500`), the geonames DB can
+also hold named **L** (parks/areas), **T** (terrain/peaks), and **H** (hydro)
+features. These come from the much larger `allCountries` dump and load **opt-in** via
+`bootstrap --features` (the default `bootstrap` stays cities-only and fast). Only a
+curated allowlist of feature *codes* is kept (`DEFAULT_FEATURE_CODES` in
+`geonames_loader.py`) so wilderness captures fold under a meaningful name instead of
+every creek and hillock. `reverse_geocode(..., feature_proximity_km=5.0)` then picks
+by priority:
+
+1. the nearest L/T/H feature **if within `feature_proximity_km`** → `nearest_feature`
+2. else the nearest populated place (`P`) → `nearest_city`
+3. else the nearest feature even beyond the radius (no city in range) → `nearest_feature`
+4. else → `fallback`
+
+So a named feature beats a marginally-closer town when within the radius
+(feature-wins-if-≤, not strictly-closer); the default radius is 5.0 km. The chosen
+path is recorded in `geocode_confidence`.
+
+**Edge-of-feature limitation.** GeoNames features are point *centroids*, not
+polygons, so "inside a park" is approximated by centroid distance. A small named peak
+near the query can win over a large park whose centroid is far (observed: a point
+inside Rocky Mountain NP resolved to *Mount Lady Washington* 1.9 km off rather than
+the park centroid 14.8 km off). Both still yield meaningful wilderness names.
+
+`geocode-test <lat> <lon>` prints the ranked candidate list (class, name, distance)
+and the chosen result — the tool used to tune `feature_proximity_km`. Pass a negative
+longitude after `--` (e.g. `geocode-test -- 40.4 -105.6`). Real-coordinate tuning at
+5.0 km: downtown Denver → *Denver* (city), real mini4pro footage → *Vail Mountain*
+(feature), Yosemite Valley → *Yosemite Valley* (feature).
 
 ### geonameid is canonical; place_string is display-only
 
 The library stores the stable **`geonameid`** as the key. The human `place_string`
 is display-only and may drift (GeoNames updates, sanitizer retuning) — keying the
 folder structure on it would bifurcate the library on any data refresh. Results are
-cached in `geocode_cache` keyed on coordinates rounded to 4 decimals (~11 m).
+cached in `geocode_cache` keyed on coordinates rounded to 4 decimals (~11 m). The
+cache key does **not** include `feature_proximity_km`, so retuning that knob after an
+`organize` run requires clearing `geocode_cache` to re-evaluate seen coordinates.
 
 ### Two-database split (decision D24)
 
