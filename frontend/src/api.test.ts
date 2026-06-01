@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, fetchInbox } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -12,5 +12,19 @@ describe('media URL builders', () => {
     expect(previewUrl(p)).toBe('/api/preview/X/y.jpg')
     expect(posterUrl(p)).toBe('/api/poster/X/y.jpg')
     expect(videoUrl(p)).toBe('/api/video/X/y.jpg')
+  })
+})
+
+describe('fetchInbox', () => {
+  it('returns the parsed counts', async () => {
+    const fetchFn = (async () => ({
+      ok: true, status: 200, json: async () => ({ files: 7, captures: 3 }),
+    })) as unknown as typeof fetch
+    expect(await fetchInbox(fetchFn)).toEqual({ files: 7, captures: 3 })
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
+    await expect(fetchInbox(fetchFn)).rejects.toThrow(/inbox fetch failed: 500/)
   })
 })
