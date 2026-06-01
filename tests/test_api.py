@@ -25,12 +25,13 @@ def _probe_codec(path: Path) -> str:
     return out.stdout.strip()
 
 
-def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None):
+def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
+          gps_source="exif"):
     conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
-        "local_date, lat, lon, codec, sha256, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "local_date, lat, lon, codec, gps_source, sha256, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
-         "2024-07-04", lat, lon, codec, "deadbeef", status),
+         "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status),
     )
 
 
@@ -53,7 +54,8 @@ def client_and_lib(tmp_path):
     _seed(conn, dest_path=str(library / "A" / "a.JPG"), filename="a.JPG",
           media_type="photo", status="organized", lat=40.0, lon=-105.0)
     _seed(conn, dest_path=str(library / "B" / "b.JPG"), filename="b.JPG",
-          media_type="photo", status="organized", lat=41.0, lon=-106.0)
+          media_type="photo", status="organized", lat=41.0, lon=-106.0,
+          gps_source="inferred")
     _seed(conn, dest_path=str(library / "_no-gps" / "q.JPG"), filename="q.JPG",
           media_type="photo", status="quarantined", lat=None, lon=None)
     _seed(conn, dest_path=str(library / "clips" / "v.mp4"), filename="v.mp4",
@@ -99,6 +101,15 @@ def test_library_returns_geojson_excluding_quarantined(client_and_lib):
     assert feat["geometry"]["type"] == "Point"
     assert feat["geometry"]["coordinates"] == [-105.0, 40.0]  # [lon, lat]
     assert feat["properties"]["path"] == "A/a.JPG"
+
+
+def test_library_exposes_gps_source(client_and_lib):
+    # The map UI needs gps_source to render inferred-location markers distinctly.
+    client, _ = client_and_lib
+    fc = client.get("/api/library").json()
+    by_name = {f["properties"]["filename"]: f["properties"] for f in fc["features"]}
+    assert by_name["a.JPG"]["gps_source"] == "exif"
+    assert by_name["b.JPG"]["gps_source"] == "inferred"
 
 
 def test_media_range_request_returns_206(client_and_lib):

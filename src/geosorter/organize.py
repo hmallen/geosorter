@@ -24,11 +24,11 @@ from __future__ import annotations
 import os
 import secrets
 import shutil
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import db, geocoder, grouping, move_engine, pathing, tz_resolver
+from . import db, geocoder, grouping, inference, move_engine, pathing, tz_resolver
 from .metadata import MetadataExtractor
 
 # Disk-space safety margin over the raw source bytes (mirrors geonames_loader).
@@ -41,6 +41,7 @@ class BatchReport:
 
     batch_id: str
     organized: int = 0
+    inferred: int = 0  # subset of `organized` whose location was borrowed (B8)
     quarantined: int = 0
     duplicates_skipped: int = 0
     companions: int = 0
@@ -207,15 +208,32 @@ def run_organize(
             _disk_preflight(paths, library)
             report.batch_id = make_batch_id(datetime.now(), secrets.token_hex(3))
 
+        # Pass 1 — extract every group's metadata up front (skipping groups a prior
+        # run already moved), so a within-run GPS pool exists before any group is
+        # geocoded or moved. The ExifTool daemon is released before the move phase.
+        # Cancel is honoured in pass 2 (the move phase), not here: extraction is
+        # read-only and quick for the small drone inboxes this targets.
+        extracted: list[tuple[int, grouping.CaptureGroup, object]] = []
         with extractor_factory() as extractor:
-            for group in groups:
-                if report.aborted:
-                    break
-                if cancel is not None and cancel():
-                    report.cancelled = True
-                    break
-                _process_group(group, extractor, index, geonames, library, report,
-                               dry_run, progress, cfg.feature_proximity_km)
+            for idx, group in enumerate(groups):
+                if not dry_run and move_engine.is_already_moved(index, group.primary):
+                    continue
+                extracted.append((idx, group, extractor.extract(group.primary)))
+
+        # Infer locations for no-GPS-but-timestamped captures from time-adjacent
+        # GPS-bearing captures in this same batch (conservative: no neighbor in
+        # window -> the file quarantines as usual, never relocated far).
+        inferred_map = _infer_batch(extracted, cfg.inference_max_gap_minutes)
+
+        # Pass 2 — geocode + group-atomic move each capture (no extractor needed).
+        for idx, group, md in extracted:
+            if report.aborted:
+                break
+            if cancel is not None and cancel():
+                report.cancelled = True
+                break
+            _process_group(group, md, inferred_map.get(idx), index, geonames,
+                           library, report, dry_run, progress, cfg.feature_proximity_km)
 
         if not dry_run:
             index.execute(
@@ -230,19 +248,41 @@ def run_organize(
         index.close()
 
 
-def _process_group(group, extractor, index, geonames, library, report, dry_run,
+def _infer_batch(extracted, max_gap_minutes: float) -> dict:
+    """Within-run neighbor-GPS inference over a pass-1 ``(idx, group, md)`` list.
+
+    Clusters on the RAW naive capture timestamp (``tz_resolver._parse_naive``) —
+    the same clock for sources and targets, so same-media-type captures in a
+    session compare correctly. A photo (local wall-clock) vs video (UTC)
+    cross-match is skewed by the local UTC offset and will usually fall outside the
+    window, so the no-GPS file simply quarantines (never a wrong location).
+    Returns ``{idx: InferenceResult}`` for the no-GPS captures that found a neighbor.
+    """
+    items = [
+        (
+            idx,
+            tz_resolver._parse_naive(md.capture_ts_raw) if md.capture_ts_raw else None,
+            (md.lat, md.lon) if md.lat is not None and md.lon is not None else None,
+        )
+        for idx, _group, md in extracted
+    ]
+    return inference.infer_locations(items, max_gap=timedelta(minutes=max_gap_minutes))
+
+
+def _process_group(group, md, inferred, index, geonames, library, report, dry_run,
                    progress, feature_proximity_km=5.0) -> None:
     primary = group.primary
 
-    # Group fully done in a prior run (primary is deleted last → reliable sentinel).
-    if not dry_run and move_engine.is_already_moved(index, primary):
-        return
-
-    md = extractor.extract(primary)
     if md.media_type == "video":  # codec stats are a video-only tally (HEVC decision)
         report.codec[md.codec if md.codec in ("h264", "h265") else "unknown"] += 1
     if progress is not None:
         progress(f"  {primary.name}")
+
+    # Borrow a time-adjacent neighbor's GPS when this capture has none (B8). The
+    # borrowed coordinate then flows through tz/geocode/path exactly like real GPS.
+    if md.lat is None and md.lon is None and inferred is not None:
+        md = replace(md, lat=inferred.lat, lon=inferred.lon, gps_source="inferred")
+    was_inferred = md.gps_source == "inferred"
 
     local = tz_resolver.resolve_local_time(
         md.lat, md.lon, md.capture_ts_raw, md.capture_ts_source_tag
@@ -261,7 +301,7 @@ def _process_group(group, extractor, index, geonames, library, report, dry_run,
         primary_dest = pathing.compute_dest_path(library, geo, local, primary.stem, primary.suffix)
 
     if dry_run:
-        _tally(report, group, geo, quarantine, local)
+        _tally(report, group, geo, quarantine, local, was_inferred)
         return
 
     src_sha = move_engine.sha256_file(primary)
@@ -297,7 +337,7 @@ def _process_group(group, extractor, index, geonames, library, report, dry_run,
         if sha is not None:  # already-deleted files (skipped in Phase A) need nothing
             move_engine.commit_delete(index, sp, sha)
 
-    _tally(report, group, geo, quarantine, local)
+    _tally(report, group, geo, quarantine, local, was_inferred)
 
 
 def _persist(index, report, md, geo, local, quarantine, primary, primary_dest, group, files_to_move, primary_sha) -> None:
@@ -360,11 +400,13 @@ def _stored_sha(index, primary: Path) -> str:
     return row[0] if row else move_engine.sha256_file(primary)
 
 
-def _tally(report, group, geo, quarantine, local) -> None:
+def _tally(report, group, geo, quarantine, local, was_inferred=False) -> None:
     if quarantine:
         report.quarantined += 1
     else:
         report.organized += 1
+        if was_inferred:
+            report.inferred += 1
         place = (geo.place_string if geo and geo.place_string else "_unknown")
         report.per_place[place] = report.per_place.get(place, 0) + 1
     report.companions += len(group.companions)
