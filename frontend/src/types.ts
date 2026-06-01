@@ -7,6 +7,7 @@ export interface FeatureProps {
   local_date: string | null
   media_type: 'photo' | 'video'
   codec: string | null
+  gps_source: 'exif' | 'srt' | 'srt_partial' | 'inferred' | 'none' | null
   path: string // library-relative POSIX path used to build media URLs
 }
 

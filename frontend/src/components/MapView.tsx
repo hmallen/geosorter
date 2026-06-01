@@ -65,6 +65,7 @@ export default function MapView({ features, onSelect }: Props) {
           )
         }
         const props = c.properties
+        const inferred = props.gps_source === 'inferred'
         return (
           <Marker
             key={`p${props.id}`}
@@ -76,10 +77,17 @@ export default function MapView({ features, onSelect }: Props) {
               onSelect(index, c)
             }}
           >
-            <div className="pin" title={props.filename} />
+            <div
+              className={inferred ? 'pin pin--inferred' : 'pin'}
+              title={inferred ? `${props.filename} (inferred location)` : props.filename}
+            />
           </Marker>
         )
       })}
+      <div className="map-legend">
+        <span><i className="pin pin--legend" /> GPS</span>
+        <span><i className="pin pin--inferred pin--legend" /> inferred</span>
+      </div>
     </Map>
   )
 }

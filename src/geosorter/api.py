@@ -79,7 +79,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         try:
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, media_type, codec, "
-                "dest_path, lat, lon FROM files "
+                "gps_source, dest_path, lat, lon FROM files "
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
         finally:
@@ -95,6 +95,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
                     "local_date": r["local_date"],
                     "media_type": r["media_type"],
                     "codec": r["codec"],
+                    "gps_source": r["gps_source"],
                     "path": _relpath(r["dest_path"], library_root),
                 },
             }
