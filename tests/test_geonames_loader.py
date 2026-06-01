@@ -105,3 +105,85 @@ def test_load_columnar_fallback_no_rtree(tmp_path):
         assert "geonames_rtree" not in tnames
     finally:
         conn.close()
+
+
+def _src_with_features(tmp_path):
+    """A source dir = committed fixtures + an allCountries.txt (the L/T/H sample)."""
+    import shutil
+
+    src = tmp_path / "src"
+    src.mkdir()
+    for f in FIXTURES.iterdir():
+        shutil.copy(f, src / f.name)
+    shutil.copy(src / "allCountries_sample.txt", src / "allCountries.txt")
+    return src
+
+
+def test_load_features_filters_to_allowlist(tmp_path):
+    src = _src_with_features(tmp_path)
+    gn_db = tmp_path / "geonames.db"
+    counts = geonames_loader.load(gn_db, src, features=True)
+    conn = db.connect(gn_db, integrity_check=False)
+    try:
+        loaded = {
+            r[0]: (r[1], r[2])
+            for r in conn.execute(
+                "SELECT geonameid, feature_class, feature_code FROM geonames "
+                "WHERE feature_class IN ('L','T','H')"
+            )
+        }
+    finally:
+        conn.close()
+    # The three allowlisted L/T/H rows load; T/HLL and L/AREA are filtered by code.
+    assert counts["features"] == 3
+    assert loaded == {
+        5439343: ("L", "PRK"),
+        5436540: ("T", "PK"),
+        5577313: ("H", "LK"),
+    }
+    assert 5436538 not in loaded
+    assert 5436539 not in loaded
+
+
+def test_load_features_custom_codes(tmp_path):
+    src = _src_with_features(tmp_path)
+    gn_db = tmp_path / "geonames.db"
+    counts = geonames_loader.load(gn_db, src, features=True, feature_codes={"PK"})
+    conn = db.connect(gn_db, integrity_check=False)
+    try:
+        rows = conn.execute(
+            "SELECT geonameid FROM geonames WHERE feature_class IN ('L','T','H')"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert counts["features"] == 1
+    assert [r[0] for r in rows] == [5436540]
+
+
+def test_load_default_excludes_features(tmp_path):
+    gn_db = tmp_path / "geonames.db"
+    counts = geonames_loader.load(gn_db, FIXTURES)  # cities-only default
+    assert "features" not in counts
+    conn = db.connect(gn_db, integrity_check=False)
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM geonames WHERE feature_class IN ('L','T','H')"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 0
+
+
+def test_features_covered_by_spatial_index(tmp_path):
+    src = _src_with_features(tmp_path)
+    gn_db = tmp_path / "geonames.db"
+    geonames_loader.load(gn_db, src, features=True)
+    conn = db.connect(gn_db, integrity_check=False)
+    try:
+        n_rtree = _counts(conn, "geonames_rtree")
+        n_rows = _counts(conn, "geonames")
+    finally:
+        conn.close()
+    # cities (3) + allowlisted features (3); the rtree covers every row 1:1.
+    assert n_rows == 6
+    assert n_rtree == 6

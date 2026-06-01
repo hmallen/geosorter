@@ -112,6 +112,88 @@ def _insert_city(conn, geonameid, lat, lon, name="HighLat"):
     conn.commit()
 
 
+def _insert_feature(conn, geonameid, lat, lon, name, feature_class="L", feature_code="PRK"):
+    conn.execute(
+        "INSERT INTO geonames(geonameid, name, ascii_name, lat, lon, feature_class, "
+        "feature_code, country_code, admin1_code, admin2_code, population, timezone) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (geonameid, name, name, lat, lon, feature_class, feature_code,
+         "US", "CO", None, 0, "America/Denver"),
+    )
+    conn.execute(
+        "INSERT INTO geonames_rtree(id, min_lat, max_lat, min_lon, max_lon) VALUES (?,?,?,?,?)",
+        (geonameid, lat, lat, lon, lon),
+    )
+    conn.commit()
+
+
+# Query point and offsets (~111 km / deg of latitude at 40 N): 0.009 deg ~ 1 km,
+# 0.018 deg ~ 2 km, 0.072 deg ~ 8 km. Used to place a city and a feature at known
+# distances from QUERY for the prefer-nearest-feature heuristic.
+QUERY = (40.0, -105.0)
+
+
+def test_feature_within_radius_beats_nearer_city(tmp_path):
+    # A park ~2 km away wins over a town ~1 km away because it is within the 5 km
+    # feature_proximity_km, even though the town is marginally closer.
+    conn = _geonames_db(tmp_path)
+    _insert_city(conn, 9000001, 40.009, -105.0, name="NearTown")
+    _insert_feature(conn, 9000002, 40.018, -105.0, "Rocky Mountain NP")
+    try:
+        result = geocoder.reverse_geocode(conn, *QUERY, feature_proximity_km=5.0)
+    finally:
+        conn.close()
+    assert result.geonameid == 9000002
+    assert result.ascii_name == "Rocky Mountain NP"
+    assert result.feature_class == "L"
+    assert result.geocode_confidence == "nearest_feature"
+
+
+def test_feature_beyond_radius_yields_city(tmp_path):
+    # The same town, but the park is now ~8 km away — beyond 5 km — so the town wins.
+    conn = _geonames_db(tmp_path)
+    _insert_city(conn, 9000001, 40.009, -105.0, name="NearTown")
+    _insert_feature(conn, 9000002, 40.072, -105.0, "Far Park")
+    try:
+        result = geocoder.reverse_geocode(conn, *QUERY, feature_proximity_km=5.0)
+    finally:
+        conn.close()
+    assert result.geonameid == 9000001
+    assert result.feature_class == "P"
+    assert result.geocode_confidence == "nearest_city"
+
+
+def test_feature_only_within_radius(tmp_path):
+    # A peak in range with no nearby town still resolves to the feature.
+    conn = _geonames_db(tmp_path)
+    _insert_feature(conn, 9000003, 40.018, -105.0, "Longs Peak",
+                    feature_class="T", feature_code="PK")
+    try:
+        result = geocoder.reverse_geocode(conn, *QUERY, feature_proximity_km=5.0)
+    finally:
+        conn.close()
+    assert result.geonameid == 9000003
+    assert result.feature_class == "T"
+    assert result.geocode_confidence == "nearest_feature"
+
+
+def test_candidates_lists_city_and_feature(tmp_path):
+    # The candidates() helper (powering geocode-test) surfaces both the town and
+    # the feature with distances, nearest first.
+    conn = _geonames_db(tmp_path)
+    _insert_city(conn, 9000001, 40.009, -105.0, name="NearTown")
+    _insert_feature(conn, 9000002, 40.018, -105.0, "Rocky Mountain NP")
+    try:
+        cands = geocoder.candidates(conn, *QUERY)
+    finally:
+        conn.close()
+    ids = [c.geonameid for c in cands]
+    assert 9000001 in ids and 9000002 in ids
+    # Sorted nearest-first by distance.
+    dists = [c.dist_km for c in cands]
+    assert dists == sorted(dists)
+
+
 def test_high_latitude_longitude_correction(tmp_path):
     # At 70 deg N, 1 deg of longitude (~38 km) is well within reach of a drone,
     # but a fixed +/-0.5 deg lon bbox would exclude it. The cos(lat)-corrected

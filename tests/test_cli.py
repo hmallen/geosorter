@@ -160,3 +160,56 @@ def test_organize_then_verify_library_cli(tmp_path):
     r2 = CliRunner().invoke(cli, ["verify-library", "--config", str(cfg)])
     assert r2.exit_code == 0, r2.output
     assert "checked 1, ok 1" in r2.output
+
+
+def _feature_src(tmp_path: Path) -> Path:
+    """A GeoNames source dir = committed fixtures + an allCountries.txt sample."""
+    import shutil
+
+    src = tmp_path / "src"
+    src.mkdir()
+    for f in FIXTURES.iterdir():
+        shutil.copy(f, src / f.name)
+    shutil.copy(src / "allCountries_sample.txt", src / "allCountries.txt")
+    return src
+
+
+def test_bootstrap_with_features(tmp_path):
+    cfg = _write_cfg(tmp_path)
+    src = _feature_src(tmp_path)
+    result = CliRunner().invoke(
+        cli,
+        ["bootstrap", "--from", str(src), "--no-download", "--features",
+         "--config", str(cfg)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Bootstrap complete" in result.output
+    assert "3 features" in result.output
+
+
+def test_geocode_test_prints_candidates_and_choice(tmp_path):
+    from geosorter import geonames_loader
+
+    src = _feature_src(tmp_path)
+    gn_db = tmp_path / "geonames.db"
+    geonames_loader.load(gn_db, src, features=True)
+    cfg = tmp_path / "geosorter.toml"
+    cfg.write_text(f"geonames_db_path = '{gn_db}'\n", encoding="utf-8")
+    # Query right at Rocky Mountain National Park (40.4, -105.6); `--` lets the
+    # negative longitude through as an argument rather than an option.
+    result = CliRunner().invoke(
+        cli, ["geocode-test", "--config", str(cfg), "--", "40.4", "-105.6"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Rocky Mountain National Park" in result.output
+    assert "nearest_feature" in result.output
+
+
+def test_geocode_test_without_bootstrap_is_clean_error(tmp_path):
+    cfg = tmp_path / "geosorter.toml"
+    cfg.write_text(f"geonames_db_path = '{tmp_path / 'absent.db'}'\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli, ["geocode-test", "--config", str(cfg), "--", "40.0", "-105.0"]
+    )
+    assert result.exit_code != 0
+    assert "bootstrap" in result.output.lower()
