@@ -162,6 +162,30 @@ def test_organize_then_verify_library_cli(tmp_path):
     assert "checked 1, ok 1" in r2.output
 
 
+def test_undo_nothing_when_log_empty(tmp_path):
+    cfg, _inbox, _library = _write_cfg_organize(tmp_path)
+    result = CliRunner().invoke(cli, ["undo", "--yes", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "Nothing to undo" in result.output
+
+
+def test_organize_then_undo_cli(tmp_path):
+    # Full destructive CLI organize (--yes) then undo (--yes) round-trips the file.
+    cfg, inbox, library = _write_cfg_organize(tmp_path)
+    import shutil
+
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")
+    r1 = CliRunner().invoke(cli, ["organize", "--yes", "--config", str(cfg)])
+    assert r1.exit_code == 0, r1.output
+    assert not (inbox / "DJI_0001.JPG").exists()  # source auto-deleted
+
+    r2 = CliRunner().invoke(cli, ["undo", "--yes", "--config", str(cfg)])
+    assert r2.exit_code == 0, r2.output
+    assert "restored:  1" in r2.output
+    assert (inbox / "DJI_0001.JPG").exists()  # back in the inbox
+    assert not any(p.is_file() for p in library.rglob("*"))  # library copy gone
+
+
 def _feature_src(tmp_path: Path) -> Path:
     """A GeoNames source dir = committed fixtures + an allCountries.txt sample."""
     import shutil

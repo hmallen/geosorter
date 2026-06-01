@@ -7,6 +7,7 @@ import time
 
 from geosorter.jobs import JobManager
 from geosorter.organize import BatchReport
+from geosorter.undo import UndoReport
 
 
 def _wait(mgr, job_id, timeout=5.0):
@@ -17,6 +18,16 @@ def _wait(mgr, job_id, timeout=5.0):
             return st
         time.sleep(0.01)
     raise AssertionError(f"job {job_id} did not finish: {mgr.status(job_id)}")
+
+
+def _wait_undo(mgr, job_id, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = mgr.undo_status(job_id)
+        if st is not None and st.state in ("done", "error", "cancelled"):
+            return st
+        time.sleep(0.01)
+    raise AssertionError(f"undo job {job_id} did not finish: {mgr.undo_status(job_id)}")
 
 
 def test_submit_runs_and_completes():
@@ -74,3 +85,66 @@ def test_pipeline_exception_becomes_error_state():
     st = _wait(mgr, job_id)
     assert st.state == "error"
     assert "kaboom" in st.error
+
+
+# --------------------------------------------------------------------------- #
+def test_submit_undo_runs_and_completes():
+    def fake_undo(cfg, *, batch_id, cancel, progress):
+        progress("  DJI_0001.JPG")
+        return UndoReport(batch_id="b1", restored=3, conflicts=["/inbox/x.jpg"])
+
+    mgr = JobManager(None, undo_fn=fake_undo)
+    job_id = mgr.submit_undo()
+    st = _wait_undo(mgr, job_id)
+    assert st.state == "done"
+    assert st.restored == 3
+    assert st.batch_id == "b1"
+    assert st.conflicts == ["/inbox/x.jpg"]
+    assert st.processed == 1
+
+
+def test_undo_status_unknown_returns_none():
+    mgr = JobManager(None, undo_fn=lambda *a, **k: UndoReport())
+    assert mgr.undo_status("does-not-exist") is None
+
+
+def test_undo_nothing_to_undo_maps_to_done():
+    mgr = JobManager(None, undo_fn=lambda *a, **k: UndoReport(nothing_to_undo=True))
+    job_id = mgr.submit_undo()
+    st = _wait_undo(mgr, job_id)
+    assert st.state == "done"
+    assert st.nothing_to_undo is True
+    assert st.restored == 0
+
+
+def test_undo_cancel_sets_event_and_stops():
+    started = threading.Event()
+
+    def fake_undo(cfg, *, batch_id, cancel, progress):
+        started.set()
+        restored = 0
+        for _ in range(1000):
+            if cancel():
+                return UndoReport(batch_id="b1", restored=restored, cancelled=True)
+            restored += 1
+            time.sleep(0.005)
+        return UndoReport(batch_id="b1", restored=restored)
+
+    mgr = JobManager(None, undo_fn=fake_undo)
+    job_id = mgr.submit_undo()
+    assert started.wait(2.0)
+    assert mgr.cancel(job_id) is True
+    st = _wait_undo(mgr, job_id)
+    assert st.state == "cancelled"
+    assert st.restored < 1000
+
+
+def test_undo_exception_becomes_error_state():
+    def boom(cfg, *, batch_id, cancel, progress):
+        raise RuntimeError("undo-boom")
+
+    mgr = JobManager(None, undo_fn=boom)
+    job_id = mgr.submit_undo()
+    st = _wait_undo(mgr, job_id)
+    assert st.state == "error"
+    assert "undo-boom" in st.error
