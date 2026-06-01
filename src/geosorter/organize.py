@@ -49,6 +49,7 @@ class BatchReport:
     codec: dict[str, int] = field(default_factory=lambda: {"h264": 0, "h265": 0, "unknown": 0})
     tz_ambiguous: int = 0
     aborted: bool = False
+    cancelled: bool = False  # True when a caller-supplied cancel hook halted the run
     dry_run: bool = False
     confirmed: bool = True  # False when the first-run gate was declined
 
@@ -169,6 +170,7 @@ def run_organize(
     assume_yes: bool = False,
     confirm=None,
     progress=None,
+    cancel=None,
     extractor_factory=MetadataExtractor,
 ) -> BatchReport:
     """Scan ``cfg.inbox_path`` and organize every capture into ``cfg.library_root``.
@@ -176,6 +178,9 @@ def run_organize(
     ``dry_run`` performs zero filesystem and zero DB writes but returns the same
     counts. ``confirm`` is called once (with a preview string) on the first
     destructive run unless ``assume_yes``; returning False aborts with no writes.
+    ``cancel``, if given, is a no-arg predicate polled **between** capture groups
+    (never mid-group, so group-atomicity holds); when it returns True the run stops
+    and ``report.cancelled`` is set, leaving unprocessed captures in the inbox.
     ``extractor_factory`` is injectable for tests.
     """
     if cfg.inbox_path is None or cfg.library_root is None:
@@ -205,6 +210,9 @@ def run_organize(
         with extractor_factory() as extractor:
             for group in groups:
                 if report.aborted:
+                    break
+                if cancel is not None and cancel():
+                    report.cancelled = True
                     break
                 _process_group(group, extractor, index, geonames, library, report,
                                dry_run, progress, cfg.feature_proximity_km)

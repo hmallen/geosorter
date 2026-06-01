@@ -32,3 +32,15 @@ nearest_feature/nearest_city/fallback), the point-centroid edge-of-feature
 limitation, the `geocode-test` verb, the geocode_cache key caveat, and the
 real-coordinate tuning results (Denver→city, Vail Mountain/Yosemite→feature). No
 schema migration. Added a key-decisions bullet.
+
+## [2026-06-01] create | Phase 1 Backend — HTTP API Contract & Derived Assets
+Captured B6 (h-api-backend) architecture, opening Phase 1: the FastAPI contract
+B7 builds against (GeoJSON `/api/library` loaded-once feed of organized+geolocated
+files; range-capable `/api/media` via starlette `FileResponse`; resolve()+
+is_relative_to traversal guard; `/api/thumb`/`/api/poster`/`/api/video`; conditional
+same-origin SPA mount), the loopback-default/no-auth security posture, the codec-stats
+gate and resulting **on-demand HEVC→H.264 proxy** decision, the lazy + mtime-cached +
+atomically-written (`mkstemp`→`os.replace`) derived-asset model under
+`.geosorter-cache/` (keeping organize.py free of Pillow/ffmpeg), and the cancellable
+single-worker `JobManager` (ThreadPoolExecutor max_workers=1, between-groups cancel
+preserving group-atomicity; not FastAPI BackgroundTasks).
