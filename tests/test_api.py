@@ -103,6 +103,33 @@ def test_thumb_endpoint_returns_jpeg(client_and_lib):
     assert resp.headers["content-type"].startswith("image/jpeg")
 
 
+def test_preview_endpoint_returns_jpeg(client_and_lib):
+    client, library = client_and_lib
+    shutil.copy(MEDIA / "dji_photo.jpg", library / "photo.jpg")
+    resp = client.get("/api/preview/photo.jpg")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/jpeg")
+
+
+def test_spa_mounted_when_dir_exists(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    spa = tmp_path / "webui"
+    spa.mkdir()
+    (spa / "index.html").write_text("<!doctype html><title>geosorter</title>", encoding="utf-8")
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    client = TestClient(api.create_app(cfg, spa_dir=spa))
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "geosorter" in resp.text  # the mounted index.html is served at the origin
+
+
 def test_video_endpoint_serves_h264_proxy_for_hevc(client_and_lib):
     client, library = client_and_lib
     (library / "clips").mkdir(parents=True, exist_ok=True)

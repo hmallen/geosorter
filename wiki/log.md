@@ -44,3 +44,13 @@ atomically-written (`mkstemp`→`os.replace`) derived-asset model under
 `.geosorter-cache/` (keeping organize.py free of Pillow/ffmpeg), and the cancellable
 single-worker `JobManager` (ThreadPoolExecutor max_workers=1, between-groups cancel
 preserving group-atomicity; not FastAPI BackgroundTasks).
+
+## [2026-06-01] update | Phase 1 Backend — HTTP API Contract & Derived Assets (B7 frontend)
+Extended the page for B7 (h-map-viewer), completing Phase 1: added the new 1080p
+`/api/preview` endpoint (1920px long-edge JPEG, lightbox) to the derived-asset family,
+and a **Frontend SPA** section — the Vite + React + TS app (`react-map-gl`/MapLibre/
+`supercluster`) that builds to `src/geosorter/webui` and is served same-origin by
+`geosorter serve`. Captured the OpenFreeMap hosted-tiles choice (only online dep;
+offline pmtiles deferred to Phase 2) and the client-side clustering design (whole
+`/api/library` loaded once; `supercluster.getClusters(bbox, zoom)` returns only visible
+clusters/points), with pure logic Vitest-tested and the UI verified by manual smoke.
