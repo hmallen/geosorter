@@ -1,9 +1,9 @@
 ---
 title: Crash-Safe Move Engine & Organize Pipeline
-tags: [move-engine, organize, crash-safety, sqlite, geosorter, phase-0a]
+tags: [move-engine, organize, undo, crash-safety, sqlite, geosorter, phase-0a, phase-2]
 created: 2026-05-31
-updated: 2026-05-31
-sources: [task:h-move-engine-cli]
+updated: 2026-06-01
+sources: [task:h-move-engine-cli, task:h-undo-batch]
 ---
 
 # Crash-Safe Move Engine & Organize Pipeline
@@ -98,3 +98,50 @@ Recomputes the on-disk SHA-256 of every organized destination and compares it to
 the verified `moves.dest_sha256` (for `copy_verified`/`source_deleted` rows) to
 detect post-deletion bit-rot — the safety net for an archive whose only copy now
 lives in the library.
+
+## Undo a batch (`undo.py`, task B8 — Phase 2)
+
+Undo reverses the most recent `organize` batch (or a given `--batch`): it moves
+each filed library file **back** to its original inbox `source_path` and removes
+the batch's index rows. The `moves` log is the substrate — it already records, per
+file, the original `source_path`, the `dest_path`, and the verified
+`source_sha256` (which, because copy was byte-verified, equals the library copy's
+hash).
+
+The reverse move mirrors the forward discipline exactly — **copy library →
+`<source>.partial`, verify by hash, `os.replace` into the inbox, then delete the
+library copy** — and likewise never `os.rename`s (cross-volume safe). It is a
+*bespoke* path, deliberately **not** a reuse of `copy_and_verify` (that would write
+forward-looking `moves` rows with the library file as the "source") and **not** a
+new `moves.status='undone'` (the status `CHECK` can't be altered without a full
+SQLite table rebuild).
+
+**Idempotency is by disk state, not a status flag.** `_reverse_one` decides from
+what is actually on disk, so a crash mid-undo *or* a leftover from a mid-organize
+abort recovers the same way. For each row (both `source_deleted` and the rarer
+`copy_verified` flow through one unified path):
+
+- **library copy gone, source restored with matching hash** → already done (a prior
+  partial run); just drop the rows.
+- **library copy gone, source absent** → `missing` (cannot reverse); source occupied
+  by *different* content → `conflict`.
+- **source path occupied, hash matches** → our own restored file (crash between
+  `os.replace` and the delete); finish by deleting the library copy + rows.
+- **source path occupied, hash differs** → a *different* file the user dropped there:
+  **skipped and reported in `conflicts`, never clobbered.**
+- otherwise → the normal reverse move above; a verify mismatch records a `failure`
+  and keeps both the library copy and the row (nothing destroyed).
+
+**Row cleanup** is incremental and crash-safe (committed per file): dropping a
+primary's `moves` row also deletes its `files` row, which cascades
+`file_companions` (FK `ON DELETE CASCADE`, `foreign_keys=ON`); companion `moves`
+rows (`file_id` NULL) delete by id. The per-batch `codec_stats` row is dropped only
+once no `moves` or `files` rows remain for the batch — so a partial undo (some files
+conflicted) correctly leaves the still-filed files indexed.
+
+Undo is exposed as the `undo` CLI verb (confirm-gated) and as a cancellable
+background job (`POST /api/undo`) that **shares the single-worker executor with
+`organize`**, so the two destructive passes are mutually exclusive. `cancel` is
+polled between files; remaining rows are left for a clean resume. Orphaned
+derived-cache entries (thumbs/previews/posters/proxies) are left as-is — they are
+mtime-keyed and regenerate on demand.
