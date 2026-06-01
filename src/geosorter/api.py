@@ -123,6 +123,11 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         out = derived.thumbnail(library_root, _safe_path(relpath))
         return FileResponse(out, media_type="image/jpeg")
 
+    @app.get("/api/preview/{relpath:path}")
+    def preview(relpath: str) -> FileResponse:
+        out = derived.preview(library_root, _safe_path(relpath))
+        return FileResponse(out, media_type="image/jpeg")
+
     @app.get("/api/poster/{relpath:path}")
     def poster(relpath: str) -> FileResponse:
         out = derived.poster(library_root, _safe_path(relpath))

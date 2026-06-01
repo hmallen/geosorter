@@ -40,7 +40,9 @@ frontend (and any other client) builds against.
 - `GET /api/media/{relpath}` → the original file via range-capable
   `starlette.responses.FileResponse` (HTTP 206 for `Range` requests → video seek,
   large-photo download). **Not** a bare `StreamingResponse`.
-- `GET /api/thumb/{relpath}` / `GET /api/poster/{relpath}` → derived JPEG images.
+- `GET /api/thumb/{relpath}` (512px grid thumbnail) / `GET /api/preview/{relpath}`
+  (1080p / 1920px long-edge, lightbox photo, B7) / `GET /api/poster/{relpath}`
+  (video poster frame) → lazily generated, cached derived JPEGs.
 - `GET /api/video/{relpath}` → a **browser-playable** video (range-capable). H.264
   originals are served directly; HEVC is served as a cached H.264 proxy. The
   frontend points every `<video>` here regardless of source codec.
@@ -102,3 +104,24 @@ The feed reads the index DB `files` table populated by the
 [capture time & geocoding](capture-time-and-geocoding.md) for how those values are
 derived). The two-database split (decision D24) is unchanged — the API only reads
 the index DB plus, for the codec lookup, the same table.
+
+## Frontend SPA (`frontend/`, B7)
+
+A Vite + React + TypeScript single-page app (`react-map-gl` v8 MapLibre adapter,
+`maplibre-gl`, `supercluster`) consumes the contract above. It builds to
+`src/geosorter/webui` — the dir `create_app` mounts — so it is served same-origin
+by `geosorter serve` (no CORS); the build output is gitignored and produced on
+demand (`npm --prefix frontend run build`). Dev runs the Vite server with `/api`
+proxied to `127.0.0.1:8000`.
+
+Key choices: **OpenFreeMap** hosted vector tiles (no key; the only online
+dependency — photos/GPS stay local; offline pmtiles is a Phase 2 option), and
+**client-side clustering** with the explicit `supercluster` package in a pure,
+unit-tested module (the `/api/library` feed is loaded whole, so the map — not the
+server — does the clustering; `getClusters(bbox, zoom)` returns only the visible
+clusters/points, keeping DOM marker count low). Pure logic (URL builders,
+clustering, the organize-job polling state machine, marker→files selection) lives
+in side-effect-free modules with Vitest coverage; the React components and the
+visual end-to-end flow are verified by a manual smoke. The lightbox loads photos
+from `/api/preview` (1080p) and plays videos from `/api/video` (H.264 proxy for
+HEVC); "Process Inbox" drives `POST /api/organize` + status polling.
