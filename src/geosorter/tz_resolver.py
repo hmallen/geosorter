@@ -113,3 +113,40 @@ def resolve_local_time(
         local_time_hms=dt_local.strftime("%H-%M-%S"),
         tz_ambiguous=ambiguous,
     )
+
+
+def local_time_from_utc(
+    lat: float | None, lon: float | None, capture_ts_utc: str | None
+) -> LocalTime:
+    """Recompute :class:`LocalTime` for a stored UTC instant at a new coordinate.
+
+    Used by the B8 manual re-tag: an already-organized file carries a resolved
+    ``capture_ts_utc`` (ISO 8601, UTC); when the user assigns a new location the
+    local date/time must be recomputed against the new coordinate's IANA zone. The
+    instant is unambiguous (already UTC), so there is no DST-fold case. Returns
+    :data:`_EMPTY` when the coordinate has no resolvable zone or ``capture_ts_utc``
+    is missing/unparseable.
+    """
+    if lat is None or lon is None or not capture_ts_utc:
+        return _EMPTY
+
+    zone_name = _finder().timezone_at(lng=lon, lat=lat)
+    if zone_name is None:
+        return _EMPTY
+
+    try:
+        dt_utc = datetime.fromisoformat(capture_ts_utc)
+    except ValueError:
+        return LocalTime(zone_name, None, None, None, None, False)
+    if dt_utc.tzinfo is None:
+        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+
+    dt_local = dt_utc.astimezone(ZoneInfo(zone_name))
+    return LocalTime(
+        iana_zone=zone_name,
+        capture_ts_utc=dt_utc.astimezone(timezone.utc).isoformat(),
+        capture_ts_local=dt_local.isoformat(),
+        local_date=dt_local.strftime("%Y-%m-%d"),
+        local_time_hms=dt_local.strftime("%H-%M-%S"),
+        tz_ambiguous=False,
+    )

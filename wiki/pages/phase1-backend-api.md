@@ -3,7 +3,7 @@ title: Phase 1 Backend — HTTP API Contract & Derived Assets
 tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
 created: 2026-06-01
 updated: 2026-06-01
-sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference]
+sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -32,9 +32,10 @@ frontend (and any other client) builds against.
   B7). One `Point` feature per **organized, geolocated** file; quarantined/no-GPS
   files are excluded (they have no coordinate to place). Feature `properties`:
   `id`, `filename`, `place_string`, `local_date`, `media_type`, `codec`,
-  `gps_source` (`exif`|`srt`|`srt_partial`|`inferred`|`none`|null — B8; the map UI
-  styles `inferred` markers distinctly), and `path` (library-relative POSIX path
-  used to build media URLs). Coordinates are `[lon, lat]` (GeoJSON order).
+  `gps_source` (`exif`|`srt`|`srt_partial`|`inferred`|`manual`|`none`|null — B8; the
+  map UI styles `inferred` (amber/dashed) and `manual` (green) markers distinctly),
+  and `path` (library-relative POSIX path used to build media URLs). Coordinates are
+  `[lon, lat]` (GeoJSON order).
 - `GET /api/inbox` → `{files, captures}` — how much is waiting for the next
   `organize` run (B8). `files` = recursive file count under `inbox_path` (what
   `organize` scans); `captures` = DJI capture-group count (`group_companions`, what
@@ -48,6 +49,13 @@ frontend (and any other client) builds against.
   most recent `organize` batch back to the inbox; see the
   [undo section](crash-safe-move-engine.md) for the reverse-move model. The two
   cancel routes are partitioned by job kind (a route 404s on the other kind's id).
+- `POST /api/retag` (body `{file_id, lat, lon}`, lat/lon WGS84-bounded) → `{job_id}`;
+  `GET /api/retag/status/{id}` → the re-tag-job snapshot (B8). Re-files an organized
+  capture to a map-clicked location; see the
+  [re-tag section](crash-safe-move-engine.md) for the move model. **No cancel route**
+  — a re-tag is a fast atomic single-capture op, unlike the long-running
+  organize/undo. Shares the single-worker pool, so organize, undo, and re-tag are
+  mutually exclusive.
 - `GET /api/media/{relpath}` → the original file via range-capable
   `starlette.responses.FileResponse` (HTTP 206 for `Range` requests → video seek,
   large-photo download). **Not** a bare `StreamingResponse`.
@@ -112,6 +120,12 @@ second job kind on the **same** `JobManager` — it shares that one `max_workers
 executor and the cancel-event table, so an organize and an undo can never run
 concurrently against the same library/inbox. Its `cancel` is polled **between
 files**.
+
+The B8 **re-tag** job (`submit_retag`/`retag_status`/`_run_retag`, `RetagJobState`)
+is the third kind on the same executor — so organize, undo, and re-tag are mutually
+exclusive (no concurrent index-DB writers). It has **no cancel** (a single-capture
+atomic move; nothing to interrupt). `retag_fn=retag.retag_file` is injectable for
+tests. See the [re-tag section](crash-safe-move-engine.md) for the move model.
 
 ## Source of the GeoJSON
 
