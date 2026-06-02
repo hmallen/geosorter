@@ -86,3 +86,19 @@ The `GET /api/library` GeoJSON feature `properties` now include `gps_source`
 (`exif`|`srt`|`srt_partial`|`inferred`|`none`|null), so the B7 map UI can render
 `inferred`-location markers with a distinct amber/dashed pin + legend (task
 h-neighbor-gps-inference). Additive, non-breaking contract change.
+
+## [2026-06-01] update | Crash-Safe Move Engine & Organize Pipeline (B8 manual re-tag)
+Documented the B8 manual map-click re-tag (`geosorter.retag`, task h-retag-location): the
+map UI's "Re-tag location" → click re-files an already-organized capture to the clicked
+coordinate. `retag_file` re-geocodes, recomputes local time from the stored
+`capture_ts_utc` against the new tz (`tz_resolver.local_time_from_utc`), and performs a
+bespoke disk-state-idempotent, group-atomic library→library crash-safe move (copy+verify
+ALL → one index commit → delete olds), stamping `gps_source='manual'`. `_resolve_collision`
+suffixes `_2`/`_3` against the UNIQUE `files.dest_path` before moving. Organized-only;
+no schema migration (`gps_source` has no CHECK).
+
+## [2026-06-01] update | Phase 1 Backend — HTTP API Contract (B8 re-tag endpoint + gps_source manual)
+Added `POST /api/retag` (`{file_id, lat, lon}`, WGS84-bounded) + `GET /api/retag/status/{id}`
+(task h-retag-location): a third background-job kind on the shared single-worker executor
+(organize/undo/re-tag mutually exclusive), no cancel route (atomic op). The `/api/library`
+`gps_source` enum gains `manual`; the map UI renders manual pins green (legend updated).

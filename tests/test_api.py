@@ -214,6 +214,27 @@ def test_undo_job_lifecycle(client_and_lib):
     assert client.post("/api/undo/cancel/does-not-exist").status_code == 404
 
 
+def test_retag_job_lifecycle(client_and_lib):
+    # An unknown file_id exercises the route + job plumbing without needing a real
+    # geonames DB or on-disk media (retag_file returns 'not_found' before geocoding).
+    client, _ = client_and_lib
+    resp = client.post("/api/retag", json={"file_id": 99999, "lat": 39.7, "lon": -104.9})
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    st = None
+    for _ in range(300):
+        st = client.get(f"/api/retag/status/{job_id}").json()
+        if st["state"] in ("done", "error"):
+            break
+        time.sleep(0.02)
+    assert st["state"] == "done"
+    assert st["status"] == "not_found"
+    assert st["moved"] == 0
+
+    assert client.get("/api/retag/status/does-not-exist").status_code == 404
+
+
 def test_cancel_routes_are_partitioned_by_job_kind(client_and_lib):
     # A cancel route must not accept the other kind's job id (job ids never migrate
     # between the organize and undo tables, so this is timing-independent).
