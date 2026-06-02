@@ -3,7 +3,7 @@ title: Phase 1 Backend — HTTP API Contract & Derived Assets
 tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
 created: 2026-06-01
 updated: 2026-06-01
-sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location]
+sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location, task:m-basemap-heatmap-toggles]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -156,3 +156,12 @@ in side-effect-free modules with Vitest coverage; the React components and the
 visual end-to-end flow are verified by a manual smoke. The lightbox loads photos
 from `/api/preview` (1080p) and plays videos from `/api/video` (H.264 proxy for
 HEVC); "Process Inbox" drives `POST /api/organize` + status polling.
+
+**View toggles (B8).** A pure `basemaps.ts` module holds the basemap styles and the
+heatmap spec: `VECTOR_STYLE` (OpenFreeMap), `SATELLITE_STYLE` (an Esri World Imagery
+**raster** style object with attribution), `HEATMAP_LAYER` (a native MapLibre
+`type:'heatmap'` layer), and `heatmapData(features)` (a GeoJSON `FeatureCollection`).
+An on-map `.map-controls` panel switches the **Satellite** basemap (`mapStyle`
+swap) and a **Heatmap** density layer (`<Source>`/`<Layer>`); turning the heatmap on
+hides the cluster markers + legend for a clean density view. `basemaps.ts` is
+side-effect-free with Vitest coverage; the toggle wiring is component glue.
