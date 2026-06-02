@@ -12,6 +12,9 @@ Exposes the organized library over HTTP for the B7 frontend:
 * ``POST /api/undo`` / ``GET /api/undo/status/{id}`` / ``POST /api/undo/cancel/{id}``
   — reverse the most recent organize batch as a cancellable background job (B8;
   see :mod:`geosorter.undo`). Shares the single-worker pool with organize.
+* ``POST /api/retag`` (``{file_id, lat, lon}``) / ``GET /api/retag/status/{id}`` —
+  re-file an organized capture to a map-clicked location as a background job (B8;
+  see :mod:`geosorter.retag`). Shares the single-worker pool with organize/undo.
 * ``GET  /api/media/{relpath}`` — original file, range-capable (video seek),
   path-traversal-guarded.
 * ``GET  /api/thumb/{relpath}`` / ``GET /api/poster/{relpath}`` — lazily generated,
@@ -31,11 +34,24 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from . import db, derived, inbox
 from .jobs import JobManager
+
+
+class RetagRequest(BaseModel):
+    """Body of ``POST /api/retag``: re-file ``file_id`` to a clicked coordinate.
+
+    ``lat``/``lon`` are constrained to valid WGS84 ranges so an out-of-range click
+    is rejected with a clean 422 rather than failing deep in the job.
+    """
+
+    file_id: int
+    lat: float = Field(ge=-90.0, le=90.0)
+    lon: float = Field(ge=-180.0, le=180.0)
 
 
 def _strip(dest_path: str) -> str:
@@ -140,6 +156,17 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         if jobs.undo_status(job_id) is None or not jobs.cancel(job_id):
             raise HTTPException(status_code=404, detail="unknown job")
         return {"cancelled": True}
+
+    @app.post("/api/retag")
+    def retag_start(req: RetagRequest) -> dict:
+        return {"job_id": jobs.submit_retag(req.file_id, req.lat, req.lon)}
+
+    @app.get("/api/retag/status/{job_id}")
+    def retag_status(job_id: str) -> dict:
+        state = jobs.retag_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
 
     @app.get("/api/media/{relpath:path}")
     def media(relpath: str) -> FileResponse:

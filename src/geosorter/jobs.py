@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
 from .organize import run_organize
+from .retag import retag_file
 from .undo import run_undo
 
 
@@ -54,23 +55,40 @@ class UndoJobState:
     failures: list[str] = field(default_factory=list)
 
 
+@dataclass
+class RetagJobState:
+    """Serializable snapshot of one manual re-tag job's progress."""
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    status: str = ""  # the RetagReport status: 'retagged' | 'not_found' | 'failed'
+    moved: int = 0
+    place_string: str | None = None
+    processed: int = 0  # files seen so far (progress callback ticks)
+    current: str | None = None  # most recent file being relocated
+    error: str | None = None
+
+
 class JobManager:
     """Owns the worker pool and the live job table.
 
-    ``organize_fn``/``undo_fn`` are injectable for tests; they default to the real
-    :func:`geosorter.organize.run_organize` /
-    :func:`geosorter.undo.run_undo`. The single ``max_workers=1`` executor is shared
-    by both job kinds, so an organize and an undo can never run concurrently against
-    the same library/inbox.
+    ``organize_fn``/``undo_fn``/``retag_fn`` are injectable for tests; they default
+    to the real :func:`geosorter.organize.run_organize` /
+    :func:`geosorter.undo.run_undo` / :func:`geosorter.retag.retag_file`. The single
+    ``max_workers=1`` executor is shared by all three job kinds, so organize, undo,
+    and re-tag can never run concurrently against the same library/index.
     """
 
-    def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo):
+    def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
+                 retag_fn=retag_file):
         self._cfg = cfg
         self._organize_fn = organize_fn
         self._undo_fn = undo_fn
+        self._retag_fn = retag_fn
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._jobs: dict[str, JobState] = {}
         self._undo_jobs: dict[str, UndoJobState] = {}
+        self._retag_jobs: dict[str, RetagJobState] = {}
         self._cancels: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
 
@@ -176,3 +194,43 @@ class JobManager:
         state.conflicts = list(report.conflicts)
         state.failures = list(report.failures)
         state.state = "cancelled" if report.cancelled else "done"
+
+    # ----- re-tag jobs (share the executor with organize/undo) --------------- #
+
+    def submit_retag(self, file_id: int, lat: float, lon: float) -> str:
+        """Queue a manual re-tag of ``file_id`` to ``(lat, lon)`` and return its id."""
+        job_id = uuid.uuid4().hex
+        with self._lock:
+            self._retag_jobs[job_id] = RetagJobState(job_id=job_id)
+        self._executor.submit(self._run_retag, job_id, file_id, lat, lon)
+        return job_id
+
+    def retag_status(self, job_id: str) -> RetagJobState | None:
+        """Consistent point-in-time snapshot of a re-tag job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._retag_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def _run_retag(self, job_id: str, file_id: int, lat: float, lon: float) -> None:
+        state = self._retag_jobs[job_id]
+        state.state = "running"
+
+        def progress(msg: str) -> None:
+            state.processed += 1
+            state.current = msg.strip()
+
+        try:
+            report = self._retag_fn(self._cfg, file_id, lat, lon, progress=progress)
+        except Exception as exc:  # surface any failure as a job error
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        state.status = report.status
+        state.moved = report.moved
+        state.place_string = report.place_string
+        if report.status == "failed":
+            state.state = "error"
+            state.error = report.error
+        else:
+            state.state = "done"
