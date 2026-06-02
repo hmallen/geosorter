@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre'
-import type { MapEvent, ViewStateChangeEvent } from 'react-map-gl/maplibre'
+import type { MapEvent, MapLayerMouseEvent, ViewStateChangeEvent } from 'react-map-gl/maplibre'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type Supercluster from 'supercluster'
@@ -13,9 +13,12 @@ const WORLD: BBox = [-180, -85, 180, 85]
 interface Props {
   features: LibraryFeature[]
   onSelect: (index: Supercluster<FeatureProps>, item: ClusterOrPoint) => void
+  // Re-tag placement mode (B8): when set, a map-background click reports the
+  // clicked coordinate (lng, lat) instead of selecting markers.
+  onMapClick?: (lng: number, lat: number) => void
 }
 
-export default function MapView({ features, onSelect }: Props) {
+export default function MapView({ features, onSelect, onMapClick }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const [view, setView] = useState({ longitude: -98, latitude: 39, zoom: 3 })
   const [bbox, setBbox] = useState<BBox>(WORLD)
@@ -40,6 +43,8 @@ export default function MapView({ features, onSelect }: Props) {
       }
       onLoad={(e: MapEvent) => syncBounds(e.target)}
       onMoveEnd={(e: ViewStateChangeEvent) => syncBounds(e.target)}
+      onClick={(e: MapLayerMouseEvent) => onMapClick?.(e.lngLat.lng, e.lngLat.lat)}
+      cursor={onMapClick ? 'crosshair' : undefined}
       mapStyle={STYLE}
       style={{ position: 'absolute', inset: 0 }}
     >
@@ -65,7 +70,12 @@ export default function MapView({ features, onSelect }: Props) {
           )
         }
         const props = c.properties
-        const inferred = props.gps_source === 'inferred'
+        const variant =
+          props.gps_source === 'inferred' ? ' pin--inferred'
+          : props.gps_source === 'manual' ? ' pin--manual' : ''
+        const note =
+          props.gps_source === 'inferred' ? ' (inferred location)'
+          : props.gps_source === 'manual' ? ' (manually placed)' : ''
         return (
           <Marker
             key={`p${props.id}`}
@@ -77,16 +87,14 @@ export default function MapView({ features, onSelect }: Props) {
               onSelect(index, c)
             }}
           >
-            <div
-              className={inferred ? 'pin pin--inferred' : 'pin'}
-              title={inferred ? `${props.filename} (inferred location)` : props.filename}
-            />
+            <div className={`pin${variant}`} title={`${props.filename}${note}`} />
           </Marker>
         )
       })}
       <div className="map-legend">
         <span><i className="pin pin--legend" /> GPS</span>
         <span><i className="pin pin--inferred pin--legend" /> inferred</span>
+        <span><i className="pin pin--manual pin--legend" /> manual</span>
       </div>
     </Map>
   )

@@ -1,9 +1,9 @@
 ---
 title: Crash-Safe Move Engine & Organize Pipeline
-tags: [move-engine, organize, undo, inference, crash-safety, sqlite, geosorter, phase-0a, phase-2]
+tags: [move-engine, organize, undo, retag, inference, crash-safety, sqlite, geosorter, phase-0a, phase-2]
 created: 2026-05-31
 updated: 2026-06-01
-sources: [task:h-move-engine-cli, task:h-undo-batch, task:h-neighbor-gps-inference]
+sources: [task:h-move-engine-cli, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location]
 ---
 
 # Crash-Safe Move Engine & Organize Pipeline
@@ -173,3 +173,37 @@ background job (`POST /api/undo`) that **shares the single-worker executor with
 polled between files; remaining rows are left for a clean resume. Orphaned
 derived-cache entries (thumbs/previews/posters/proxies) are left as-is — they are
 mtime-keyed and regenerate on demand.
+
+## Manual re-tag (`retag.py`, task B8 — Phase 2)
+
+`retag_file(cfg, file_id, lat, lon)` re-files an already-**organized** capture to a
+map-clicked coordinate (the map UI's "Re-tag location" → click). It re-geocodes the
+coordinate, recomputes the local date/time from the file's **stored**
+`capture_ts_utc` against the *new* timezone (`tz_resolver.local_time_from_utc`),
+recomputes the destination, and physically relocates the primary + companions —
+then marks the `files` row `gps_source='manual'`. (Primary use: correcting a wrong
+or `inferred` pin. Organized files only; quarantined no-GPS rescue is deferred.)
+
+The move is a **library→library** variant of the same crash-safe discipline — a
+*bespoke* path like undo's (not `move_engine`'s inbox→library primitives), and
+**group-atomic**: `_relocate` copies every changed file to `<new>.partial`, verifies
+it against the stored `dest_sha256`, and `os.replace`s it into the new path — for
+*all* files — before the single index commit; only then are the old copies deleted.
+So a verified copy always exists at the new path before the old is removed (no data
+loss), and a new path occupied by *different* content is never clobbered (hash
+mismatch → `status='failed'`, nothing destroyed). Idempotent by disk state: a new
+path already holding the file's own verified bytes is accepted as a resume.
+
+`new_dest` is disambiguated by `_resolve_collision` (a `_2`/`_3` suffix keyed on a
+*different* `files.dest_path` owner) **before** the move, because that column is
+`UNIQUE` — without it a re-tag onto a path another capture already holds would copy
+the bytes and then fail the `UPDATE` with an `IntegrityError`, orphaning the copy.
+The index update (one commit) rewrites the primary's `files` row (geo columns,
+`gps_source='manual'`, `capture_ts_local`, `local_date`, `dest_path`, `filename`),
+each `file_companions.dest_path`, and each `moves.dest_path` (the verified
+`dest_sha256` is unchanged — the bytes did not). "No move needed" is decided by the
+recomputed destination equalling the current one, not by coordinate equality.
+
+Re-tag runs as a background job (`POST /api/retag`) on the **same single-worker
+executor** as organize/undo (the three are mutually exclusive). It has **no cancel**
+— a single-capture atomic move has nothing to interrupt.

@@ -69,3 +69,31 @@ def test_missing_timestamp_returns_empty():
     result = tz_resolver.resolve_local_time(*DENVER, None, None)
     assert result.local_date is None
     assert result.capture_ts_utc is None
+
+
+# --- local_time_from_utc (B8 re-tag): recompute local time from a stored UTC ---
+
+
+def test_local_time_from_utc_resolves_denver():
+    # 16:15 UTC on 2024-07-04 is 10:15 MDT (UTC-6 summer) in Denver.
+    result = tz_resolver.local_time_from_utc(*DENVER, "2024-07-04T16:15:00+00:00")
+    assert result.iana_zone == "America/Denver"
+    assert result.local_date == "2024-07-04"
+    assert result.local_time_hms == "10-15-00"
+    assert result.capture_ts_utc.startswith("2024-07-04T16:15:00")
+    assert result.tz_ambiguous is False
+
+
+def test_local_time_from_utc_differs_across_timezone():
+    # The same instant resolves to a later wall-clock (and possibly next day) in Tokyo.
+    denver = tz_resolver.local_time_from_utc(*DENVER, "2024-07-04T16:15:00+00:00")
+    tokyo = tz_resolver.local_time_from_utc(35.68, 139.76, "2024-07-04T16:15:00+00:00")
+    assert tokyo.iana_zone == "Asia/Tokyo"
+    # 16:15 UTC = 01:15 next day JST (UTC+9): a different date than Denver's.
+    assert tokyo.local_date == "2024-07-05"
+    assert tokyo.local_date != denver.local_date
+
+
+def test_local_time_from_utc_unparseable_returns_empty():
+    assert tz_resolver.local_time_from_utc(*DENVER, "not-a-timestamp").local_date is None
+    assert tz_resolver.local_time_from_utc(*DENVER, None).local_date is None

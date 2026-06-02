@@ -58,6 +58,63 @@
   border-style: dashed;
 }
 
+/* Manually re-tagged markers: distinct green fill (user-verified location, B8). */
+.pin--manual {
+  background: #2e9e5b;
+}
+
+/* Re-tag placement banner: shown while awaiting a map click (B8). */
+.placement-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #2e9e5b;
+  color: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  font-size: 14px;
+}
+
+.placement-banner button {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+/* File-list thumb: stacked open-button + re-tag action (B8). */
+.thumb-open {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.retag {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f6f6f6;
+  cursor: pointer;
+}
+
+.retag:hover {
+  background: #e8f5ee;
+}
+
 /* Map legend explaining the GPS vs inferred marker styles. */
 .map-legend {
   position: absolute;
