@@ -102,3 +102,12 @@ Added `POST /api/retag` (`{file_id, lat, lon}`, WGS84-bounded) + `GET /api/retag
 (task h-retag-location): a third background-job kind on the shared single-worker executor
 (organize/undo/re-tag mutually exclusive), no cancel route (atomic op). The `/api/library`
 `gps_source` enum gains `manual`; the map UI renders manual pins green (legend updated).
+
+## [2026-06-02] update | Phase 1 Backend — HTTP API Contract (B8 satellite + heatmap view toggles)
+Documented the final B8 polish item (task m-basemap-heatmap-toggles, frontend-only): a pure
+`basemaps.ts` module (`VECTOR_STYLE`, `SATELLITE_STYLE` Esri World Imagery raster +
+attribution, `HEATMAP_LAYER`, `heatmapData`) and an on-map `.map-controls` panel in
+`MapView` with a Satellite basemap toggle (`mapStyle` swap) and a native-MapLibre Heatmap
+toggle (`Source`/`Layer`) that hides the markers + legend while active. **Phase 2 (B8)
+deferred-polish is now complete** (undo, inbox counter, neighbor-GPS inference, manual
+re-tag, satellite + heatmap).
