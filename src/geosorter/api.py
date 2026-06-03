@@ -29,6 +29,7 @@ loopback interface unless the operator explicitly opts in via ``--host``.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
@@ -40,6 +41,8 @@ from starlette.staticfiles import StaticFiles
 
 from . import db, derived, inbox
 from .jobs import JobManager
+
+logger = logging.getLogger("geosorter.api")
 
 
 class RetagRequest(BaseModel):
@@ -59,18 +62,41 @@ def _strip(dest_path: str) -> str:
     return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
 
 
-def _relpath(dest_path: str, library_root: Path) -> str:
-    """Library-relative POSIX path used in media URLs (best-effort fallback)."""
+def _relpath(dest_path: str, *roots: Path) -> str:
+    """Library-relative POSIX path used in media URLs.
+
+    Tries each candidate root in order and returns the path relative to the first
+    one that contains ``dest_path``. Callers pass the **raw** ``cfg.library_root``
+    first (it matches the stored ``dest_path`` drive form) and the ``.resolve()``d
+    root as a backstop — on a mapped network drive ``.resolve()`` rewrites e.g.
+    ``Z:\\...`` to a ``\\\\server\\share\\...`` UNC path that no longer matches the
+    stored ``Z:\\...`` paths, which would otherwise silently degrade every media URL
+    to a bare filename (404). If no root matches, log a warning and fall back to the
+    bare filename so the failure is visible rather than silent.
+    """
     stripped = Path(_strip(dest_path))
-    try:
-        return stripped.relative_to(library_root).as_posix()
-    except ValueError:
-        return stripped.name
+    for root in roots:
+        try:
+            return stripped.relative_to(root).as_posix()
+        except ValueError:
+            continue
+    logger.warning(
+        "dest_path %r is not under any known library root %s; serving by bare "
+        "filename (media URLs may 404)",
+        dest_path,
+        [str(r) for r in roots],
+    )
+    return stripped.name
 
 
 def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
     """Build the FastAPI app bound to one :class:`~geosorter.config.Config`."""
     library_root = Path(cfg.library_root).resolve()
+    # Raw (unresolved) form for media-URL relpaths: stored dest_paths are built from
+    # the unresolved cfg.library_root, so on a mapped drive (Z: -> UNC) the resolved
+    # root above no longer matches them. _relpath tries url_root first, library_root
+    # as a backstop. The traversal guard / derived cache keep using library_root.
+    url_root = Path(cfg.library_root)
     jobs = JobManager(cfg)
     app = FastAPI(title="geosorter", version="0.1.0")
 
@@ -112,7 +138,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
                     "media_type": r["media_type"],
                     "codec": r["codec"],
                     "gps_source": r["gps_source"],
-                    "path": _relpath(r["dest_path"], library_root),
+                    "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
             for r in rows
@@ -199,7 +225,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
             for row in conn.execute(
                 "SELECT dest_path, codec FROM files WHERE media_type='video'"
             ):
-                if _relpath(row["dest_path"], library_root) == relpath:
+                if _relpath(row["dest_path"], url_root, library_root) == relpath:
                     return row["codec"]
         finally:
             conn.close()
