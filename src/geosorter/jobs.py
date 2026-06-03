@@ -34,6 +34,9 @@ class JobState:
     companions: int = 0
     processed: int = 0  # files seen so far (progress callback ticks)
     current: str | None = None  # most recent file being processed
+    current_phase: str | None = None  # 'hashing' | 'copying' | 'verifying' (byte progress)
+    bytes_done: int = 0  # bytes processed in the current file's current phase
+    bytes_total: int = 0  # current file's size (0 until a byte-progress tick arrives)
     error: str | None = None
     failures: list[str] = field(default_factory=list)
 
@@ -130,9 +133,16 @@ class JobManager:
             state.processed += 1
             state.current = msg.strip()
 
+        def byte_progress(name: str, phase: str, done: int, total: int) -> None:
+            state.current = name
+            state.current_phase = phase
+            state.bytes_done = done
+            state.bytes_total = total
+
         try:
             report = self._organize_fn(
-                self._cfg, assume_yes=True, cancel=event.is_set, progress=progress
+                self._cfg, assume_yes=True, cancel=event.is_set,
+                progress=progress, byte_progress=byte_progress,
             )
         except Exception as exc:  # surface any pipeline failure as a job error
             state.state = "error"

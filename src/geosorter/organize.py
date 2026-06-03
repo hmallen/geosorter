@@ -171,6 +171,7 @@ def run_organize(
     assume_yes: bool = False,
     confirm=None,
     progress=None,
+    byte_progress=None,
     cancel=None,
     extractor_factory=MetadataExtractor,
 ) -> BatchReport:
@@ -182,6 +183,9 @@ def run_organize(
     ``cancel``, if given, is a no-arg predicate polled **between** capture groups
     (never mid-group, so group-atomicity holds); when it returns True the run stops
     and ``report.cancelled`` is set, leaving unprocessed captures in the inbox.
+    ``byte_progress``, if given, is called as ``byte_progress(filename, phase, done,
+    total)`` during each file's copy/hash so a caller can show live within-file
+    progress on a slow drive (the CLI omits it; the HTTP job manager uses it).
     ``extractor_factory`` is injectable for tests.
     """
     if cfg.inbox_path is None or cfg.library_root is None:
@@ -233,7 +237,8 @@ def run_organize(
                 report.cancelled = True
                 break
             _process_group(group, md, inferred_map.get(idx), index, geonames,
-                           library, report, dry_run, progress, cfg.feature_proximity_km)
+                           library, report, dry_run, progress, cfg.feature_proximity_km,
+                           byte_progress)
 
         if not dry_run:
             index.execute(
@@ -270,7 +275,7 @@ def _infer_batch(extracted, max_gap_minutes: float) -> dict:
 
 
 def _process_group(group, md, inferred, index, geonames, library, report, dry_run,
-                   progress, feature_proximity_km=5.0) -> None:
+                   progress, feature_proximity_km=5.0, byte_progress=None) -> None:
     primary = group.primary
 
     if md.media_type == "video":  # codec stats are a video-only tally (HEVC decision)
@@ -320,7 +325,12 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
     for sp, dp in files_to_move:
         if move_engine.is_already_moved(index, sp):
             continue
-        outcome = move_engine.copy_and_verify(index, report.batch_id, sp, dp)
+        bp = (
+            (lambda phase, done, total, _name=sp.name: byte_progress(_name, phase, done, total))
+            if byte_progress is not None
+            else None
+        )
+        outcome = move_engine.copy_and_verify(index, report.batch_id, sp, dp, progress=bp)
         if outcome.status == "failed":
             report.aborted = True
             report.failures.append(f"{sp}: {outcome.error}")
