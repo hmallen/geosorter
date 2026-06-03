@@ -25,7 +25,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-_DJI_RE = re.compile(r"^(?P<base>DJI_\d+)(?:_(?P<seg>\d+))?$", re.IGNORECASE)
+# Two DJI naming conventions:
+#   classic — DJI_0003 (counter only), split as DJI_0003_001
+#   modern  — DJI_<14-digit-timestamp>_<counter>_<lens>, e.g.
+#             DJI_20240825165234_0001_D, split as ..._D_001
+# The lens letter (_D/_W/_T/_S) is part of ``base`` so distinct lenses are
+# distinct captures. The modern shape is tried first; a plain counter falls back
+# to classic. ``seg`` is the optional split-video continuation index.
+_DJI_RE = re.compile(
+    r"^(?P<base>DJI_(?:\d{14}_\d+_[A-Za-z]+|\d+))(?:_(?P<seg>\d+))?$",
+    re.IGNORECASE,
+)
 _COMPANION_EXT = {".dng": "dng", ".lrf": "lrf", ".srt": "srt"}
 _PRIMARY_EXT = {".jpg", ".jpeg", ".mp4", ".mov"}
 
