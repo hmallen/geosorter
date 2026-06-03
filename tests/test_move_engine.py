@@ -1,7 +1,5 @@
 """Tests for the crash-safe move engine (copy → verify → delete, recoverable)."""
 
-import shutil
-
 from geosorter import db, move_engine
 
 BATCH = "20260531T120000-abcdef"
@@ -70,7 +68,7 @@ def test_verify_mismatch_aborts(tmp_path, monkeypatch):
         with open(d, "wb") as fh:
             fh.write(b"CORRUPTED")
 
-    monkeypatch.setattr(move_engine.shutil, "copyfile", _corrupt)
+    monkeypatch.setattr(move_engine, "_copy_file", _corrupt)
     try:
         outcome = move_engine.copy_and_verify(conn, BATCH, src, dest)
         row = _moves_row(conn, src)
@@ -93,7 +91,7 @@ def test_disk_full_cleans_partial(tmp_path, monkeypatch):
             fh.write(b"partial")
         raise OSError("No space left on device")
 
-    monkeypatch.setattr(move_engine.shutil, "copyfile", _boom)
+    monkeypatch.setattr(move_engine, "_copy_file", _boom)
     try:
         outcome = move_engine.copy_and_verify(conn, BATCH, src, dest)
     finally:
@@ -112,13 +110,13 @@ def test_midflight_kill_recovers(tmp_path, monkeypatch):
     dest = str(tmp_path / "library" / "out.JPG")
 
     calls = {"n": 0}
-    real_copy = shutil.copyfile
+    real_copy = move_engine._copy_file
 
     def _counting(s, d, *a, **k):
         calls["n"] += 1
         return real_copy(s, d)
 
-    monkeypatch.setattr(move_engine.shutil, "copyfile", _counting)
+    monkeypatch.setattr(move_engine, "_copy_file", _counting)
     try:
         first = move_engine.copy_and_verify(conn, BATCH, src, dest)
         assert first.status == "copy_verified"
@@ -134,6 +132,37 @@ def test_midflight_kill_recovers(tmp_path, monkeypatch):
     assert not src.exists()
     assert (tmp_path / "library" / "out.JPG").read_bytes() == b"hello-capture"
     assert row[0] == "source_deleted"
+
+
+def test_sha256_file_reports_progress(tmp_path):
+    # on_bytes is called with the cumulative byte count and the digest is unchanged.
+    src = _src(tmp_path, data=b"x" * (3 * (1 << 20) + 7))  # 3 chunks + tail
+    seen: list[int] = []
+    digest = move_engine.sha256_file(src, on_bytes=seen.append)
+    assert digest == move_engine.sha256_file(src)  # same digest with/without callback
+    assert seen  # at least one tick
+    assert seen == sorted(seen)  # monotonic cumulative
+    assert seen[-1] == src.stat().st_size  # final tick == file size
+
+
+def test_copy_and_verify_reports_phases(tmp_path):
+    conn = _index(tmp_path)
+    src = _src(tmp_path, data=b"capture-bytes" * 100_000)
+    dest = str(tmp_path / "library" / "out.JPG")
+    calls: list[tuple[str, int, int]] = []
+    try:
+        outcome = move_engine.copy_and_verify(
+            conn, BATCH, src, dest, progress=lambda phase, done, total: calls.append((phase, done, total))
+        )
+    finally:
+        conn.close()
+    assert outcome.status == "copy_verified"
+    assert (tmp_path / "library" / "out.JPG").read_bytes() == src.read_bytes()  # byte-identical
+    phases = {phase for phase, _d, _t in calls}
+    assert {"copying", "verifying"} <= phases
+    size = src.stat().st_size
+    assert all(total == size for _p, _d, total in calls)  # total == source size for every tick
+    assert all(done <= total for _p, done, total in calls)
 
 
 def test_is_already_moved(tmp_path):

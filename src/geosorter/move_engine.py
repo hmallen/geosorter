@@ -26,19 +26,47 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 
-def sha256_file(path: str | Path, *, chunk: int = 1 << 20) -> str:
-    """Return the SHA-256 hex digest of a file, read in streaming chunks."""
+def sha256_file(
+    path: str | Path, *, chunk: int = 1 << 20, on_bytes: Callable[[int], None] | None = None
+) -> str:
+    """Return the SHA-256 hex digest of a file, read in streaming chunks.
+
+    ``on_bytes``, if given, is called after each chunk with the cumulative number
+    of bytes read so far — a progress hook for the slow-network case where hashing
+    a multi-GB file is itself a long operation.
+    """
     h = hashlib.sha256()
+    copied = 0
     with open(path, "rb") as fh:
         for block in iter(lambda: fh.read(chunk), b""):
             h.update(block)
+            copied += len(block)
+            if on_bytes is not None:
+                on_bytes(copied)
     return h.hexdigest()
+
+
+def _copy_file(
+    src: str | Path, dst: str, *, chunk: int = 1 << 20, on_bytes: Callable[[int], None] | None = None
+) -> None:
+    """Stream-copy ``src`` → ``dst`` in chunks, reporting cumulative bytes.
+
+    Replaces ``shutil.copyfile`` so a long copy over a slow drive can surface live
+    progress via ``on_bytes`` (called after each chunk with bytes written so far).
+    """
+    copied = 0
+    with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+        for block in iter(lambda: fsrc.read(chunk), b""):
+            fdst.write(block)
+            copied += len(block)
+            if on_bytes is not None:
+                on_bytes(copied)
 
 
 @dataclass(frozen=True)
@@ -71,7 +99,12 @@ def is_already_moved(conn: sqlite3.Connection, source_path: str | Path) -> bool:
 
 
 def copy_and_verify(
-    conn: sqlite3.Connection, batch_id: str, source_path: str | Path, dest_path: str
+    conn: sqlite3.Connection,
+    batch_id: str,
+    source_path: str | Path,
+    dest_path: str,
+    *,
+    progress: Callable[[str, int, int], None] | None = None,
 ) -> MoveOutcome:
     """Copy ``source_path`` → ``dest_path`` and verify by SHA-256.
 
@@ -79,9 +112,18 @@ def copy_and_verify(
     deleted — call :func:`commit_delete` for that). Idempotent: a re-run resumes
     from an existing ``pending``/``copy_verified`` row without re-copying a
     byte-verified destination. Returns a :class:`MoveOutcome`.
+
+    ``progress``, if given, is called as ``progress(phase, done, total)`` during the
+    three byte-heavy steps (``phase`` ∈ ``'hashing'``/``'copying'``/``'verifying'``,
+    ``total`` = the source size) so a caller can show live progress on a slow drive.
     """
     source_path = Path(source_path)
-    src_sha = sha256_file(source_path)
+    total = source_path.stat().st_size
+
+    def _emit(phase: str) -> Callable[[int], None] | None:
+        return (lambda done: progress(phase, done, total)) if progress is not None else None
+
+    src_sha = sha256_file(source_path, on_bytes=_emit("hashing"))
 
     existing = conn.execute(
         "SELECT status, dest_sha256 FROM moves WHERE source_path=? AND source_sha256=?",
@@ -107,8 +149,8 @@ def copy_and_verify(
     partial = final + ".partial"
     try:
         os.makedirs(os.path.dirname(final), exist_ok=True)
-        shutil.copyfile(str(source_path), partial)
-        dest_sha = sha256_file(partial)
+        _copy_file(str(source_path), partial, on_bytes=_emit("copying"))
+        dest_sha = sha256_file(partial, on_bytes=_emit("verifying"))
     except OSError as err:
         _cleanup(partial)
         conn.execute(

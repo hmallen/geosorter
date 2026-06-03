@@ -17,7 +17,8 @@ export function useOrganizeJob(onDone?: () => void) {
     } catch (e) {
       setJob({
         state: 'error', organized: 0, quarantined: 0, duplicates_skipped: 0,
-        companions: 0, processed: 0, current: null, failures: [String(e)], error: String(e),
+        companions: 0, processed: 0, current: null, current_phase: null,
+        bytes_done: 0, bytes_total: 0, failures: [String(e)], error: String(e),
       })
     } finally {
       setRunning(false)

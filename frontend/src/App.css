@@ -28,6 +28,12 @@
   color: #444;
 }
 
+.toolbar .job--error {
+  color: #b00020;
+  max-width: 420px;
+  white-space: normal;
+}
+
 .cluster {
   background: #1978c8;
   color: #fff;

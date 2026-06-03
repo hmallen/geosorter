@@ -1,6 +1,7 @@
 import { useOrganizeJob } from '../useOrganizeJob'
 import { useUndoJob } from '../useUndoJob'
 import { useInboxCount } from '../useInboxCount'
+import { progressLabel, resultLabel } from '../organizeJob'
 
 export default function Toolbar({ onDone }: { onDone: () => void }) {
   const { count, refresh } = useInboxCount()
@@ -29,11 +30,11 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
         {undoing ? 'Undoing…' : 'Undo Last Batch'}
       </button>
       {job && (
-        <span className="job">
-          {job.state === 'running'
-            ? `processing ${job.processed}${job.current ? ` — ${job.current}` : ''}`
-            : `${job.state}: organized ${job.organized}, quarantined ${job.quarantined}` +
-              (job.failures.length ? `, errors ${job.failures.length}` : '')}
+        <span
+          className={`job${job.state === 'error' ? ' job--error' : ''}`}
+          title={job.error ?? undefined}
+        >
+          {job.state === 'running' ? progressLabel(job) : resultLabel(job)}
         </span>
       )}
       {undo && (
