@@ -64,3 +64,42 @@ def test_distinct_captures_form_distinct_groups(tmp_path):
     b = _touch(tmp_path / "DJI_0006.JPG", 6000.0)
     groups = grouping.group_companions([a, b])
     assert {g.primary.name for g in groups} == {"DJI_0005.JPG", "DJI_0006.JPG"}
+
+
+# Modern DJI naming: DJI_<14-digit-timestamp>_<counter>_<lens>, e.g.
+# DJI_20240825165234_0001_D.MP4. The lens letter (_D/_W/_T/_S) is part of the
+# grouping key, so distinct lenses are distinct captures.
+
+
+def test_group_modern_video_with_srt_and_lrf(tmp_path):
+    mp4 = _touch(tmp_path / "DJI_20240825165234_0001_D.MP4", 2000.0)
+    srt = _touch(tmp_path / "DJI_20240825165234_0001_D.SRT", 2000.0)
+    lrf = _touch(tmp_path / "DJI_20240825165234_0001_D.LRF", 2000.0)
+    groups = grouping.group_companions([mp4, srt, lrf])
+    assert len(groups) == 1
+    assert groups[0].primary == mp4
+    assert _by_name(groups[0].companions) == {
+        ("DJI_20240825165234_0001_D.SRT", "srt"),
+        ("DJI_20240825165234_0001_D.LRF", "lrf"),
+    }
+
+
+def test_modern_lens_suffixes_are_separate_captures(tmp_path):
+    lens_d = _touch(tmp_path / "DJI_20240825165234_0001_D.MP4", 2000.0)
+    lens_w = _touch(tmp_path / "DJI_20240825165234_0001_W.MP4", 2000.0)
+    groups = grouping.group_companions([lens_d, lens_w])
+    assert {g.primary.name for g in groups} == {
+        "DJI_20240825165234_0001_D.MP4",
+        "DJI_20240825165234_0001_W.MP4",
+    }
+
+
+def test_modern_split_video_continuation_grouped_by_name(tmp_path):
+    mp4 = _touch(tmp_path / "DJI_20240825165234_0001_D.MP4", 3000.0)
+    cont = _touch(tmp_path / "DJI_20240825165234_0001_D_001.MP4", 3000.0 + 600)
+    groups = grouping.group_companions([mp4, cont])
+    assert len(groups) == 1
+    assert groups[0].primary == mp4
+    assert _by_name(groups[0].companions) == {
+        ("DJI_20240825165234_0001_D_001.MP4", "other"),
+    }
