@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, fetchInbox } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -12,6 +12,13 @@ describe('media URL builders', () => {
     expect(previewUrl(p)).toBe('/api/preview/X/y.jpg')
     expect(posterUrl(p)).toBe('/api/poster/X/y.jpg')
     expect(videoUrl(p)).toBe('/api/video/X/y.jpg')
+  })
+})
+
+describe('listThumb', () => {
+  it('uses the video poster for videos and the image thumb for photos', () => {
+    expect(listThumb('video', 'X/y.mp4')).toBe(posterUrl('X/y.mp4'))
+    expect(listThumb('photo', 'X/y.jpg')).toBe(thumbUrl('X/y.jpg'))
   })
 })
 
