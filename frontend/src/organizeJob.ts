@@ -10,8 +10,43 @@ export interface JobState {
   companions: number
   processed: number
   current: string | null
+  current_phase: string | null
+  bytes_done: number
+  bytes_total: number
   failures: string[]
   error: string | null
+}
+
+// Human-readable byte size for the progress label.
+export function fmtBytes(n: number): string {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1) } MB`
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`
+  return `${n} B`
+}
+
+// Live label while a run is in flight. Shows per-file byte progress (phase +
+// done/total + percent) once a byte tick has arrived, else the file counter.
+export function progressLabel(job: JobState): string {
+  if (job.bytes_total > 0) {
+    const pct = Math.floor((job.bytes_done / job.bytes_total) * 100)
+    const phase = job.current_phase ?? 'processing'
+    const name = job.current ? `${job.current} ` : ''
+    return `${phase} ${name}— ${fmtBytes(job.bytes_done)}/${fmtBytes(job.bytes_total)} (${pct}%)`
+  }
+  return `processing ${job.processed}${job.current ? ` — ${job.current}` : ''}`
+}
+
+// Terminal label. On error, append the actual failure detail (job.error, or the
+// joined failures) so the toolbar never shows a bare "errors N" with no reason.
+export function resultLabel(job: JobState): string {
+  let label = `${job.state}: organized ${job.organized}, quarantined ${job.quarantined}`
+  if (job.failures.length) label += `, errors ${job.failures.length}`
+  if (job.state === 'error') {
+    const detail = job.error ?? (job.failures.length ? job.failures.join('; ') : '')
+    if (detail) label += ` — ${detail}`
+  }
+  return label
 }
 
 const TERMINAL = new Set(['done', 'error', 'cancelled'])

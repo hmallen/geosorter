@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { runOrganize, type JobState } from './organizeJob'
+import { runOrganize, progressLabel, resultLabel, type JobState } from './organizeJob'
 
 function ok(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as Response
@@ -7,7 +7,8 @@ function ok(body: unknown): Response {
 
 const base = {
   organized: 0, quarantined: 0, duplicates_skipped: 0, companions: 0,
-  processed: 0, current: null, failures: [], error: null,
+  processed: 0, current: null, current_phase: null, bytes_done: 0, bytes_total: 0,
+  failures: [], error: null,
 }
 
 describe('runOrganize', () => {
@@ -34,5 +35,43 @@ describe('runOrganize', () => {
   it('throws if the start request fails', async () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(runOrganize(fetchFn)).rejects.toThrow(/organize start failed: 500/)
+  })
+})
+
+describe('resultLabel', () => {
+  it('appends the error detail when the run errored', () => {
+    const job: JobState = {
+      ...base, state: 'error', organized: 0, quarantined: 0,
+      failures: [String.raw`Z:\inbox\DJI_0003.MP4: network name no longer available`],
+      error: String.raw`Z:\inbox\DJI_0003.MP4: network name no longer available`,
+    }
+    const label = resultLabel(job)
+    expect(label).toContain('error: organized 0, quarantined 0')
+    expect(label).toContain('errors 1')
+    expect(label).toContain('network name no longer available') // the actual detail is shown
+  })
+
+  it('omits error detail on a clean done run', () => {
+    const job: JobState = { ...base, state: 'done', organized: 2, quarantined: 1 }
+    const label = resultLabel(job)
+    expect(label).toBe('done: organized 2, quarantined 1')
+  })
+})
+
+describe('progressLabel', () => {
+  it('shows phase, bytes and percent while copying', () => {
+    const job: JobState = {
+      ...base, state: 'running', current: 'DJI_0003.MP4',
+      current_phase: 'copying', bytes_done: 512 * 1024 * 1024, bytes_total: 1024 * 1024 * 1024,
+    }
+    const label = progressLabel(job)
+    expect(label).toContain('copying')
+    expect(label).toContain('DJI_0003.MP4')
+    expect(label).toContain('(50%)')
+  })
+
+  it('falls back to the file counter when no byte total is known', () => {
+    const job: JobState = { ...base, state: 'running', processed: 4, current: 'a.jpg' }
+    expect(progressLabel(job)).toBe('processing 4 — a.jpg')
   })
 })

@@ -114,6 +114,23 @@ def test_organize_photo_end_to_end(tmp_path):
     assert mrow[0] == "source_deleted"
 
 
+def test_byte_progress_forwarded(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", data=b"capture-bytes" * 1000)
+    ticks: list[tuple[str, str, int, int]] = []
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0001.JPG": _md()}),
+        byte_progress=lambda name, phase, done, total: ticks.append((name, phase, done, total)),
+    )
+    assert report.organized == 1
+    copying = [t for t in ticks if t[1] == "copying"]
+    assert copying  # at least one copy tick was forwarded
+    assert all(t[0] == "DJI_0001.JPG" for t in copying)  # filename carried through
+    assert all(0 < done <= total for _n, _p, done, total in copying)
+
+
 def test_organize_quarantines_no_gps(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
     src = _add(inbox, "DJI_0009.JPG")
@@ -283,10 +300,10 @@ def test_group_atomic_companion_failure_keeps_primary(tmp_path, monkeypatch):
 
     real = move_engine.copy_and_verify
 
-    def _fail_srt(conn, batch, sp, dp):
+    def _fail_srt(conn, batch, sp, dp, *, progress=None):
         if str(sp).endswith(".SRT"):
             return move_engine.MoveOutcome("failed", "x", None, dp, "injected")
-        return real(conn, batch, sp, dp)
+        return real(conn, batch, sp, dp, progress=progress)
 
     monkeypatch.setattr(organize.move_engine, "copy_and_verify", _fail_srt)
     report = organize.run_organize(
