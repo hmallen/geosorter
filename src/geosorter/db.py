@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS files (
     dest_path         TEXT NOT NULL UNIQUE,          -- absolute path in library
     filename          TEXT NOT NULL,
     media_type        TEXT NOT NULL,                 -- 'photo' | 'video'
+    capture_kind      TEXT,                          -- NULL=normal | 'hyperlapse' | 'panorama' (B10/B12)
+    frame_count       INTEGER,                       -- # source frames for hyperlapse/panorama (B10/B12)
+    star_rating       INTEGER,                       -- DJI in-app star rating, from MISC catalog (B11)
     capture_ts_utc    TEXT,                          -- ISO 8601 UTC
     capture_ts_local  TEXT,                          -- ISO 8601 with local offset
     local_date        TEXT,                          -- YYYY-MM-DD (GPS-derived local)
@@ -197,10 +200,48 @@ def _stamp_version(conn: sqlite3.Connection) -> None:
     )
 
 
+# Columns added after the original v1 ``files`` table, applied to existing
+# installs via ``ALTER TABLE``. A fresh install gets them straight from
+# ``_INDEX_SCHEMA`` (so the migration is a no-op there). Maps column -> DDL type;
+# all are nullable so existing rows read as ``NULL``.
+_INDEX_MIGRATIONS: dict[str, str] = {
+    "capture_kind": "TEXT",
+    "frame_count": "INTEGER",
+    "star_rating": "INTEGER",
+}
+
+
+def migrate_index_schema(conn: sqlite3.Connection) -> None:
+    """Bring an existing index DB up to ``SCHEMA_VERSION`` (idempotent).
+
+    ``_INDEX_SCHEMA`` only ``CREATE TABLE IF NOT EXISTS``-es, so it never adds a
+    column to a pre-existing ``files`` table. This adds each missing column via
+    ``ALTER TABLE`` (guarded against a concurrent writer that already added it),
+    then stamps ``schema_version`` to the new version — but **only after** every
+    target column is confirmed present, so a crash mid-migration never leaves a
+    version stamp ahead of the actual columns. Cheap to re-run (a ``PRAGMA
+    table_info`` read + no-op) for the many callers of ``init_index_schema``.
+    """
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(files)")}
+    for column, decl in _INDEX_MIGRATIONS.items():
+        if column in existing:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE files ADD COLUMN {column} {decl}")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise  # a real error, not a lost ADD-COLUMN race
+    final = {r[1] for r in conn.execute("PRAGMA table_info(files)")}
+    if _INDEX_MIGRATIONS.keys() <= final:
+        conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+    conn.commit()
+
+
 def init_index_schema(conn: sqlite3.Connection) -> None:
-    """Create the index-DB tables (idempotent)."""
+    """Create the index-DB tables (idempotent) and migrate to the current version."""
     conn.executescript(_INDEX_SCHEMA)
     _stamp_version(conn)
+    migrate_index_schema(conn)
     conn.commit()
 
 
