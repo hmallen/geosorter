@@ -12,6 +12,11 @@ export const previewUrl = (path: string): string => `/api/preview/${enc(path)}`
 export const posterUrl = (path: string): string => `/api/poster/${enc(path)}`
 export const videoUrl = (path: string): string => `/api/video/${enc(path)}`
 
+// File-list tile image: the /api/thumb route renders images with Pillow, which
+// can't open a video — so videos use their ffmpeg poster frame instead.
+export const listThumb = (mediaType: 'photo' | 'video', path: string): string =>
+  mediaType === 'video' ? posterUrl(path) : thumbUrl(path)
+
 export async function fetchLibrary(fetchFn: typeof fetch = fetch): Promise<LibraryFC> {
   const resp = await fetchFn('/api/library')
   if (!resp.ok) throw new Error(`library fetch failed: ${resp.status}`)

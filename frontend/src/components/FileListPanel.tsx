@@ -1,4 +1,4 @@
-import { thumbUrl } from '../api'
+import { listThumb } from '../api'
 import type { LibraryFeature } from '../types'
 
 interface Props {
@@ -26,7 +26,11 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
         {files.map((f, i) => (
           <div key={f.properties.id} className="thumb">
             <button className="thumb-open" onClick={() => onOpen(i)}>
-              <img src={thumbUrl(f.properties.path)} alt={f.properties.filename} loading="lazy" />
+              <img
+                src={listThumb(f.properties.media_type, f.properties.path)}
+                alt={f.properties.filename}
+                loading="lazy"
+              />
               <span>{f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}</span>
             </button>
             <button
