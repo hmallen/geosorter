@@ -243,3 +243,60 @@ def test_cancel_routes_are_partitioned_by_job_kind(client_and_lib):
     org_id = client.post("/api/organize").json()["job_id"]
     assert client.post(f"/api/organize/cancel/{undo_id}").status_code == 404
     assert client.post(f"/api/undo/cancel/{org_id}").status_code == 404
+
+
+def test_relpath_prefers_matching_root(tmp_path):
+    # A non-matching root is passed first, the matching root second: _relpath must
+    # try each and return the correct library-relative path (the mapped-drive case,
+    # where the resolved/UNC root does not match the stored Z:\ form but the raw
+    # root does).
+    dest = str(tmp_path / "lib" / "Place" / "f.JPG")
+    assert api._relpath(dest, tmp_path / "OTHER", tmp_path / "lib") == "Place/f.JPG"
+    assert api._relpath(dest, tmp_path / "lib") == "Place/f.JPG"
+
+
+def test_relpath_warns_and_falls_back_when_no_root_matches(tmp_path, caplog):
+    dest = str(tmp_path / "a" / "b.JPG")
+    with caplog.at_level("WARNING", logger="geosorter.api"):
+        result = api._relpath(dest, tmp_path / "x")
+    assert result == "b.JPG"
+    assert any(rec.levelname == "WARNING" for rec in caplog.records)
+
+
+def test_library_path_roundtrips_when_root_resolves_differently(tmp_path):
+    # Reproduce the mapped-drive case end to end: cfg.library_root resolves to a
+    # DIFFERENT path than the stored dest_path form (Z:\ -> UNC in production; a
+    # directory symlink here). Without the raw-root fallback the relpath degrades to
+    # a bare filename and /api/thumb 404s.
+    real = tmp_path / "real_lib"
+    (real / "Place" / "2024-01-01").mkdir(parents=True)
+    link = tmp_path / "link_lib"
+    try:
+        link.symlink_to(real, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlinks not permitted on this platform")
+    if Path(link).resolve() == link:
+        pytest.skip("symlink did not change resolve() on this platform")
+
+    img = link / "Place" / "2024-01-01" / "p.JPG"
+    shutil.copy(MEDIA / "dji_photo.jpg", img)
+    (tmp_path / "inbox").mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=link,  # raw form differs from link.resolve() (== real)
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    _seed(conn, dest_path=str(img), filename="p.JPG", media_type="photo",
+          status="organized", lat=40.0, lon=-105.0)
+    conn.commit()
+    conn.close()
+
+    client = TestClient(api.create_app(cfg))
+    path = client.get("/api/library").json()["features"][0]["properties"]["path"]
+    assert path == "Place/2024-01-01/p.JPG"  # folderful, not the bare "p.JPG"
+    assert client.get(f"/api/thumb/{path}").status_code == 200
