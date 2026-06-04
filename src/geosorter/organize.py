@@ -45,6 +45,9 @@ class BatchReport:
     quarantined: int = 0
     duplicates_skipped: int = 0
     companions: int = 0
+    retained_frame_bytes: int = 0  # disk cost of retained hyperlapse frames (B10)
+    unclaimed: int = 0  # recognized PANORAMA/MISC paths B10 does not file (B10)
+    warnings: list[str] = field(default_factory=list)  # orphan frame dirs etc. (B10)
     failures: list[str] = field(default_factory=list)
     per_place: dict[str, int] = field(default_factory=dict)
     codec: dict[str, int] = field(default_factory=lambda: {"h264": 0, "h265": 0, "unknown": 0})
@@ -106,6 +109,37 @@ def _companion_dest(primary_dest: str, primary_src: Path, companion_src: Path) -
     else:
         extra = "_" + companion_src.stem
     return prefix + os.path.join(folder, primary_stem + extra + companion_src.suffix)
+
+
+def _frame_dest(primary_dest: str, primary_src: Path, frame_src: Path) -> str:
+    r"""Destination for a hyperlapse frame: a ``<primary_stem>_frames/`` subfolder.
+
+    The frame keeps its original DJI name (``HYPERLAPSE_0001.JPG``) — already unique
+    and ordered within the source dir — inside a subfolder beside the render named
+    off the render's (possibly suffix-resolved) final stem. The primary's ``\\?\``
+    long-path prefix, if any, is preserved. ``move_engine`` creates the subfolder.
+    """
+    prefix = "\\\\?\\" if primary_dest.startswith("\\\\?\\") else ""
+    final = _strip(primary_dest)
+    folder = os.path.dirname(final)
+    primary_stem = Path(final).stem
+    return prefix + os.path.join(folder, primary_stem + "_frames", frame_src.name)
+
+
+def _borrow_frame_gps(group, md, extractor):
+    """Return ``md`` with GPS borrowed from the first GPS-bearing frame (B10).
+
+    Frames are pre-sorted by name, so this picks the earliest frame that carries a
+    coordinate. If no frame has GPS, ``md`` is returned unchanged (the render then
+    falls back to neighbor-GPS inference / quarantine like any other no-GPS file).
+    """
+    for fpath, ctype in group.companions:
+        if ctype != "hyperlapse_frame":
+            continue
+        fmd = extractor.extract(fpath)
+        if fmd.lat is not None and fmd.lon is not None:
+            return replace(md, lat=fmd.lat, lon=fmd.lon, gps_source="hyperlapse_frame")
+    return md
 
 
 def _is_duplicate(conn, primary: Path, src_sha: str) -> bool:
@@ -200,8 +234,11 @@ def run_organize(
     geonames = db.connect(cfg.geonames_db_path, integrity_check=False)
     try:
         paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
-        groups = grouping.group_companions(paths)
+        pre = grouping.prescan_inbox(paths, inbox_root=inbox)
+        groups = pre.groups
         report = BatchReport(batch_id="(dry-run)", dry_run=dry_run)
+        report.warnings.extend(pre.warnings)
+        report.unclaimed = len(pre.unclaimed)
 
         if not dry_run and not assume_yes and is_first_run(index):
             if confirm is not None and not confirm(_preview(groups, inbox, library)):
@@ -222,7 +259,12 @@ def run_organize(
             for idx, group in enumerate(groups):
                 if not dry_run and move_engine.is_already_moved(index, group.primary):
                     continue
-                extracted.append((idx, group, extractor.extract(group.primary)))
+                md = extractor.extract(group.primary)
+                # A hyperlapse render carries no GPS of its own; borrow it from the
+                # first GPS-bearing frame so the render lands on the map (B10).
+                if group.capture_kind == "hyperlapse" and md.lat is None and md.lon is None:
+                    md = _borrow_frame_gps(group, md, extractor)
+                extracted.append((idx, group, md))
 
         # Infer locations for no-GPS-but-timestamped captures from time-adjacent
         # GPS-bearing captures in this same batch (conservative: no neighbor in
@@ -238,7 +280,7 @@ def run_organize(
                 break
             _process_group(group, md, inferred_map.get(idx), index, geonames,
                            library, report, dry_run, progress, cfg.feature_proximity_km,
-                           byte_progress)
+                           byte_progress, cfg.retain_hyperlapse_frames)
 
         if not dry_run:
             index.execute(
@@ -275,16 +317,38 @@ def _infer_batch(extracted, max_gap_minutes: float) -> dict:
 
 
 def _process_group(group, md, inferred, index, geonames, library, report, dry_run,
-                   progress, feature_proximity_km=5.0, byte_progress=None) -> None:
+                   progress, feature_proximity_km=5.0, byte_progress=None,
+                   retain_hyperlapse_frames=True) -> None:
     primary = group.primary
+
+    # Effective companion set: a hyperlapse group with retention off files the render
+    # alone (its frames stay in the inbox), so they leave the move/persist set here.
+    companions = group.companions
+    if group.capture_kind == "hyperlapse" and not retain_hyperlapse_frames:
+        companions = [(p, t) for p, t in companions if t != "hyperlapse_frame"]
+    frame_count = (
+        sum(1 for _, t in companions if t == "hyperlapse_frame")
+        if group.capture_kind == "hyperlapse"
+        else None
+    )
+    # Source sizes for the retained-frame report. Guarded with ``exists()`` because a
+    # crash-resume can re-enter here with some frame sources already deleted (the
+    # primary's source_deleted sentinel is what gates a full skip, not per-frame).
+    frame_bytes = sum(
+        p.stat().st_size
+        for p, t in companions
+        if t == "hyperlapse_frame" and p.exists()
+    )
 
     if md.media_type == "video":  # codec stats are a video-only tally (HEVC decision)
         report.codec[md.codec if md.codec in ("h264", "h265") else "unknown"] += 1
     if progress is not None:
         progress(f"  {primary.name}")
 
-    # Borrow a time-adjacent neighbor's GPS when this capture has none (B8). The
-    # borrowed coordinate then flows through tz/geocode/path exactly like real GPS.
+    # Borrow a time-adjacent neighbor's GPS when this capture has none (B8). A
+    # hyperlapse render already borrowed its frame GPS in pass 1, so this only
+    # applies to the rare frame-less / GPS-less case. The borrowed coordinate then
+    # flows through tz/geocode/path exactly like real GPS.
     if md.lat is None and md.lon is None and inferred is not None:
         md = replace(md, lat=inferred.lat, lon=inferred.lon, gps_source="inferred")
     was_inferred = md.gps_source == "inferred"
@@ -306,7 +370,7 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         primary_dest = pathing.compute_dest_path(library, geo, local, primary.stem, primary.suffix)
 
     if dry_run:
-        _tally(report, group, geo, quarantine, local, was_inferred)
+        _tally(report, companions, geo, quarantine, local, was_inferred, frame_bytes)
         return
 
     src_sha = move_engine.sha256_file(primary)
@@ -316,8 +380,13 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
     primary_dest = _resolve_collision(index, primary, primary_dest)
 
     files_to_move = [(primary, primary_dest)]
-    for cpath, ctype in group.companions:
-        files_to_move.append((cpath, _companion_dest(primary_dest, primary, cpath)))
+    for cpath, ctype in companions:
+        cdest = (
+            _frame_dest(primary_dest, primary, cpath)
+            if ctype == "hyperlapse_frame"
+            else _companion_dest(primary_dest, primary, cpath)
+        )
+        files_to_move.append((cpath, cdest))
 
     # Phase A: copy + verify every file in the group (no deletes yet). Record each
     # file's verified source hash so Phase B's delete keys on the exact moves row.
@@ -341,16 +410,18 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
     # primary last, so the primary's source_deleted row is a reliable group-done
     # sentinel. Delete keys on the stored hash, never a re-hash of the live file.
     primary_sha = shas.get(primary) or _stored_sha(index, primary)
-    _persist(index, report, md, geo, local, quarantine, primary, primary_dest, group, files_to_move, primary_sha)
+    _persist(index, report, md, geo, local, quarantine, primary, primary_dest,
+             companions, files_to_move, primary_sha, group.capture_kind, frame_count)
     for sp, _dp in reversed(files_to_move):
         sha = shas.get(sp)
         if sha is not None:  # already-deleted files (skipped in Phase A) need nothing
             move_engine.commit_delete(index, sp, sha)
 
-    _tally(report, group, geo, quarantine, local, was_inferred)
+    _tally(report, companions, geo, quarantine, local, was_inferred, frame_bytes)
 
 
-def _persist(index, report, md, geo, local, quarantine, primary, primary_dest, group, files_to_move, primary_sha) -> None:
+def _persist(index, report, md, geo, local, quarantine, primary, primary_dest,
+             companions, files_to_move, primary_sha, capture_kind, frame_count) -> None:
     """Insert/refresh the ``files`` row and its ``file_companions`` (idempotent)."""
     row = index.execute("SELECT id FROM files WHERE dest_path=?", (primary_dest,)).fetchone()
     if row is not None:
@@ -360,7 +431,8 @@ def _persist(index, report, md, geo, local, quarantine, primary, primary_dest, g
             "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
             "capture_ts_utc, capture_ts_local, local_date, lat, lon, gps_source, "
             "geocode_confidence, tz_ambiguous, codec, width, height, duration_s, sha256, "
-            "status, batch_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status, batch_id, capture_kind, frame_count) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 geo.geonameid if geo else None,
                 geo.place_string if geo else None,
@@ -382,6 +454,8 @@ def _persist(index, report, md, geo, local, quarantine, primary, primary_dest, g
                 primary_sha,
                 "quarantined" if quarantine else "organized",
                 report.batch_id,
+                capture_kind,
+                frame_count,
             ),
         )
         file_id = cur.lastrowid
@@ -392,7 +466,7 @@ def _persist(index, report, md, geo, local, quarantine, primary, primary_dest, g
         (file_id, str(primary)),
     )
     index.execute("DELETE FROM file_companions WHERE primary_file_id=?", (file_id,))
-    for (cpath, ctype), (_sp, cdest) in zip(group.companions, files_to_move[1:]):
+    for (cpath, ctype), (_sp, cdest) in zip(companions, files_to_move[1:]):
         index.execute(
             "INSERT INTO file_companions(primary_file_id, dest_path, companion_type) VALUES (?,?,?)",
             (file_id, cdest, ctype),
@@ -410,7 +484,8 @@ def _stored_sha(index, primary: Path) -> str:
     return row[0] if row else move_engine.sha256_file(primary)
 
 
-def _tally(report, group, geo, quarantine, local, was_inferred=False) -> None:
+def _tally(report, companions, geo, quarantine, local, was_inferred=False,
+           frame_bytes=0) -> None:
     if quarantine:
         report.quarantined += 1
     else:
@@ -419,7 +494,8 @@ def _tally(report, group, geo, quarantine, local, was_inferred=False) -> None:
             report.inferred += 1
         place = (geo.place_string if geo and geo.place_string else "_unknown")
         report.per_place[place] = report.per_place.get(place, 0) + 1
-    report.companions += len(group.companions)
+    report.companions += len(companions)
+    report.retained_frame_bytes += frame_bytes
     if local.tz_ambiguous:
         report.tz_ambiguous += 1
 

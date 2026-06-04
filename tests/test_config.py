@@ -61,3 +61,14 @@ def test_inference_max_gap_minutes_override(tmp_path):
     cfg_path = tmp_path / "geosorter.toml"
     cfg_path.write_text("inference_max_gap_minutes = 45\n", encoding="utf-8")
     assert config.load(cfg_path).inference_max_gap_minutes == 45.0
+
+
+def test_retain_hyperlapse_frames_default_true(tmp_path):
+    # No config file → hyperlapse source frames are retained alongside the render.
+    assert config.load(tmp_path / "nope.toml").retain_hyperlapse_frames is True
+
+
+def test_retain_hyperlapse_frames_override_false(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("retain_hyperlapse_frames = false\n", encoding="utf-8")
+    assert config.load(cfg_path).retain_hyperlapse_frames is False

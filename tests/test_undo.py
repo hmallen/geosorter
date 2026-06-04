@@ -239,3 +239,39 @@ def test_undo_cancel_stops_and_keeps_remaining(tmp_path):
     assert report.restored == 0
     m, f, _c = _counts(cfg, report.batch_id)
     assert m == 2 and f == 2  # nothing dropped — fully re-runnable
+
+
+def test_undo_hyperlapse_300_companions(tmp_path):
+    # A 300-frame hyperlapse render moves group-atomically and undo reverses every
+    # source (render + 300 frames) back to the inbox, dropping all batch rows. This
+    # exercises undo at scale without any undo-specific code change.
+    import os
+
+    cfg, inbox, library = _setup(tmp_path)
+    render = _add(
+        inbox, "DCIM/DJI_001/DJI_20240829183426_0021_D.MP4", b"render-bytes"
+    )
+    frames = []
+    for i in range(1, 301):
+        f = _add(
+            inbox,
+            f"DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_{i:04d}.JPG",
+            f"frame-{i}".encode(),
+        )
+        os.utime(f, (1000.0 + i, 1000.0 + i))
+        frames.append(f)
+    os.utime(render, (1400.0, 1400.0))
+    mapping = {render.name: _md(media_type="video", lat=None, lon=None,
+                                gps_source="none", codec="h264")}
+    mapping.update({f"HYPERLAPSE_{i:04d}.JPG": _md() for i in range(1, 301)})
+
+    org = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+    assert org.organized == 1 and org.companions == 300
+    assert not render.exists() and not any(f.exists() for f in frames)
+
+    report = undo.run_undo(cfg)
+    assert report.restored == 301  # render + 300 frames
+    assert report.conflicts == [] and report.failures == []
+    assert render.exists() and all(f.exists() for f in frames)
+    assert not any(p.is_file() for p in library.rglob("*"))  # library copies gone
+    assert _counts(cfg, report.batch_id) == (0, 0, 0)

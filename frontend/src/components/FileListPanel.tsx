@@ -31,6 +31,11 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
                 alt={f.properties.filename}
                 loading="lazy"
               />
+              {f.properties.capture_kind === 'hyperlapse' && (f.properties.frame_count ?? 0) > 0 && (
+                <span className="badge badge--hyperlapse" title="Hyperlapse render">
+                  ⊞ ×{f.properties.frame_count}
+                </span>
+              )}
               <span>{f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}</span>
             </button>
             <button

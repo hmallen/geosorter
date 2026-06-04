@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -410,6 +411,130 @@ def test_cancel_between_groups_leaves_remaining(tmp_path):
     assert report.organized == 1
     assert not first.exists()  # first group fully organized
     assert sorted(p.name for p in inbox.iterdir()) == ["DJI_0002.JPG"]  # rest untouched
+
+
+# --------------------------------------------------------------------------- #
+# Hyperlapse handling (B10): a SRT-less render borrows its frames' GPS, the frames
+# travel as hyperlapse_frame companions into a <render>_frames/ subfolder.
+# --------------------------------------------------------------------------- #
+def _hyperlapse_card(inbox, counter="0021", *, n_frames=3):
+    """Build DCIM/DJI_001/<render>.MP4 + DCIM/HYPERLAPSE/001_<counter>/ frames.
+
+    Returns ``(render_path, [frame_paths])``. The render mtime is set just after
+    the frames, matching the real card (render written at capture end).
+    """
+    render = _add(
+        inbox, f"DCIM/DJI_001/DJI_20240829183426_{counter}_D.MP4", b"render-bytes"
+    )
+    frames = []
+    for i in range(1, n_frames + 1):
+        f = _add(
+            inbox,
+            f"DCIM/HYPERLAPSE/001_{counter}/HYPERLAPSE_{i:04d}.JPG",
+            f"frame-{i}".encode(),
+        )
+        os.utime(f, (1000.0 + i, 1000.0 + i))
+        frames.append(f)
+    os.utime(render, (1100.0, 1100.0))  # shortly after the frames
+    return render, frames
+
+
+def test_hyperlapse_borrows_frame_gps(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    render, frames = _hyperlapse_card(inbox, n_frames=3)
+    mapping = {
+        render.name: _md(media_type="video", lat=None, lon=None,
+                         gps_source="none", codec="h264"),
+        # Frames carry EXIF GPS (default _md lat/lon → Boulder fixture).
+        "HYPERLAPSE_0001.JPG": _md(),
+        "HYPERLAPSE_0002.JPG": _md(),
+        "HYPERLAPSE_0003.JPG": _md(),
+    }
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory(mapping)
+    )
+    assert report.organized == 1
+    assert report.quarantined == 0
+    assert report.companions == 3
+    assert report.retained_frame_bytes > 0
+    assert not render.exists() and not any(f.exists() for f in frames)
+
+    conn = _index(cfg)
+    try:
+        frow = conn.execute(
+            "SELECT dest_path, gps_source, capture_kind, frame_count FROM files"
+        ).fetchone()
+        ctypes = [
+            r[0]
+            for r in conn.execute(
+                "SELECT companion_type FROM file_companions"
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+    assert frow[1] == "hyperlapse_frame"
+    assert frow[2] == "hyperlapse"
+    assert frow[3] == 3
+    assert ctypes == ["hyperlapse_frame"] * 3
+    # Frames land in a <render_stem>_frames/ subfolder beside the render.
+    dest = organize._strip(frow[0])
+    frames_dir = Path(dest).with_suffix("").parent / (Path(dest).stem + "_frames")
+    assert frames_dir.is_dir()
+    assert sorted(p.name for p in frames_dir.iterdir()) == [
+        "HYPERLAPSE_0001.JPG",
+        "HYPERLAPSE_0002.JPG",
+        "HYPERLAPSE_0003.JPG",
+    ]
+
+
+def test_hyperlapse_retain_false_files_render_only(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    cfg = replace(cfg, retain_hyperlapse_frames=False)
+    render, frames = _hyperlapse_card(inbox, n_frames=3)
+    mapping = {
+        render.name: _md(media_type="video", lat=None, lon=None,
+                         gps_source="none", codec="h264"),
+        "HYPERLAPSE_0001.JPG": _md(),
+        "HYPERLAPSE_0002.JPG": _md(),
+        "HYPERLAPSE_0003.JPG": _md(),
+    }
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory(mapping)
+    )
+    assert report.organized == 1
+    assert report.companions == 0
+    assert report.retained_frame_bytes == 0
+    assert not render.exists()  # the render is still filed
+    assert all(f.exists() for f in frames)  # frames left in the inbox
+
+    conn = _index(cfg)
+    try:
+        frow = conn.execute(
+            "SELECT gps_source, capture_kind, frame_count FROM files"
+        ).fetchone()
+        companions = conn.execute("SELECT COUNT(*) FROM file_companions").fetchone()[0]
+    finally:
+        conn.close()
+    assert frow[0] == "hyperlapse_frame"  # GPS still borrowed from a frame
+    assert frow[1] == "hyperlapse"
+    assert frow[2] == 0
+    assert companions == 0
+
+
+def test_prescan_warnings_surface_in_report(tmp_path):
+    # A PANORAMA frame dir + an orphan HYPERLAPSE dir (no matching render) must be
+    # reported, never silently dropped or quarantined as singles.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DCIM/PANORAMA/001_0002/PANO_0001.JPG", b"pano")
+    orphan = _add(
+        inbox, "DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0001.JPG", b"orphan-frame"
+    )
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({}))
+    assert report.organized == 0
+    assert report.quarantined == 0
+    assert report.unclaimed == 1  # the PANORAMA frame
+    assert any("0099" in w for w in report.warnings)  # orphan hyperlapse dir
+    assert orphan.exists()  # left in the inbox, not moved
 
 
 # --------------------------------------------------------------------------- #

@@ -7,7 +7,9 @@ export interface FeatureProps {
   local_date: string | null
   media_type: 'photo' | 'video'
   codec: string | null
-  gps_source: 'exif' | 'srt' | 'srt_partial' | 'inferred' | 'manual' | 'none' | null
+  gps_source: 'exif' | 'srt' | 'srt_partial' | 'inferred' | 'manual' | 'hyperlapse_frame' | 'none' | null
+  capture_kind: 'hyperlapse' | 'panorama' | null // B10: special DJI capture units
+  frame_count: number | null // # source frames for a hyperlapse/panorama render
   path: string // library-relative POSIX path used to build media URLs
 }
 

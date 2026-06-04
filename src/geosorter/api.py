@@ -132,7 +132,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         try:
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, media_type, codec, "
-                "gps_source, dest_path, lat, lon FROM files "
+                "gps_source, capture_kind, frame_count, dest_path, lat, lon FROM files "
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
         finally:
@@ -149,12 +149,33 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
                     "media_type": r["media_type"],
                     "codec": r["codec"],
                     "gps_source": r["gps_source"],
+                    "capture_kind": r["capture_kind"],
+                    "frame_count": r["frame_count"],
                     "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
             for r in rows
         ]
         return {"type": "FeatureCollection", "features": features}
+
+    @app.get("/api/frames/{file_id}")
+    def frames(file_id: int) -> dict:
+        """List a hyperlapse render's source-frame relpaths (lightbox gallery, B10)."""
+        conn = _index()
+        try:
+            if conn.execute(
+                "SELECT 1 FROM files WHERE id=?", (file_id,)
+            ).fetchone() is None:
+                raise HTTPException(status_code=404, detail="unknown file")
+            rows = conn.execute(
+                "SELECT dest_path FROM file_companions "
+                "WHERE primary_file_id=? AND companion_type='hyperlapse_frame' "
+                "ORDER BY dest_path",
+                (file_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return {"frames": [_relpath(r["dest_path"], url_root, library_root) for r in rows]}
 
     @app.get("/api/inbox")
     def inbox_count() -> dict:
