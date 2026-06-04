@@ -41,3 +41,17 @@ def test_two_distinct_dji_photos(tmp_path):
     _add(box, "DJI_0001.JPG")
     _add(box, "DJI_0002.JPG")
     assert inbox.count_inbox(box) == inbox.InboxCount(files=2, captures=2)
+
+
+def test_hyperlapse_render_and_frames_count_as_one_capture(tmp_path):
+    # A render + its 5 source frames is ONE capture (the pre-scan links them), even
+    # though it is 6 files — so the badge reads "1 capture", not "1 + 5 singles".
+    box = tmp_path / "inbox"
+    box.mkdir()
+    render = _add(box, "DCIM/DJI_001/DJI_20240829183426_0021_D.MP4")
+    import os
+    for i in range(1, 6):
+        f = _add(box, f"DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_{i:04d}.JPG")
+        os.utime(f, (1000.0 + i, 1000.0 + i))
+    os.utime(render, (1100.0, 1100.0))
+    assert inbox.count_inbox(box) == inbox.InboxCount(files=6, captures=1)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -33,5 +33,24 @@ describe('fetchInbox', () => {
   it('throws on a non-OK response', async () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(fetchInbox(fetchFn)).rejects.toThrow(/inbox fetch failed: 500/)
+  })
+})
+
+describe('frames gallery (B10)', () => {
+  it('builds the frames URL from a file id', () => {
+    expect(framesUrl(42)).toBe('/api/frames/42')
+  })
+
+  it('returns the parsed frame relpaths', async () => {
+    const fetchFn = (async () => ({
+      ok: true, status: 200,
+      json: async () => ({ frames: ['P/hl_frames/HYPERLAPSE_0001.JPG'] }),
+    })) as unknown as typeof fetch
+    expect(await fetchFrames(7, fetchFn)).toEqual(['P/hl_frames/HYPERLAPSE_0001.JPG'])
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 404 }) as Response) as unknown as typeof fetch
+    await expect(fetchFrames(7, fetchFn)).rejects.toThrow(/frames fetch failed: 404/)
   })
 })

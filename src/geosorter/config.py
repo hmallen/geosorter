@@ -48,6 +48,11 @@ spatial_index = 'rtree'
 # same `organize` run, but only when that capture is within this many minutes.
 # Beyond the window the no-GPS file is quarantined as usual (never relocated far).
 # inference_max_gap_minutes = 30.0
+
+# Retain DJI hyperlapse source frames (the 250-350 stills in HYPERLAPSE/001_<counter>/)
+# alongside the rendered video, filed into a `<render>_frames/` subfolder. Set to
+# false to file only the render and leave the frames in the inbox (saves disk).
+# retain_hyperlapse_frames = true
 """
 
 
@@ -62,6 +67,7 @@ class Config:
     spatial_index: str = "rtree"
     feature_proximity_km: float = 5.0
     inference_max_gap_minutes: float = 30.0
+    retain_hyperlapse_frames: bool = True
 
 
 def default_data_dir() -> Path:
@@ -119,6 +125,7 @@ def load(path: str | Path | None = None) -> Config:
         spatial_index=spatial_index,
         feature_proximity_km=float(data.get("feature_proximity_km", 5.0)),
         inference_max_gap_minutes=float(data.get("inference_max_gap_minutes", 30.0)),
+        retain_hyperlapse_frames=bool(data.get("retain_hyperlapse_frames", True)),
     )
 
 
