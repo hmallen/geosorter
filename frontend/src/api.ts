@@ -23,6 +23,20 @@ export async function fetchLibrary(fetchFn: typeof fetch = fetch): Promise<Libra
   return (await resp.json()) as LibraryFC
 }
 
+// Hyperlapse source-frame gallery (B10): list a render's frame relpaths, then
+// build a thumbnail URL per frame with the existing /api/thumb route (frames are
+// JPEGs, so Pillow renders them directly).
+export const framesUrl = (id: number): string => `/api/frames/${id}`
+
+export async function fetchFrames(
+  id: number,
+  fetchFn: typeof fetch = fetch,
+): Promise<string[]> {
+  const resp = await fetchFn(framesUrl(id))
+  if (!resp.ok) throw new Error(`frames fetch failed: ${resp.status}`)
+  return ((await resp.json()) as { frames: string[] }).frames
+}
+
 // Inbox counter (B8): how much is waiting for the next organize run.
 export interface InboxCount {
   files: number

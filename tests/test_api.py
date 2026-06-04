@@ -26,13 +26,16 @@ def _probe_codec(path: Path) -> str:
 
 
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
-          gps_source="exif"):
-    conn.execute(
+          gps_source="exif", capture_kind=None, frame_count=None):
+    cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
-        "local_date, lat, lon, codec, gps_source, sha256, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "local_date, lat, lon, codec, gps_source, sha256, status, capture_kind, frame_count) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
-         "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status),
+         "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status,
+         capture_kind, frame_count),
     )
+    return cur.lastrowid
 
 
 @pytest.fixture
@@ -110,6 +113,64 @@ def test_library_exposes_gps_source(client_and_lib):
     by_name = {f["properties"]["filename"]: f["properties"] for f in fc["features"]}
     assert by_name["a.JPG"]["gps_source"] == "exif"
     assert by_name["b.JPG"]["gps_source"] == "inferred"
+
+
+def _hyperlapse_client(tmp_path):
+    """A client whose library holds one hyperlapse render + 3 frame companions."""
+    library = tmp_path / "library"
+    library.mkdir()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    fid = _seed(conn, dest_path=str(library / "P" / "hl.MP4"), filename="hl.MP4",
+                media_type="video", status="organized", lat=4.81, lon=-75.68,
+                gps_source="hyperlapse_frame", capture_kind="hyperlapse", frame_count=3)
+    for i in range(1, 4):
+        conn.execute(
+            "INSERT INTO file_companions(primary_file_id, dest_path, companion_type) "
+            "VALUES (?,?,?)",
+            (fid, str(library / "P" / "hl_frames" / f"HYPERLAPSE_{i:04d}.JPG"),
+             "hyperlapse_frame"),
+        )
+    conn.commit()
+    conn.close()
+    return TestClient(api.create_app(cfg)), fid
+
+
+def test_library_exposes_capture_kind_and_frame_count(tmp_path):
+    client, _ = _hyperlapse_client(tmp_path)
+    fc = client.get("/api/library").json()
+    feat = next(f for f in fc["features"] if f["properties"]["filename"] == "hl.MP4")
+    assert feat["properties"]["capture_kind"] == "hyperlapse"
+    assert feat["properties"]["frame_count"] == 3
+    assert feat["properties"]["gps_source"] == "hyperlapse_frame"
+
+
+def test_frames_lists_hyperlapse_companions(tmp_path):
+    client, fid = _hyperlapse_client(tmp_path)
+    resp = client.get(f"/api/frames/{fid}")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "frames": [
+            "P/hl_frames/HYPERLAPSE_0001.JPG",
+            "P/hl_frames/HYPERLAPSE_0002.JPG",
+            "P/hl_frames/HYPERLAPSE_0003.JPG",
+        ]
+    }
+
+
+def test_frames_unknown_id_404(tmp_path):
+    client, _ = _hyperlapse_client(tmp_path)
+    assert client.get("/api/frames/999999").status_code == 404
 
 
 def test_media_range_request_returns_206(client_and_lib):
