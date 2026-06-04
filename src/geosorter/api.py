@@ -98,6 +98,16 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
     # as a backstop. The traversal guard / derived cache keep using library_root.
     url_root = Path(cfg.library_root)
     jobs = JobManager(cfg)
+
+    # Run schema creation + migration ONCE at startup on a dedicated connection,
+    # not per-request: the v1->v2 ALTER TABLE migration must not race the many
+    # short-lived request connections (WAL allows concurrent readers + one writer).
+    _startup_conn = db.connect(cfg.index_db_path, integrity_check=False)
+    try:
+        db.init_index_schema(_startup_conn)
+    finally:
+        _startup_conn.close()
+
     app = FastAPI(title="geosorter", version="0.1.0")
 
     def _safe_path(relpath: str) -> Path:
@@ -110,9 +120,10 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         return candidate
 
     def _index():
+        # Schema is initialised/migrated once at create_app startup, so a request
+        # connection just opens and returns (no per-request init -> no WAL race).
         conn = db.connect(cfg.index_db_path, integrity_check=False)
         conn.row_factory = sqlite3.Row
-        db.init_index_schema(conn)
         return conn
 
     @app.get("/api/library")
