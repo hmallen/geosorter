@@ -4,11 +4,12 @@ A cheap scan of ``inbox_path`` for the map UI's "inbox" badge. Reports two numbe
 
 * ``files`` — every file under the inbox (recursively), i.e. exactly what
   :func:`geosorter.organize.run_organize` scans.
-* ``captures`` — the number of DJI capture groups
-  (:func:`geosorter.grouping.group_companions`), i.e. what ``organize`` will
+* ``captures`` — the number of capture groups
+  (:func:`geosorter.grouping.prescan_inbox`), i.e. what ``organize`` will
   actually process. Non-DJI filenames are ignored by the grouper, so they raise
   ``files`` without raising ``captures`` — an honest "inbox clutter that won't
-  organize" signal.
+  organize" signal. A hyperlapse render + its frame directory count as ONE capture
+  (the pre-scan links the frames as companions), not 1 + N singles.
 
 Deliberately scan-on-request (no ``watchdog`` observer / push channel): drone
 inboxes are small and the frontend polls.
@@ -42,5 +43,5 @@ def count_inbox(inbox_path: Path | None) -> InboxCount:
     if not inbox.is_dir():
         return InboxCount(0, 0)
     paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
-    groups = grouping.group_companions(paths)
-    return InboxCount(files=len(paths), captures=len(groups))
+    result = grouping.prescan_inbox(paths, inbox_root=inbox)
+    return InboxCount(files=len(paths), captures=len(result.groups))

@@ -195,7 +195,14 @@ def _render_report(report: BatchReport, dry_run: bool) -> None:
         click.echo(f"  inferred location:  {report.inferred} (GPS borrowed from a time-adjacent capture)")
     click.echo(f"  quarantined:        {report.quarantined}")
     click.echo(f"  companions:         {report.companions}")
+    if report.retained_frame_bytes:
+        mib = report.retained_frame_bytes / (1024 * 1024)
+        click.echo(f"  hyperlapse frames:  {mib:.1f} MiB retained (set retain_hyperlapse_frames=false to skip)")
     click.echo(f"  duplicates skipped: {report.duplicates_skipped}")
+    if report.unclaimed:
+        click.echo(f"  unclaimed:          {report.unclaimed} file(s) in PANORAMA/MISC (not yet handled) — left in the inbox")
+    for warning in report.warnings:
+        click.echo(f"  ! {warning}")
     click.echo(
         f"  codec: h264={report.codec['h264']} "
         f"h265={report.codec['h265']} unknown={report.codec['unknown']}"
