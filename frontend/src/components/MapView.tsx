@@ -88,11 +88,15 @@ export default function MapView({ features, onSelect, onMapClick }: Props) {
           )
         }
         const props = c.properties
+        // Panorama is keyed on capture_kind (its GPS is plain 'exif'), so it must
+        // be tested before the gps_source variants (B12).
         const variant =
-          props.gps_source === 'inferred' ? ' pin--inferred'
+          props.capture_kind === 'panorama' ? ' pin--panorama'
+          : props.gps_source === 'inferred' ? ' pin--inferred'
           : props.gps_source === 'manual' ? ' pin--manual' : ''
         const note =
-          props.gps_source === 'inferred' ? ' (inferred location)'
+          props.capture_kind === 'panorama' ? ' (panorama)'
+          : props.gps_source === 'inferred' ? ' (inferred location)'
           : props.gps_source === 'manual' ? ' (manually placed)' : ''
         return (
           <Marker
@@ -114,6 +118,7 @@ export default function MapView({ features, onSelect, onMapClick }: Props) {
           <span><i className="pin pin--legend" /> GPS</span>
           <span><i className="pin pin--inferred pin--legend" /> inferred</span>
           <span><i className="pin pin--manual pin--legend" /> manual</span>
+          <span><i className="pin pin--panorama pin--legend" /> panorama</span>
         </div>
       )}
     </Map>

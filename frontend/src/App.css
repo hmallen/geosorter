@@ -69,6 +69,11 @@
   background: #2e9e5b;
 }
 
+/* Panorama capture markers: distinct violet fill (B12). */
+.pin--panorama {
+  background: #7c4dc4;
+}
+
 /* Re-tag placement banner: shown while awaiting a map click (B8). */
 .placement-banner {
   position: absolute;
@@ -275,7 +280,8 @@
   position: relative;
 }
 
-.badge--hyperlapse {
+.badge--hyperlapse,
+.badge--panorama {
   position: absolute;
   top: 4px;
   left: 4px;
@@ -285,6 +291,11 @@
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
   pointer-events: none;
+}
+
+/* Panorama capture badge: distinct violet tint (B12). */
+.badge--panorama {
+  background: rgba(124, 77, 196, 0.85);
 }
 
 .frames-toggle {

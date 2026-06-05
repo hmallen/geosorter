@@ -173,6 +173,61 @@ def test_frames_unknown_id_404(tmp_path):
     assert client.get("/api/frames/999999").status_code == 404
 
 
+def _panorama_client(tmp_path):
+    """A client whose library holds one panorama primary + 2 tile companions."""
+    library = tmp_path / "library"
+    library.mkdir()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    fid = _seed(conn, dest_path=str(library / "P" / "PANO_0001.JPG"),
+                filename="PANO_0001.JPG", media_type="photo", status="organized",
+                lat=4.81, lon=-75.68, gps_source="exif", capture_kind="panorama",
+                frame_count=2)
+    for i in range(2, 4):
+        conn.execute(
+            "INSERT INTO file_companions(primary_file_id, dest_path, companion_type) "
+            "VALUES (?,?,?)",
+            (fid, str(library / "P" / "PANO_0001_frames" / f"PANO_{i:04d}.JPG"),
+             "panorama_frame"),
+        )
+    conn.commit()
+    conn.close()
+    return TestClient(api.create_app(cfg)), fid
+
+
+def test_library_exposes_panorama_capture_kind(tmp_path):
+    client, _ = _panorama_client(tmp_path)
+    fc = client.get("/api/library").json()
+    feat = next(
+        f for f in fc["features"] if f["properties"]["filename"] == "PANO_0001.JPG"
+    )
+    assert feat["properties"]["capture_kind"] == "panorama"
+    assert feat["properties"]["frame_count"] == 2
+    assert feat["properties"]["gps_source"] == "exif"
+
+
+def test_frames_lists_panorama_companions(tmp_path):
+    client, fid = _panorama_client(tmp_path)
+    resp = client.get(f"/api/frames/{fid}")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "frames": [
+            "P/PANO_0001_frames/PANO_0002.JPG",
+            "P/PANO_0001_frames/PANO_0003.JPG",
+        ]
+    }
+
+
 def test_media_range_request_returns_206(client_and_lib):
     client, library = client_and_lib
     (library / "clip.bin").write_bytes(b"0123456789")

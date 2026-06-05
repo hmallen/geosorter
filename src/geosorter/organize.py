@@ -112,11 +112,12 @@ def _companion_dest(primary_dest: str, primary_src: Path, companion_src: Path) -
 
 
 def _frame_dest(primary_dest: str, primary_src: Path, frame_src: Path) -> str:
-    r"""Destination for a hyperlapse frame: a ``<primary_stem>_frames/`` subfolder.
+    r"""Destination for a frame companion: a ``<primary_stem>_frames/`` subfolder.
 
-    The frame keeps its original DJI name (``HYPERLAPSE_0001.JPG``) — already unique
-    and ordered within the source dir — inside a subfolder beside the render named
-    off the render's (possibly suffix-resolved) final stem. The primary's ``\\?\``
+    Shared by hyperlapse frames (``HYPERLAPSE_0001.JPG``) and panorama tiles
+    (``PANO_0002.JPG``). The frame keeps its original DJI name — already unique and
+    ordered within the source dir — inside a subfolder beside the primary named off
+    the primary's (possibly suffix-resolved) final stem. The primary's ``\\?\``
     long-path prefix, if any, is preserved. ``move_engine`` creates the subfolder.
     """
     prefix = "\\\\?\\" if primary_dest.startswith("\\\\?\\") else ""
@@ -327,8 +328,8 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
     if group.capture_kind == "hyperlapse" and not retain_hyperlapse_frames:
         companions = [(p, t) for p, t in companions if t != "hyperlapse_frame"]
     frame_count = (
-        sum(1 for _, t in companions if t == "hyperlapse_frame")
-        if group.capture_kind == "hyperlapse"
+        sum(1 for _, t in companions if t in ("hyperlapse_frame", "panorama_frame"))
+        if group.capture_kind in ("hyperlapse", "panorama")
         else None
     )
     # Source sizes for the retained-frame report. Guarded with ``exists()`` because a
@@ -383,7 +384,7 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
     for cpath, ctype in companions:
         cdest = (
             _frame_dest(primary_dest, primary, cpath)
-            if ctype == "hyperlapse_frame"
+            if ctype in ("hyperlapse_frame", "panorama_frame")
             else _companion_dest(primary_dest, primary, cpath)
         )
         files_to_move.append((cpath, cdest))
