@@ -9,9 +9,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
-from geosorter import api, db
+from geosorter import api, db, derived
 from geosorter.config import Config
+from geosorter.jobs import JobManager
 
 MEDIA = Path(__file__).parent / "fixtures" / "media"
 
@@ -26,15 +28,16 @@ def _probe_codec(path: Path) -> str:
 
 
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
-          gps_source="exif", capture_kind=None, frame_count=None, star_rating=None):
+          gps_source="exif", capture_kind=None, frame_count=None, star_rating=None,
+          stitch_status=None):
     cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
         "local_date, lat, lon, codec, gps_source, sha256, status, capture_kind, "
-        "frame_count, star_rating) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "frame_count, star_rating, stitch_status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
          "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status,
-         capture_kind, frame_count, star_rating),
+         capture_kind, frame_count, star_rating, stitch_status),
     )
     return cur.lastrowid
 
@@ -313,6 +316,92 @@ def test_library_exposes_star_rating(tmp_path):
     }
     assert by_name["rated.JPG"]["star_rating"] == 4
     assert by_name["unrated.JPG"]["star_rating"] is None
+
+
+# --------------------------------------------------------------------------- #
+# Panorama stitch (B13): GeoJSON stitch_status, the cached-hero serve route, and
+# the POST-start + status-poll job plumbing.
+def _panorama_stitch_cfg(tmp_path, *, stitch_status=None):
+    library = tmp_path / "library"
+    (library / "P").mkdir(parents=True)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    fid = _seed(conn, dest_path=str(library / "P" / "PANO_0001.JPG"),
+                filename="PANO_0001.JPG", media_type="photo", status="organized",
+                lat=4.81, lon=-75.68, gps_source="exif", capture_kind="panorama",
+                frame_count=2, stitch_status=stitch_status)
+    conn.commit()
+    conn.close()
+    return cfg, fid, library
+
+
+def test_library_exposes_stitch_status(tmp_path):
+    cfg, _, _ = _panorama_stitch_cfg(tmp_path, stitch_status="ok")
+    client = TestClient(api.create_app(cfg))
+    feat = next(
+        f for f in client.get("/api/library").json()["features"]
+        if f["properties"]["filename"] == "PANO_0001.JPG"
+    )
+    assert feat["properties"]["stitch_status"] == "ok"
+
+
+def test_stitch_image_served_when_cached(tmp_path):
+    cfg, fid, library = _panorama_stitch_cfg(tmp_path)
+    # Pre-place a cached hero exactly where the route looks for it.
+    out = derived.stitch_cache_path(library.resolve(), library / "P" / "PANO_0001.JPG")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (60, 30), "skyblue").save(out, "JPEG")
+    client = TestClient(api.create_app(cfg))
+    resp = client.get(f"/api/stitch/{fid}")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/jpeg")
+
+
+def test_stitch_image_404_when_not_generated(tmp_path):
+    cfg, fid, _ = _panorama_stitch_cfg(tmp_path)
+    client = TestClient(api.create_app(cfg))
+    assert client.get(f"/api/stitch/{fid}").status_code == 404  # -> client uses gallery
+
+
+def test_stitch_routes_404_for_non_panorama_and_unknown(client_and_lib):
+    # The seeded a.JPG (id 1) is a normal photo, not a panorama.
+    client, _ = client_and_lib
+    assert client.get("/api/stitch/1").status_code == 404
+    assert client.get("/api/stitch/999999").status_code == 404
+    assert client.post("/api/stitch/1").status_code == 404
+    assert client.post("/api/stitch/999999").status_code == 404
+    # The route is file-id-keyed: an intermediate name like a .pto is unreachable
+    # (no int file_id), so .pto / intermediates are never servable.
+    assert client.get("/api/stitch/project.pto").status_code in (404, 422)
+
+
+def test_stitch_post_starts_job_and_status_polls(tmp_path):
+    cfg, fid, _ = _panorama_stitch_cfg(tmp_path)
+    jm = JobManager(cfg, stitch_fn=lambda *a, **k: Path("stitched.jpg"))
+    client = TestClient(api.create_app(cfg, job_manager=jm))
+    resp = client.post(f"/api/stitch/{fid}")
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    st = None
+    for _ in range(300):
+        st = client.get(f"/api/stitch/status/{job_id}").json()
+        if st["state"] in ("done", "error"):
+            break
+        time.sleep(0.02)
+    assert st["state"] == "done"
+    assert st["status"] == "ok"
+    assert client.get("/api/stitch/status/does-not-exist").status_code == 404
 
 
 def test_media_db_extension_blocked(client_and_lib):
