@@ -17,9 +17,16 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
+from . import db
+from .derived import HuginNotFound, StitchFailed, panorama_stitch
 from .organize import run_organize
 from .retag import retag_file
 from .undo import run_undo
+
+
+def _strip(dest_path: str) -> str:
+    """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
+    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
 
 
 @dataclass
@@ -72,6 +79,19 @@ class RetagJobState:
     error: str | None = None
 
 
+@dataclass
+class StitchJobState:
+    """Serializable snapshot of one panorama-stitch job's progress (B13)."""
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    file_id: int | None = None
+    # '' (in progress) | 'ok' | 'failed' (degenerate/pipeline error) | 'unavailable'
+    # (Hugin not installed — the row keeps NULL and the UI keeps the tile gallery)
+    status: str = ""
+    error: str | None = None
+
+
 class JobManager:
     """Owns the worker pool and the live job table.
 
@@ -83,15 +103,21 @@ class JobManager:
     """
 
     def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
-                 retag_fn=retag_file):
+                 retag_fn=retag_file, stitch_fn=panorama_stitch):
         self._cfg = cfg
         self._organize_fn = organize_fn
         self._undo_fn = undo_fn
         self._retag_fn = retag_fn
+        self._stitch_fn = stitch_fn
         self._executor = ThreadPoolExecutor(max_workers=1)
+        # A panorama stitch is read-only (~7 min) and strictly off the crash-safe
+        # move path, so it gets its OWN single worker: stitches serialize among
+        # themselves but never block (or wait behind) organize/undo/retag.
+        self._stitch_pool = ThreadPoolExecutor(max_workers=1)
         self._jobs: dict[str, JobState] = {}
         self._undo_jobs: dict[str, UndoJobState] = {}
         self._retag_jobs: dict[str, RetagJobState] = {}
+        self._stitch_jobs: dict[str, StitchJobState] = {}
         self._cancels: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
 
@@ -244,3 +270,94 @@ class JobManager:
             state.error = report.error
         else:
             state.state = "done"
+
+    # ----- stitch jobs (dedicated pool — independent of the destructive one) -- #
+
+    def submit_stitch(self, file_id: int) -> str:
+        """Queue a panorama stitch for ``file_id`` and return its id.
+
+        Dedups: if a stitch for the same ``file_id`` is already pending/running its
+        id is returned instead of starting a second ~7-min pass. A fresh job marks
+        ``files.stitch_status='pending'`` so a concurrently-loaded GeoJSON reflects it.
+        """
+        with self._lock:
+            for jid, st in self._stitch_jobs.items():
+                if st.file_id == file_id and st.state in ("pending", "running"):
+                    return jid
+            job_id = uuid.uuid4().hex
+            self._stitch_jobs[job_id] = StitchJobState(job_id=job_id, file_id=file_id)
+        self._mark_stitch_status(file_id, "pending")
+        self._stitch_pool.submit(self._run_stitch, job_id, file_id)
+        return job_id
+
+    def stitch_status(self, job_id: str) -> StitchJobState | None:
+        """Consistent point-in-time snapshot of a stitch job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._stitch_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def _mark_stitch_status(self, file_id: int, status: str | None) -> None:
+        """Write ``files.stitch_status`` for a panorama row (NULL clears it)."""
+        conn = db.connect(self._cfg.index_db_path, integrity_check=False)
+        try:
+            conn.execute(
+                "UPDATE files SET stitch_status=? WHERE id=? AND capture_kind='panorama'",
+                (status, file_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _run_stitch(self, job_id: str, file_id: int) -> None:
+        state = self._stitch_jobs[job_id]
+        state.state = "running"
+
+        # Load the panorama primary tile + its frame-tile companions from the index.
+        conn = db.connect(self._cfg.index_db_path, integrity_check=False)
+        try:
+            row = conn.execute(
+                "SELECT dest_path, capture_kind FROM files WHERE id=?", (file_id,)
+            ).fetchone()
+            if row is None or row[1] != "panorama":
+                state.state = "error"
+                state.error = "not a panorama capture"
+                return
+            primary = _strip(row[0])
+            frames = [
+                _strip(r[0])
+                for r in conn.execute(
+                    "SELECT dest_path FROM file_companions "
+                    "WHERE primary_file_id=? AND companion_type='panorama_frame' "
+                    "ORDER BY dest_path",
+                    (file_id,),
+                )
+            ]
+        finally:
+            conn.close()
+
+        try:
+            self._stitch_fn(
+                self._cfg.library_root, primary, frames,
+                hugin_bin_dir=self._cfg.hugin_bin_dir,
+            )
+        except HuginNotFound:
+            # Hugin absent: not a failure — clear back to NULL, keep the gallery.
+            self._mark_stitch_status(file_id, None)
+            state.status = "unavailable"
+            state.state = "done"
+            return
+        except StitchFailed as exc:
+            self._mark_stitch_status(file_id, "failed")
+            state.status = "failed"
+            state.error = str(exc)
+            state.state = "done"
+            return
+        except Exception as exc:  # unexpected — record failed + surface the error
+            self._mark_stitch_status(file_id, "failed")
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        self._mark_stitch_status(file_id, "ok")
+        state.status = "ok"
+        state.state = "done"

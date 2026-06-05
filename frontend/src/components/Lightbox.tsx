@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { fetchFrames, posterUrl, previewUrl, thumbUrl, videoUrl } from '../api'
+import { fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
+import { runStitch, type StitchState } from '../stitchJob'
 import type { LibraryFeature } from '../types'
 
 interface Props {
@@ -25,12 +26,35 @@ export default function Lightbox({ files, index, onIndex, onClose }: Props) {
     (kind === 'hyperlapse' || kind === 'panorama') && (f?.properties.frame_count ?? 0) > 0
   const fileId = f?.properties.id
 
-  // Reset the gallery whenever the selected file changes.
+  // Stitched panorama hero (B13): the ~7-min Hugin stitch is user-triggered. The
+  // hero exists when the library's stitch_status is 'ok', or once an in-session run
+  // completes 'ok'; otherwise the button offers to generate it (gallery stays).
+  const isPanorama = kind === 'panorama'
+  const [stitch, setStitch] = useState<StitchState | null>(null)
+  const heroReady =
+    isPanorama && (f?.properties.stitch_status === 'ok' || stitch?.status === 'ok')
+  // Only offer to stitch when tiles were actually filed — a 0-tile panorama can't be
+  // stitched (same gate as the frame gallery), so the button never starts a doomed job.
+  const stitchable = isPanorama && (f?.properties.frame_count ?? 0) > 0
+  const stitchBusy = stitch?.state === 'pending' || stitch?.state === 'running'
+
+  // Reset the gallery + stitch state whenever the selected file changes.
   useEffect(() => {
     setShowFrames(false)
     setFrameZoom(null)
     setFrames(null)
+    setStitch(null)
   }, [fileId])
+
+  const generateStitch = () => {
+    if (fileId === undefined) return
+    setStitch({ state: 'pending', status: '', file_id: fileId, error: null })
+    runStitch(fetch, fileId, { onProgress: setStitch })
+      .then(setStitch)
+      .catch(() =>
+        setStitch({ state: 'error', status: 'failed', file_id: fileId, error: 'stitch failed' }),
+      )
+  }
 
   useEffect(() => {
     if (!showFrames || frames !== null || fileId === undefined) return
@@ -52,6 +76,12 @@ export default function Lightbox({ files, index, onIndex, onClose }: Props) {
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
         {frameZoom ? (
           <img src={previewUrl(frameZoom)} alt="source frame" />
+        ) : heroReady ? (
+          <img
+            className="pano-hero"
+            src={stitchUrl(f.properties.id)}
+            alt={`${f.properties.filename} (stitched 360 panorama)`}
+          />
         ) : f.properties.media_type === 'video' ? (
           <video
             src={videoUrl(f.properties.path)}
@@ -61,6 +91,24 @@ export default function Lightbox({ files, index, onIndex, onClose }: Props) {
           />
         ) : (
           <img src={previewUrl(f.properties.path)} alt={f.properties.filename} />
+        )}
+
+        {stitchable && !heroReady && !frameZoom && (
+          <div className="stitch-controls">
+            {stitchBusy ? (
+              <span className="stitch-status">Stitching panorama… (~7 min)</span>
+            ) : stitch?.status === 'unavailable' ? (
+              <span className="stitch-status">
+                Panorama stitching unavailable (Hugin not installed).
+              </span>
+            ) : stitch?.status === 'failed' || stitch?.state === 'error' ? (
+              <span className="stitch-status">Stitch failed — showing the tile gallery.</span>
+            ) : (
+              <button className="stitch-button" onClick={generateStitch}>
+                ⊕ Generate stitched panorama
+              </button>
+            )}
+          </div>
         )}
 
         {isFrameGallery && (
