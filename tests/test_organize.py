@@ -521,18 +521,69 @@ def test_hyperlapse_retain_false_files_render_only(tmp_path):
     assert companions == 0
 
 
-def test_prescan_warnings_surface_in_report(tmp_path):
-    # A PANORAMA frame dir + an orphan HYPERLAPSE dir (no matching render) must be
-    # reported, never silently dropped or quarantined as singles.
+def _panorama_card(inbox, counter="0002", *, n_frames=3):
+    """Build DCIM/PANORAMA/001_<counter>/PANO_0001..N.JPG; return the tile paths."""
+    tiles = []
+    for i in range(1, n_frames + 1):
+        t = _add(inbox, f"DCIM/PANORAMA/001_{counter}/PANO_{i:04d}.JPG", f"tile-{i}".encode())
+        os.utime(t, (1000.0 + i, 1000.0 + i))
+        tiles.append(t)
+    return tiles
+
+
+def test_panorama_files_as_capture_unit(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
-    _add(inbox, "DCIM/PANORAMA/001_0002/PANO_0001.JPG", b"pano")
+    tiles = _panorama_card(inbox, n_frames=4)
+    # Every tile carries its own EXIF GPS (default _md → Boulder fixture); the
+    # primary's coordinate is what the unit files under (gps_source='exif').
+    mapping = {f"PANO_{i:04d}.JPG": _md() for i in range(1, 5)}
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory(mapping)
+    )
+    assert report.organized == 1
+    assert report.quarantined == 0
+    assert report.companions == 3
+    assert not any(t.exists() for t in tiles)  # the whole unit moved
+
+    conn = _index(cfg)
+    try:
+        frow = conn.execute(
+            "SELECT dest_path, gps_source, capture_kind, frame_count FROM files"
+        ).fetchone()
+        ctypes = [
+            r[0]
+            for r in conn.execute("SELECT companion_type FROM file_companions").fetchall()
+        ]
+    finally:
+        conn.close()
+    assert frow[1] == "exif"  # GPS straight from the primary tile's EXIF
+    assert frow[2] == "panorama"
+    assert frow[3] == 3  # panorama_frame companions (tiles - 1)
+    assert ctypes == ["panorama_frame"] * 3
+    # The primary is PANO_0001; its tiles land in a <stem>_frames/ subfolder.
+    dest = organize._strip(frow[0])
+    assert Path(dest).name.endswith("PANO_0001.JPG")
+    frames_dir = Path(dest).parent / (Path(dest).stem + "_frames")
+    assert frames_dir.is_dir()
+    assert sorted(p.name for p in frames_dir.iterdir()) == [
+        "PANO_0002.JPG",
+        "PANO_0003.JPG",
+        "PANO_0004.JPG",
+    ]
+
+
+def test_prescan_warnings_surface_in_report(tmp_path):
+    # A MISC db (unclaimed until B11) + an orphan HYPERLAPSE dir (no matching
+    # render) must be reported, never silently dropped or quarantined as singles.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "MISC/FC8482.db", b"catalog")
     orphan = _add(
         inbox, "DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0001.JPG", b"orphan-frame"
     )
     report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({}))
     assert report.organized == 0
     assert report.quarantined == 0
-    assert report.unclaimed == 1  # the PANORAMA frame
+    assert report.unclaimed == 1  # the MISC db
     assert any("0099" in w for w in report.warnings)  # orphan hyperlapse dir
     assert orphan.exists()  # left in the inbox, not moved
 

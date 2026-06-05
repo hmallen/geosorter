@@ -132,6 +132,26 @@ def test_undo_restores_companions(tmp_path):
     assert _counts(cfg, report.batch_id) == (0, 0, 0)
 
 
+def test_undo_restores_panorama_unit(tmp_path):
+    # A panorama capture is one primary + N panorama_frame companions filed under a
+    # <stem>_frames/ subfolder; undo must reverse the whole unit (B12).
+    cfg, inbox, library = _setup(tmp_path)
+    tiles = [
+        _add(inbox, f"DCIM/PANORAMA/001_0002/PANO_{i:04d}.JPG", f"tile-{i}".encode())
+        for i in range(1, 6)
+    ]
+    mapping = {f"PANO_{i:04d}.JPG": _md() for i in range(1, 6)}
+    organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+    assert not any(t.exists() for t in tiles)  # whole unit organized away
+
+    report = undo.run_undo(cfg)
+    assert report.restored == 5  # primary + 4 panorama_frame companions
+    assert all(t.exists() for t in tiles)
+    assert tiles[0].read_bytes() == b"tile-1"
+    assert not any(p.is_file() for p in library.rglob("*"))  # library copies gone
+    assert _counts(cfg, report.batch_id) == (0, 0, 0)  # batch index rows removed
+
+
 def test_undo_targets_only_the_latest_batch(tmp_path):
     cfg, inbox, _library = _setup(tmp_path)
     _add(inbox, "DJI_0001.JPG", b"first-content")
