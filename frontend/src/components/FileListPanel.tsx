@@ -41,6 +41,15 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
                   ▦ ×{f.properties.frame_count}
                 </span>
               )}
+              {f.properties.star_rating !== null && (
+                <span
+                  className="badge badge--stars"
+                  title={`${f.properties.star_rating}★ rating`}
+                >
+                  {'★'.repeat(f.properties.star_rating)}
+                  {'☆'.repeat(5 - f.properties.star_rating)}
+                </span>
+              )}
               <span>{f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}</span>
             </button>
             <button

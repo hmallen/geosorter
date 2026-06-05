@@ -132,6 +132,44 @@ def test_undo_restores_companions(tmp_path):
     assert _counts(cfg, report.batch_id) == (0, 0, 0)
 
 
+def _make_catalog(path, rows):
+    """Build a minimal DJI-shaped MISC catalog DB at ``path``; ``rows`` = (file_name, star)."""
+    import sqlite3
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE gis_info_table (file_name TEXT, star INT)")
+    conn.executemany("INSERT INTO gis_info_table(file_name, star) VALUES (?,?)", rows)
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_undo_restores_archived_catalog(tmp_path):
+    # B11 archives MISC/*.db outside library_root via the crash-safe engine; undo
+    # must reverse that archive (it is a logged moves row with file_id NULL).
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", b"video-bytes")
+    catalog = _make_catalog(
+        inbox / "MISC" / "FC.db",
+        [("/mnt/media_rw/sdcard0/DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", 4)],
+    )
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory(
+            {"DJI_20240825165234_0001_D.MP4": _md(media_type="video", codec="h264")}
+        ),
+    )
+    archive = Path(cfg.index_db_path).parent / "catalogs" / report.batch_id / "FC.db"
+    assert archive.is_file() and not catalog.exists()  # archived away
+
+    ureport = undo.run_undo(cfg)
+    assert ureport.conflicts == [] and ureport.failures == []
+    assert catalog.is_file()  # the .db is restored to its inbox MISC path
+    assert not archive.exists()  # the archive copy is removed
+    assert _counts(cfg, report.batch_id) == (0, 0, 0)  # batch index rows removed
+
+
 def test_undo_restores_panorama_unit(tmp_path):
     # A panorama capture is one primary + N panorama_frame companions filed under a
     # <stem>_frames/ subfolder; undo must reverse the whole unit (B12).

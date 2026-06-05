@@ -115,6 +115,10 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         candidate = (library_root / relpath).resolve()
         if not candidate.is_relative_to(library_root):
             raise HTTPException(status_code=403, detail="path outside library")
+        # Never serve a catalog DB. Archived MISC .db files live outside library_root
+        # by design (B11), so this is belt-and-suspenders against any .db under it.
+        if candidate.suffix.lower() == ".db":
+            raise HTTPException(status_code=403, detail="forbidden type")
         if not candidate.is_file():
             raise HTTPException(status_code=404, detail="not found")
         return candidate
@@ -132,8 +136,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         try:
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, media_type, codec, "
-                "gps_source, capture_kind, frame_count, dest_path, lat, lon FROM files "
-                "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
+                "gps_source, capture_kind, frame_count, star_rating, dest_path, lat, lon "
+                "FROM files WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
         finally:
             conn.close()
@@ -151,6 +155,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
                     "gps_source": r["gps_source"],
                     "capture_kind": r["capture_kind"],
                     "frame_count": r["frame_count"],
+                    "star_rating": r["star_rating"],
                     "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
