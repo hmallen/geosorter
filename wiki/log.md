@@ -122,3 +122,17 @@ attribution, `HEATMAP_LAYER`, `heatmapData`) and an on-map `.map-controls` panel
 toggle (`Source`/`Layer`) that hides the markers + legend while active. **Phase 2 (B8)
 deferred-polish is now complete** (undo, inbox counter, neighbor-GPS inference, manual
 re-tag, satellite + heatmap).
+
+## [2026-06-05] create | DJI Panorama Stitching (Hugin)
+Captured B13 (l-panorama-stitch-spike + m-panorama-stitch) domain knowledge + architecture:
+why off-the-shelf OpenCV `cv2.Stitcher` is a NO-GO on real DJI sphere panos (FLANN/OpenCL
+process crashes on featureless sky tiles, ~45% black void) and the **Hugin CLI pipeline** is
+a GO (`pto_gen → cpfind --multirow --celeste → cpclean → autooptimiser → pano_modify`
+equirectangular `→ hugin_executor`; `celeste` sky-masking is the key; measured 6000×2683 /
+~7 min / ~434 MiB). Documented the output-validity gate (long-edge/aspect/near-black-fraction
+guard against the cv2 void), Hugin-as-external-CLI (no pip dep, runtime-detected, optional via
+`hugin_bin_dir`), and the geosorter architecture: lazy + user-triggered (~7 min) + mtime-cached
+stitched hero, a **dedicated read-only `max_workers=1` pool** independent of the destructive
+organize/undo/retag worker, the `files.stitch_status` column (schema v3: NULL/pending/ok/failed,
+panorama rows only), and the traversal-proof file-id-keyed `/api/stitch/{id}` serve route.
+Added the index entry + a new topic page.

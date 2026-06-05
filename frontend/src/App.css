@@ -468,3 +468,33 @@
   padding: 8px;
   cursor: pointer;
 }
+
+/* Panorama stitched hero + generate control (B13) */
+.pano-hero {
+  /* a 360 equirectangular is very wide — let it use the full lightbox width */
+  width: 92vw;
+  max-height: 85vh;
+  object-fit: contain;
+}
+
+.stitch-controls {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.stitch-button {
+  font-size: 13px;
+  padding: 4px 12px;
+  border: 1px solid #888;
+  border-radius: 4px;
+  background: #f6f6f6;
+  cursor: pointer;
+}
+
+.stitch-status {
+  color: #ddd;
+  font-size: 13px;
+  padding: 4px 8px;
+}

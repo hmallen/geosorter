@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS files (
     capture_kind      TEXT,                          -- NULL=normal | 'hyperlapse' | 'panorama' (B10/B12)
     frame_count       INTEGER,                       -- # source frames for hyperlapse/panorama (B10/B12)
     star_rating       INTEGER,                       -- DJI in-app star rating, from MISC catalog (B11)
+    stitch_status     TEXT,                          -- panorama hero: NULL=none|'pending'|'ok'|'failed' (B13)
     capture_ts_utc    TEXT,                          -- ISO 8601 UTC
     capture_ts_local  TEXT,                          -- ISO 8601 with local offset
     local_date        TEXT,                          -- YYYY-MM-DD (GPS-derived local)
@@ -208,6 +209,7 @@ _INDEX_MIGRATIONS: dict[str, str] = {
     "capture_kind": "TEXT",
     "frame_count": "INTEGER",
     "star_rating": "INTEGER",
+    "stitch_status": "TEXT",
 }
 
 

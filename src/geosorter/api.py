@@ -101,15 +101,20 @@ def _relpath(dest_path: str, *roots: Path) -> str:
     return stripped.name
 
 
-def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
-    """Build the FastAPI app bound to one :class:`~geosorter.config.Config`."""
+def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> FastAPI:
+    """Build the FastAPI app bound to one :class:`~geosorter.config.Config`.
+
+    ``job_manager`` is injectable for tests (e.g. a :class:`~geosorter.jobs.JobManager`
+    with a fake ``stitch_fn`` so a stitch job completes without invoking real Hugin);
+    it defaults to a fresh manager bound to ``cfg``.
+    """
     library_root = Path(cfg.library_root).resolve()
     # Raw (unresolved) form for media-URL relpaths: stored dest_paths are built from
     # the unresolved cfg.library_root, so on a mapped drive (Z: -> UNC) the resolved
     # root above no longer matches them. _relpath tries url_root first, library_root
     # as a backstop. The traversal guard / derived cache keep using library_root.
     url_root = Path(cfg.library_root)
-    jobs = JobManager(cfg)
+    jobs = job_manager if job_manager is not None else JobManager(cfg)
 
     # Run schema creation + migration ONCE at startup on a dedicated connection,
     # not per-request: the v1->v2 ALTER TABLE migration must not race the many
@@ -148,7 +153,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         try:
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, media_type, codec, "
-                "gps_source, capture_kind, frame_count, star_rating, dest_path, lat, lon "
+                "gps_source, capture_kind, frame_count, star_rating, stitch_status, "
+                "dest_path, lat, lon "
                 "FROM files WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
         finally:
@@ -168,6 +174,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
                     "capture_kind": r["capture_kind"],
                     "frame_count": r["frame_count"],
                     "star_rating": r["star_rating"],
+                    "stitch_status": r["stitch_status"],
                     "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
@@ -252,6 +259,46 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
         if state is None:
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)
+
+    def _panorama_row(file_id: int):
+        """Return the panorama primary's row, or raise 404 (unknown/non-panorama)."""
+        conn = _index()
+        try:
+            row = conn.execute(
+                "SELECT dest_path, capture_kind FROM files WHERE id=?", (file_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None or row["capture_kind"] != "panorama":
+            raise HTTPException(status_code=404, detail="not a panorama")
+        return row
+
+    @app.post("/api/stitch/{file_id}")
+    def stitch_start(file_id: int) -> dict:
+        """Kick off the (lazy, ~7-min, dedicated-pool) Hugin stitch for a panorama."""
+        _panorama_row(file_id)
+        return {"job_id": jobs.submit_stitch(file_id)}
+
+    @app.get("/api/stitch/status/{job_id}")
+    def stitch_status(job_id: str) -> dict:
+        state = jobs.stitch_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
+
+    @app.get("/api/stitch/{file_id}")
+    def stitch_image(file_id: int) -> FileResponse:
+        """Serve the cached stitched hero, or 404 so the client uses the gallery.
+
+        Path is derived server-side from the panorama primary's stored ``dest_path``
+        (never a client relpath) and always a ``.jpg``, so ``.pto``/intermediate
+        artifacts are structurally unservable.
+        """
+        row = _panorama_row(file_id)
+        out = derived.stitch_cache_path(library_root, Path(_strip(row["dest_path"])))
+        if not out.is_file():
+            raise HTTPException(status_code=404, detail="stitch not generated")
+        return FileResponse(out, media_type="image/jpeg")
 
     @app.get("/api/media/{relpath:path}")
     def media(relpath: str) -> FileResponse:
