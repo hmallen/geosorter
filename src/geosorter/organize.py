@@ -209,6 +209,7 @@ def run_organize(
     progress=None,
     byte_progress=None,
     cancel=None,
+    selected_primaries: set[str] | None = None,
     extractor_factory=MetadataExtractor,
 ) -> BatchReport:
     """Scan ``cfg.inbox_path`` and organize every capture into ``cfg.library_root``.
@@ -222,6 +223,11 @@ def run_organize(
     ``byte_progress``, if given, is called as ``byte_progress(filename, phase, done,
     total)`` during each file's copy/hash so a caller can show live within-file
     progress on a slow drive (the CLI omits it; the HTTP job manager uses it).
+    ``selected_primaries``, if given, restricts the run to the capture groups whose
+    primary's inbox-relative POSIX path is in the set (a partial import from the map
+    UI); ``None`` imports every group (the CLI/headless default). A partial import
+    also skips the destructive MISC-catalog archive (ratings are still applied to the
+    selected files) so a catalog is never archived while unselected media remains.
     ``extractor_factory`` is injectable for tests.
     """
     if cfg.inbox_path is None or cfg.library_root is None:
@@ -238,6 +244,12 @@ def run_organize(
         paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
         pre = grouping.prescan_inbox(paths, inbox_root=inbox)
         groups = pre.groups
+        if selected_primaries is not None:
+            groups = [
+                g
+                for g in groups
+                if g.primary.relative_to(inbox).as_posix() in selected_primaries
+            ]
         report = BatchReport(batch_id="(dry-run)", dry_run=dry_run)
         report.warnings.extend(pre.warnings)
         report.unclaimed = len(pre.unclaimed)
@@ -285,7 +297,9 @@ def run_organize(
                            byte_progress, cfg.retain_hyperlapse_frames)
 
         if not dry_run:
-            _apply_catalog_ratings(index, report, pre.unclaimed, cfg)
+            _apply_catalog_ratings(
+                index, report, pre.unclaimed, cfg, archive=selected_primaries is None
+            )
             index.execute(
                 "INSERT INTO codec_stats(batch_id, h264_count, h265_count, unknown_count) "
                 "VALUES (?,?,?,?)",
@@ -319,15 +333,17 @@ def _infer_batch(extracted, max_gap_minutes: float) -> dict:
     return inference.infer_locations(items, max_gap=timedelta(minutes=max_gap_minutes))
 
 
-def _apply_catalog_ratings(index, report, unclaimed, cfg) -> None:
+def _apply_catalog_ratings(index, report, unclaimed, cfg, *, archive=True) -> None:
     """Read DJI MISC-catalog star ratings -> ``files.star_rating``, then archive the
     catalog DBs outside ``library_root`` (B11).
 
     A no-coordinate / stale / corrupt / ambiguous catalog yields no ratings and never
-    raises (``misc_parser`` is fail-safe; the apply loop is plain SQL). Every
-    ``MISC/*.db`` is preserved by a crash-safe copy to
+    raises (``misc_parser`` is fail-safe; the apply loop is plain SQL). When
+    ``archive`` is true, every ``MISC/*.db`` is preserved by a crash-safe copy to
     ``<index_db_dir>/catalogs/<batch_id>/`` and its inbox source deleted, so the move
-    is logged in ``moves`` (``file_id`` NULL) and ``undo`` reverses it.
+    is logged in ``moves`` (``file_id`` NULL) and ``undo`` reverses it. A partial
+    import passes ``archive=False`` so the catalog stays in the inbox (ratings are
+    still applied to the files filed this run) and is archived by a later full import.
     """
     dbs = [p for p in unclaimed if p.suffix.lower() == ".db"]
     if not dbs:
@@ -356,6 +372,9 @@ def _apply_catalog_ratings(index, report, unclaimed, cfg) -> None:
                 )
                 report.ratings_applied += 1
         index.commit()
+
+    if not archive:
+        return  # partial import: leave catalogs in the inbox for a later full run
 
     archive_dir = Path(cfg.index_db_path).parent / "catalogs" / report.batch_id
     for p in dbs:

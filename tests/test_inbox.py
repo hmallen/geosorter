@@ -65,3 +65,63 @@ def test_panorama_tiles_count_as_one_capture(tmp_path):
     for i in range(1, 8):
         _add(box, f"DCIM/PANORAMA/001_0002/PANO_{i:04d}.JPG")
     assert inbox.count_inbox(box) == inbox.InboxCount(files=7, captures=1)
+
+
+# --------------------------------------------------------------------------- #
+# list_inbox — per-capture-group enumeration for the import-selection UI.
+def test_list_inbox_none_and_missing(tmp_path):
+    assert inbox.list_inbox(None) == []
+    assert inbox.list_inbox(tmp_path / "nope") == []
+
+
+def test_list_inbox_empty_dir(tmp_path):
+    box = tmp_path / "inbox"
+    box.mkdir()
+    assert inbox.list_inbox(box) == []
+
+
+def test_list_inbox_groups_with_companions(tmp_path):
+    box = tmp_path / "inbox"
+    box.mkdir()
+    # One video capture (primary + .SRT companion) and one standalone photo, both in
+    # a DCIM subdir; the id is the inbox-relative POSIX primary path.
+    _add(box, "DCIM/100MEDIA/DJI_0001.MP4")
+    _add(box, "DCIM/100MEDIA/DJI_0001.SRT")  # companion of DJI_0001
+    _add(box, "DCIM/100MEDIA/DJI_0002.JPG")
+    groups = inbox.list_inbox(box)
+    assert [g.id for g in groups] == [
+        "DCIM/100MEDIA/DJI_0001.MP4",
+        "DCIM/100MEDIA/DJI_0002.JPG",
+    ]
+    g0 = groups[0]
+    assert g0.dir == "DCIM/100MEDIA"
+    assert g0.name == "DJI_0001.MP4"
+    assert g0.capture_kind is None
+    assert g0.file_count == 2  # primary + the .SRT companion
+    assert groups[1].file_count == 1
+
+
+def test_list_inbox_root_level_group_has_empty_dir(tmp_path):
+    box = tmp_path / "inbox"
+    box.mkdir()
+    _add(box, "DJI_0001.JPG")
+    g = inbox.list_inbox(box)[0]
+    assert g.id == "DJI_0001.JPG"
+    assert g.dir == ""
+
+
+def test_list_inbox_hyperlapse_is_one_group(tmp_path):
+    import os
+
+    box = tmp_path / "inbox"
+    box.mkdir()
+    render = _add(box, "DCIM/DJI_001/DJI_20240829183426_0021_D.MP4")
+    for i in range(1, 6):
+        f = _add(box, f"DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_{i:04d}.JPG")
+        os.utime(f, (1000.0 + i, 1000.0 + i))
+    os.utime(render, (1100.0, 1100.0))
+    groups = inbox.list_inbox(box)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g.capture_kind == "hyperlapse"
+    assert g.file_count == 6  # render + 5 frames

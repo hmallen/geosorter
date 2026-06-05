@@ -37,6 +37,16 @@ export function progressLabel(job: JobState): string {
   return `processing ${job.processed}${job.current ? ` — ${job.current}` : ''}`
 }
 
+// Capture-level progress label for the import progress bar: how many capture
+// groups have been processed of the total selected, and how many remain. `processed`
+// is clamped to `total` because a skipped duplicate / already-moved group can tick
+// the counter without being one of the expected captures.
+export function loadProgressLabel(processed: number, total: number): string {
+  const done = Math.min(processed, total)
+  const remaining = Math.max(0, total - processed)
+  return `loaded ${done} of ${total} capture${total === 1 ? '' : 's'} (${remaining} remaining)`
+}
+
 // Terminal label. On error, append the actual failure detail (job.error, or the
 // joined failures) so the toolbar never shows a bare "errors N" with no reason.
 export function resultLabel(job: JobState): string {
@@ -55,9 +65,20 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 export async function runOrganize(
   fetchFn: typeof fetch = fetch,
   opts: { onProgress?: (s: JobState) => void; intervalMs?: number } = {},
+  primaries?: string[] | null,
 ): Promise<JobState> {
   const { onProgress, intervalMs = 500 } = opts
-  const started = await fetchFn('/api/organize', { method: 'POST' })
+  // A partial import sends the chosen capture-group ids; a full import (select-all,
+  // the default) sends no body so the backend imports the whole inbox.
+  const init: RequestInit =
+    primaries != null
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ primaries }),
+        }
+      : { method: 'POST' }
+  const started = await fetchFn('/api/organize', init)
   if (!started.ok) throw new Error(`organize start failed: ${started.status}`)
   const { job_id } = (await started.json()) as { job_id: string }
 

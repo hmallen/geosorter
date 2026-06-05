@@ -36,7 +36,8 @@ def _wait_undo(mgr, job_id, timeout=5.0):
 
 
 def test_submit_runs_and_completes():
-    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress):
+    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None):
         progress("  DJI_0001.JPG")
         return BatchReport(batch_id="x", organized=3, quarantined=1, companions=2)
 
@@ -50,7 +51,8 @@ def test_submit_runs_and_completes():
 
 
 def test_status_exposes_byte_progress_fields():
-    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress):
+    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None):
         byte_progress("DJI_0003.MP4", "copying", 5, 10)
         return BatchReport(batch_id="x", organized=1)
 
@@ -70,7 +72,8 @@ def test_status_unknown_returns_none():
 def test_cancel_sets_event_and_stops_between_groups():
     started = threading.Event()
 
-    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress):
+    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None):
         started.set()
         organized = 0
         for _ in range(1000):  # stand-in for the per-group loop
@@ -95,7 +98,8 @@ def test_cancel_unknown_job_returns_false():
 
 
 def test_pipeline_exception_becomes_error_state():
-    def boom(cfg, *, assume_yes, cancel, progress, byte_progress):
+    def boom(cfg, *, assume_yes, cancel, progress, byte_progress,
+             selected_primaries=None):
         raise RuntimeError("kaboom")
 
     mgr = JobManager(None, organize_fn=boom)

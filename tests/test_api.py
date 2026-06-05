@@ -95,6 +95,64 @@ def test_inbox_count_populated(tmp_path):
     assert client.get("/api/inbox").json() == {"files": 2, "captures": 1}
 
 
+def test_inbox_list(tmp_path):
+    inbox = tmp_path / "inbox"
+    (inbox / "DCIM").mkdir(parents=True)
+    (inbox / "DCIM" / "DJI_0001.JPG").write_bytes(b"x")
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=tmp_path / "library",
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    client = TestClient(api.create_app(cfg))
+    assert client.get("/api/inbox/list").json() == {
+        "groups": [
+            {
+                "id": "DCIM/DJI_0001.JPG",
+                "dir": "DCIM",
+                "name": "DJI_0001.JPG",
+                "capture_kind": None,
+                "file_count": 1,
+            }
+        ]
+    }
+
+
+def test_organize_forwards_primaries(tmp_path, monkeypatch):
+    # The /api/organize route maps the optional {primaries:[...]} body to
+    # jobs.submit(selected_primaries=set|None); a missing body -> None (full import).
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    library = tmp_path / "library"
+    library.mkdir()
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+
+    calls = []
+
+    def _spy_submit(self, selected_primaries=None):
+        calls.append(selected_primaries)
+        return "fakeid"
+
+    monkeypatch.setattr(api.JobManager, "submit", _spy_submit)
+    client = TestClient(api.create_app(cfg))
+
+    assert client.post("/api/organize", json={"primaries": ["a", "b"]}).json() == {
+        "job_id": "fakeid"
+    }
+    assert calls[-1] == {"a", "b"}
+
+    assert client.post("/api/organize").json() == {"job_id": "fakeid"}
+    assert calls[-1] is None
+
+
 def test_library_returns_geojson_excluding_quarantined(client_and_lib):
     client, _ = client_and_lib
     resp = client.get("/api/library")

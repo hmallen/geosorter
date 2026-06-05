@@ -1,5 +1,6 @@
 // Typed helpers for the B6 HTTP API: media-URL builders + the library fetch.
 import type { LibraryFC } from './types'
+import type { InboxGroup } from './inboxTree'
 
 // Encode each path segment but preserve the separators, so a library-relative
 // path like "Boulder, Colorado/2024-07-04/x.JPG" becomes a valid URL the
@@ -51,4 +52,11 @@ export async function fetchInbox(fetchFn: typeof fetch = fetch): Promise<InboxCo
   const resp = await fetchFn('/api/inbox')
   if (!resp.ok) throw new Error(`inbox fetch failed: ${resp.status}`)
   return (await resp.json()) as InboxCount
+}
+
+// The inbox's capture groups for the import-selection panel (one entry per group).
+export async function fetchInboxList(fetchFn: typeof fetch = fetch): Promise<InboxGroup[]> {
+  const resp = await fetchFn('/api/inbox/list')
+  if (!resp.ok) throw new Error(`inbox list fetch failed: ${resp.status}`)
+  return ((await resp.json()) as { groups: InboxGroup[] }).groups
 }

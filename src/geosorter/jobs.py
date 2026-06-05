@@ -121,13 +121,17 @@ class JobManager:
         self._cancels: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
 
-    def submit(self) -> str:
-        """Queue a new organize job and return its UUID job id."""
+    def submit(self, selected_primaries: set[str] | None = None) -> str:
+        """Queue a new organize job and return its UUID job id.
+
+        ``selected_primaries`` (None = import everything) is forwarded to
+        :func:`run_organize` so the map UI can import a chosen subset of the inbox.
+        """
         job_id = uuid.uuid4().hex
         with self._lock:
             self._jobs[job_id] = JobState(job_id=job_id)
             self._cancels[job_id] = threading.Event()
-        self._executor.submit(self._run, job_id)
+        self._executor.submit(self._run, job_id, selected_primaries)
         return job_id
 
     def status(self, job_id: str) -> JobState | None:
@@ -150,7 +154,7 @@ class JobManager:
         event.set()
         return True
 
-    def _run(self, job_id: str) -> None:
+    def _run(self, job_id: str, selected_primaries: set[str] | None = None) -> None:
         state = self._jobs[job_id]
         event = self._cancels[job_id]
         state.state = "running"
@@ -169,6 +173,7 @@ class JobManager:
             report = self._organize_fn(
                 self._cfg, assume_yes=True, cancel=event.is_set,
                 progress=progress, byte_progress=byte_progress,
+                selected_primaries=selected_primaries,
             )
         except Exception as exc:  # surface any pipeline failure as a job error
             state.state = "error"
