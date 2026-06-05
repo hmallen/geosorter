@@ -373,10 +373,29 @@ def _apply_catalog_ratings(index, report, unclaimed, cfg, *, archive=True) -> No
                 report.ratings_applied += 1
         index.commit()
 
-    if not archive:
-        return  # partial import: leave catalogs in the inbox for a later full run
-
     archive_dir = Path(cfg.index_db_path).parent / "catalogs" / report.batch_id
+
+    if not archive:
+        # Partial import: PRESERVE the catalog's bytes against a card pull, but KEEP
+        # the inbox copy (no destructive move, no moves row) so a later import can
+        # still apply ratings to the not-yet-filed media. A verified byte-for-byte
+        # copy into the same archive dir; idempotent (skip when an identical copy is
+        # already there from a crash-resume), and never raises (the media is filed).
+        for p in dbs:
+            dest = archive_dir / p.name
+            try:
+                src_sha = move_engine.sha256_file(p)
+                if dest.exists() and move_engine.sha256_file(dest) == src_sha:
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, dest)
+                if move_engine.sha256_file(dest) != src_sha:
+                    dest.unlink(missing_ok=True)
+                    report.failures.append(f"{p}: catalog preserve-copy verify failed")
+            except OSError as exc:
+                report.failures.append(f"{p}: catalog preserve-copy error: {exc}")
+        return
+
     for p in dbs:
         dest = str(archive_dir / p.name)
         try:

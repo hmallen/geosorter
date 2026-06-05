@@ -195,6 +195,27 @@ def test_panorama_stitch_success_caches_and_is_idempotent(tmp_path, monkeypatch)
     assert len(calls) == first_calls  # cache hit -> no further hugin invocations
 
 
+def test_panorama_stitch_reports_steps(tmp_path, monkeypatch):
+    # The on_step callback fires once per Hugin pipeline step, in order, so the
+    # background job (and the UI) can show which of the six steps is running.
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, _calls = _fake_run_factory()
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    steps: list[tuple[int, int, str]] = []
+    derived.panorama_stitch(
+        library_root, primary, frames, on_step=lambda i, n, name: steps.append((i, n, name))
+    )
+
+    assert [name for _i, _n, name in steps] == [
+        "pto_gen", "cpfind", "cpclean", "autooptimiser", "pano_modify", "hugin_executor",
+    ]
+    assert [i for i, _n, _name in steps] == [1, 2, 3, 4, 5, 6]
+    assert all(n == 6 for _i, n, _name in steps)
+
+
 def test_panorama_stitch_missing_hugin_raises(tmp_path, monkeypatch):
     library_root = tmp_path / "lib"
     primary, frames = _make_pano_tiles(library_root)

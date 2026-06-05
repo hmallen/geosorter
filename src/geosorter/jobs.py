@@ -12,6 +12,7 @@ request's lifecycle and offer no id, status, or cancellation.
 
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +23,8 @@ from .derived import HuginNotFound, StitchFailed, panorama_stitch
 from .organize import run_organize
 from .retag import retag_file
 from .undo import run_undo
+
+logger = logging.getLogger("geosorter.jobs")
 
 
 def _strip(dest_path: str) -> str:
@@ -89,6 +92,11 @@ class StitchJobState:
     # '' (in progress) | 'ok' | 'failed' (degenerate/pipeline error) | 'unavailable'
     # (Hugin not installed — the row keeps NULL and the UI keeps the tile gallery)
     status: str = ""
+    # Live Hugin pipeline progress: which of the six steps is currently running, so
+    # the map UI can show "step 3/6: cpclean" during the multi-minute stitch.
+    step: int = 0
+    step_total: int = 6
+    step_name: str = ""
     error: str | None = None
 
 
@@ -340,13 +348,22 @@ class JobManager:
         finally:
             conn.close()
 
+        def _on_step(index: int, total: int, name: str) -> None:
+            state.step = index
+            state.step_total = total
+            state.step_name = name
+
         try:
             self._stitch_fn(
                 self._cfg.library_root, primary, frames,
-                hugin_bin_dir=self._cfg.hugin_bin_dir,
+                hugin_bin_dir=self._cfg.hugin_bin_dir, on_step=_on_step,
             )
         except HuginNotFound:
             # Hugin absent: not a failure — clear back to NULL, keep the gallery.
+            logger.warning(
+                "panorama stitch for file_id=%s unavailable: Hugin not found "
+                "(hugin_bin_dir=%s)", file_id, self._cfg.hugin_bin_dir,
+            )
             self._mark_stitch_status(file_id, None)
             state.status = "unavailable"
             state.state = "done"
