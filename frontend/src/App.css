@@ -192,12 +192,29 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: 320px;
+  width: 380px; /* default; overridden by the drag-resize handle's inline width */
+  max-width: 92vw;
   z-index: 10;
   background: #fff;
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
+}
+
+/* Left-edge drag handle to resize the file-list panel (B-mapfix). */
+.panel-resize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 11;
+  touch-action: none;
+}
+
+.panel-resize:hover {
+  background: rgba(25, 120, 200, 0.25);
 }
 
 .panel-head {
@@ -216,7 +233,8 @@
 }
 
 .grid {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden; /* never a horizontal scrollbar; filenames ellipsis-clamp */
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
@@ -230,6 +248,7 @@
   background: none;
   cursor: pointer;
   padding: 0;
+  min-width: 0; /* let the column shrink so nowrap names can ellipsis-clamp */
 }
 
 .thumb img {
@@ -240,7 +259,15 @@
   background: #eee;
 }
 
-.thumb span {
+/* Image box for a file tile: positioned so the capture-kind / star badges anchor
+   to the IMAGE, not the whole button (which also holds the filename row). */
+.thumb-img {
+  position: relative;
+  display: block;
+}
+
+.thumb-name {
+  display: block;
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -263,12 +290,23 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden; /* the media area shrinks instead of overflowing the viewport */
 }
 
-.lightbox-body img,
-.lightbox-body video {
+/* Primary media area: flexes to fill the remaining height and, crucially, can
+   SHRINK (min-height:0) so the source-frame filmstrip below always has room. */
+.lightbox-media {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-media img,
+.lightbox-media video {
   max-width: 92vw;
-  max-height: 85vh;
+  max-height: 100%;
   object-fit: contain;
 }
 
@@ -335,11 +373,12 @@
 }
 
 .frames-grid {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 4px;
   max-width: 92vw;
-  max-height: 60vh;
+  max-height: 40vh;
   overflow-y: auto;
   padding: 4px;
   background: rgba(0, 0, 0, 0.4);
@@ -469,12 +508,59 @@
   cursor: pointer;
 }
 
-/* Panorama stitched hero + generate control (B13) */
-.pano-hero {
-  /* a 360 equirectangular is very wide — let it use the full lightbox width */
+/* Panorama stitched hero: immersive 360 sphere viewer (round-2 fix C). Needs an
+   explicit size for photo-sphere-viewer to initialise; sized to fit the lightbox
+   alongside the frames-toggle + nav. */
+.pano-sphere {
   width: 92vw;
-  max-height: 85vh;
-  object-fit: contain;
+  height: 78vh;
+}
+
+/* Derived-asset image: spinner while loading + a failed marker after retries
+   (round-2 fix A). The wrapper is contextual so the existing `<container> img`
+   selectors keep styling the inner <img>. */
+.img-wrap {
+  position: relative;
+}
+
+.thumb .img-wrap,
+.frame-thumb .img-wrap {
+  display: block;
+  width: 100%;
+}
+
+.lightbox-media .img-wrap {
+  display: flex;
+  max-width: 92vw;
+  max-height: 100%;
+}
+
+.img-spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(0, 0, 0, 0.15);
+  border-top-color: #1978c8;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.lightbox-media .img-spinner,
+.frame-thumb .img-spinner {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+
+.img-failed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e0533d;
+  font-size: 20px;
 }
 
 .stitch-controls {

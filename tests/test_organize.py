@@ -725,10 +725,13 @@ def test_selected_primaries_none_organizes_all(tmp_path):
     assert report.organized == 2
 
 
-def test_partial_import_does_not_archive_catalog(tmp_path):
+def test_partial_import_preserves_catalog(tmp_path):
     # On a partial import (a subset selected) star ratings are still applied to the
-    # selected files, but the destructive MISC-catalog ARCHIVE is skipped so a catalog
-    # is never archived away while unselected media remains in the inbox.
+    # selected files, and the MISC catalog is PRESERVE-COPIED (byte-for-byte) into the
+    # archive so its data survives a card pull — but the inbox copy is KEPT (not the
+    # destructive move) so a later import can still apply ratings to the rest.
+    import hashlib
+
     cfg, inbox, library = _setup(tmp_path)
     _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", b"video-bytes")
     _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0002_D.MP4", b"video2-bytes")
@@ -748,8 +751,16 @@ def test_partial_import_does_not_archive_catalog(tmp_path):
     )
     assert report.organized == 1
     assert report.ratings_applied == 1  # ratings still applied to the selected file
-    assert catalog.exists()  # partial import -> catalog NOT archived
+    assert catalog.exists()  # inbox copy KEPT (not destructively archived)
     assert (inbox / "DCIM/DJI_001/DJI_20240825165234_0002_D.MP4").exists()
+    # ...but a byte-identical preserve-copy now lives in the archive.
+    archive = Path(cfg.index_db_path).parent / "catalogs" / report.batch_id / "FC.db"
+    assert archive.is_file()
+    assert (
+        hashlib.sha256(archive.read_bytes()).hexdigest()
+        == hashlib.sha256(catalog.read_bytes()).hexdigest()
+    )
+    assert report.unclaimed == 1  # the .db is still stranded in the inbox
 
 
 # --------------------------------------------------------------------------- #

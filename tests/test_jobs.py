@@ -285,7 +285,7 @@ def test_submit_stitch_success_writes_ok(tmp_path):
     cfg, file_id, primary, frames = _build_index_with_panorama(tmp_path)
     seen = {}
 
-    def fake_stitch(library_root, prim, frms, *, hugin_bin_dir):
+    def fake_stitch(library_root, prim, frms, *, hugin_bin_dir, on_step=None):
         seen["primary"] = prim
         seen["frames"] = list(frms)
         return Path("stitched.jpg")
@@ -301,10 +301,27 @@ def test_submit_stitch_success_writes_ok(tmp_path):
     assert seen["frames"] == [str(f) for f in frames]
 
 
+def test_submit_stitch_reports_step_progress(tmp_path):
+    # The job snapshot reflects the live Hugin step reported via on_step, so the
+    # map UI can show "step 3/6: cpclean" during the multi-minute run.
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+
+    def stepping_stitch(library_root, prim, frms, *, hugin_bin_dir, on_step):
+        on_step(3, 6, "cpclean")
+        return Path("stitched.jpg")
+
+    mgr = JobManager(cfg, stitch_fn=stepping_stitch)
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id))
+    assert st.state == "done"
+    assert st.step == 3
+    assert st.step_total == 6
+    assert st.step_name == "cpclean"
+
+
 def test_submit_stitch_failed_writes_failed(tmp_path):
     cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
 
-    def boom(library_root, prim, frms, *, hugin_bin_dir):
+    def boom(library_root, prim, frms, *, hugin_bin_dir, on_step=None):
         raise StitchFailed("cpfind lost the sky")
 
     mgr = JobManager(cfg, stitch_fn=boom)
@@ -317,7 +334,7 @@ def test_submit_stitch_failed_writes_failed(tmp_path):
 def test_submit_stitch_unavailable_when_hugin_missing(tmp_path):
     cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
 
-    def no_hugin(library_root, prim, frms, *, hugin_bin_dir):
+    def no_hugin(library_root, prim, frms, *, hugin_bin_dir, on_step=None):
         raise HuginNotFound("no hugin")
 
     mgr = JobManager(cfg, stitch_fn=no_hugin)
@@ -339,7 +356,7 @@ def test_submit_stitch_dedups_inflight_and_marks_pending(tmp_path):
     entered = threading.Event()
     release = threading.Event()
 
-    def blocking_stitch(library_root, prim, frms, *, hugin_bin_dir):
+    def blocking_stitch(library_root, prim, frms, *, hugin_bin_dir, on_step=None):
         entered.set()
         release.wait(2.0)
         return Path("stitched.jpg")

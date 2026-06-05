@@ -404,6 +404,37 @@ def test_stitch_post_starts_job_and_status_polls(tmp_path):
     assert client.get("/api/stitch/status/does-not-exist").status_code == 404
 
 
+def test_stitch_status_reports_step_progress(tmp_path):
+    # The live Hugin step reported via on_step must reach the HTTP status payload, so
+    # the map UI can show "step 3/6: cpclean" mid-run (regression guard for the
+    # progress label that appeared stuck at 0/6).
+    import threading
+
+    cfg, fid, _ = _panorama_stitch_cfg(tmp_path)
+    proceed = threading.Event()
+
+    def fake(*a, on_step=None, **k):
+        on_step(3, 6, "cpclean")
+        proceed.wait(2.0)  # hold the job 'running' so the test can observe the step
+        return Path("stitched.jpg")
+
+    jm = JobManager(cfg, stitch_fn=fake)
+    client = TestClient(api.create_app(cfg, job_manager=jm))
+    job_id = client.post(f"/api/stitch/{fid}").json()["job_id"]
+
+    seen = None
+    for _ in range(300):
+        seen = client.get(f"/api/stitch/status/{job_id}").json()
+        if seen.get("step") == 3:
+            break
+        time.sleep(0.02)
+    proceed.set()
+    assert seen["step"] == 3
+    assert seen["step_total"] == 6
+    assert seen["step_name"] == "cpclean"
+    assert seen["state"] == "running"
+
+
 def test_media_db_extension_blocked(client_and_lib):
     # Catalog DBs live outside library_root, but belt-and-suspenders: never serve a
     # .db even if one is somehow under the library.
