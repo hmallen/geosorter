@@ -11,17 +11,18 @@ interface Props {
 
 export default function Lightbox({ files, index, onIndex, onClose }: Props) {
   const f = files[index]
-  // Hyperlapse source-frame gallery (B10): the render is the only library entity,
-  // so its 250-350 frames are fetched on demand and shown as a thumbnail grid.
+  // Source-frame gallery: a hyperlapse render's frames (B10) or a panorama's tiles
+  // (B12) are the only such entity, fetched on demand and shown as a thumbnail grid.
   const [frames, setFrames] = useState<string[] | null>(null)
   const [showFrames, setShowFrames] = useState(false)
   const [frameZoom, setFrameZoom] = useState<string | null>(null)
 
-  // Offer the frame gallery only when frames were actually filed: a render with
-  // retain_hyperlapse_frames=false is a hyperlapse with frame_count 0 and no
-  // /api/frames payload, so showing a "view source frames" button would dead-end.
-  const isHyperlapse =
-    f?.properties.capture_kind === 'hyperlapse' && (f?.properties.frame_count ?? 0) > 0
+  // Offer the gallery only when frames were actually filed: a render with
+  // retain_hyperlapse_frames=false (or a single-tile panorama) has frame_count 0 and
+  // an empty /api/frames payload, so a "view source frames" button would dead-end.
+  const kind = f?.properties.capture_kind
+  const isFrameGallery =
+    (kind === 'hyperlapse' || kind === 'panorama') && (f?.properties.frame_count ?? 0) > 0
   const fileId = f?.properties.id
 
   // Reset the gallery whenever the selected file changes.
@@ -62,7 +63,7 @@ export default function Lightbox({ files, index, onIndex, onClose }: Props) {
           <img src={previewUrl(f.properties.path)} alt={f.properties.filename} />
         )}
 
-        {isHyperlapse && (
+        {isFrameGallery && (
           <button
             className="frames-toggle"
             onClick={() => (frameZoom ? setFrameZoom(null) : setShowFrames((s) => !s))}
@@ -75,7 +76,7 @@ export default function Lightbox({ files, index, onIndex, onClose }: Props) {
           </button>
         )}
 
-        {isHyperlapse && showFrames && !frameZoom && (
+        {isFrameGallery && showFrames && !frameZoom && (
           <div className="frames-grid">
             {frames === null && <span className="frames-status">Loading frames…</span>}
             {frames?.length === 0 && <span className="frames-status">No frames.</span>}

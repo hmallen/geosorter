@@ -55,3 +55,13 @@ def test_hyperlapse_render_and_frames_count_as_one_capture(tmp_path):
         os.utime(f, (1000.0 + i, 1000.0 + i))
     os.utime(render, (1100.0, 1100.0))
     assert inbox.count_inbox(box) == inbox.InboxCount(files=6, captures=1)
+
+
+def test_panorama_tiles_count_as_one_capture(tmp_path):
+    # A PANORAMA dir of N tiles is ONE capture unit (the pre-scan models it), even
+    # though it is N files — the badge reads "1 capture", not "N singles".
+    box = tmp_path / "inbox"
+    box.mkdir()
+    for i in range(1, 8):
+        _add(box, f"DCIM/PANORAMA/001_0002/PANO_{i:04d}.JPG")
+    assert inbox.count_inbox(box) == inbox.InboxCount(files=7, captures=1)
