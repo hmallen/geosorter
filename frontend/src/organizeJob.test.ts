@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { runOrganize, progressLabel, resultLabel, type JobState } from './organizeJob'
+import {
+  runOrganize,
+  progressLabel,
+  loadProgressLabel,
+  resultLabel,
+  type JobState,
+} from './organizeJob'
 
 function ok(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as Response
@@ -36,6 +42,35 @@ describe('runOrganize', () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(runOrganize(fetchFn)).rejects.toThrow(/organize start failed: 500/)
   })
+
+  it('posts a {primaries} body for a partial import', async () => {
+    let postInit: RequestInit | undefined
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        postInit = init
+        return ok({ job_id: 'job1' })
+      }
+      return ok({ ...base, state: 'done' })
+    }) as unknown as typeof fetch
+
+    await runOrganize(fetchFn, { intervalMs: 1 }, ['a', 'b'])
+    expect(postInit?.body).toBe(JSON.stringify({ primaries: ['a', 'b'] }))
+    expect((postInit?.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+  })
+
+  it('posts no body for a full import (select-all default)', async () => {
+    let postInit: RequestInit | undefined
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        postInit = init
+        return ok({ job_id: 'job1' })
+      }
+      return ok({ ...base, state: 'done' })
+    }) as unknown as typeof fetch
+
+    await runOrganize(fetchFn, { intervalMs: 1 })
+    expect(postInit?.body).toBeUndefined()
+  })
 })
 
 describe('resultLabel', () => {
@@ -55,6 +90,18 @@ describe('resultLabel', () => {
     const job: JobState = { ...base, state: 'done', organized: 2, quarantined: 1 }
     const label = resultLabel(job)
     expect(label).toBe('done: organized 2, quarantined 1')
+  })
+})
+
+describe('loadProgressLabel', () => {
+  it('reports loaded / total / remaining captures', () => {
+    expect(loadProgressLabel(2, 5)).toBe('loaded 2 of 5 captures (3 remaining)')
+  })
+  it('singularizes a one-capture import', () => {
+    expect(loadProgressLabel(0, 1)).toBe('loaded 0 of 1 capture (1 remaining)')
+  })
+  it('clamps when processed overshoots total (skips/dups)', () => {
+    expect(loadProgressLabel(7, 5)).toBe('loaded 5 of 5 captures (0 remaining)')
   })
 })
 
