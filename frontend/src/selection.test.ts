@@ -10,7 +10,7 @@ function feat(id: number, lon: number, lat: number): LibraryFeature {
     properties: {
       id, filename: `f${id}.jpg`, place_string: 'P', local_date: '2024-07-04',
       media_type: 'photo', codec: null, gps_source: 'exif', path: `f${id}.jpg`,
-      capture_kind: null, frame_count: null,
+      capture_kind: null, frame_count: null, star_rating: null,
     },
   }
 }
