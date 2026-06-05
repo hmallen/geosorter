@@ -1,0 +1,42 @@
+# geosorter configuration — EXAMPLE.
+#
+# Copy this file to `geosorter.toml` and edit the paths for your machine. The real
+# `geosorter.toml` is gitignored and stays local; this example is the tracked template.
+#
+# Config-file resolution order (see src/geosorter/config.py):
+#   1. --config PATH
+#   2. $GEOSORTER_CONFIG
+#   3. platformdirs user_config_dir("geosorter")/geosorter.toml
+#
+# All paths below are FICTIONAL placeholders — replace them with your own.
+
+# Inbox to scan and library to file into (both required by `geosorter organize`).
+inbox_path = 'D:\drone\inbox'
+library_root = 'Z:\DroneLibrary'
+
+# Local-disk databases (keep these OFF library_root). Defaults fall under
+# platformdirs user_data_dir when unset; set explicit local paths here if you prefer.
+index_db_path = 'C:\Users\you\AppData\Local\geosorter\index.db'
+geonames_db_path = 'C:\Users\you\AppData\Local\geosorter\geonames.db'
+
+# Spatial index for geocoding: 'rtree' (default) or 'columnar' (fallback).
+spatial_index = 'rtree'
+
+# --- Optional tuning (defaults shown; uncomment to override) ---
+
+# Prefer-nearest-feature radius (km): a named park/peak/lake within this distance of
+# the capture wins over the nearest town. Requires `bootstrap --features`.
+# feature_proximity_km = 5.0
+
+# Neighbor-GPS inference window (minutes): a capture missing GPS but carrying a
+# timestamp borrows the location of the nearest-in-time GPS-tagged capture within
+# this window; beyond it the no-GPS file is quarantined.
+# inference_max_gap_minutes = 30.0
+
+# Retain DJI hyperlapse source frames alongside the rendered video (filed into a
+# `<render>_frames/` subfolder). Set false to file only the render.
+# retain_hyperlapse_frames = true
+
+# Directory holding the Hugin CLI tools for 360 panorama stitching. Leave unset to
+# detect them on PATH; absent Hugin just disables stitching (the tile gallery remains).
+# hugin_bin_dir = 'C:\Program Files\Hugin\bin'

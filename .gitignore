@@ -16,6 +16,10 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+# Local machine config (personal inbox/library/db paths). Copy geosorter.example.toml
+# to geosorter.toml and edit; the real file stays local and untracked.
+geosorter.toml
+
 # Local SQLite databases / runtime data
 *.db
 *.db-wal
