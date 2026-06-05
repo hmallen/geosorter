@@ -1,5 +1,7 @@
 """Tests for config loading and the starter writer."""
 
+from pathlib import Path
+
 import pytest
 
 from geosorter import config
@@ -72,3 +74,15 @@ def test_retain_hyperlapse_frames_override_false(tmp_path):
     cfg_path = tmp_path / "geosorter.toml"
     cfg_path.write_text("retain_hyperlapse_frames = false\n", encoding="utf-8")
     assert config.load(cfg_path).retain_hyperlapse_frames is False
+
+
+def test_hugin_bin_dir_default_none(tmp_path):
+    # No config file → the optional Hugin binary dir is unset (PATH-only detection).
+    assert config.load(tmp_path / "nope.toml").hugin_bin_dir is None
+
+
+def test_hugin_bin_dir_override(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("hugin_bin_dir = 'C:\\\\Program Files\\\\Hugin\\\\bin'\n", encoding="utf-8")
+    cfg = config.load(cfg_path)
+    assert cfg.hugin_bin_dir == Path("C:\\Program Files\\Hugin\\bin")

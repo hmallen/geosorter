@@ -16,9 +16,10 @@ ffmpeg/ffprobe are invoked as list-form subprocesses (mirroring
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -26,6 +27,39 @@ from PIL import Image, ImageOps
 THUMB_MAX = 512
 PREVIEW_MAX = 1920
 CACHE_DIRNAME = ".geosorter-cache"
+
+# --- Panorama stitch (B13) -------------------------------------------------
+# The 360 equirectangular canvas. pano_modify sizes the full sphere to this; a
+# 2:1 canvas keeps a longitude:latitude ratio, and --crop=AUTO trims the empty
+# margins (so the final long edge is bounded by STITCH_LONG_EDGE_CAP).
+STITCH_CANVAS = "6000x3000"
+STITCH_LONG_EDGE_CAP = 6000
+# Output-validity gate: a plausible equirectangular hero is wide, large, and
+# (unlike the cv2 failure mode) not a mostly-black void.
+STITCH_MIN_LONG_EDGE = 2000
+STITCH_MIN_ASPECT = 1.3
+STITCH_MAX_ASPECT = 3.0
+STITCH_MAX_BLACK_FRAC = 0.15
+# Per-step subprocess ceiling. The spike's slowest step (cpfind) was ~188 s; the
+# generous 20 min bound only fires on a genuinely stuck process.
+STITCH_STEP_TIMEOUT_S = 1200
+# The Hugin CLI tools the stitch pipeline shells out to, in pipeline order.
+_HUGIN_TOOLS = (
+    "pto_gen",
+    "cpfind",
+    "cpclean",
+    "autooptimiser",
+    "pano_modify",
+    "hugin_executor",
+)
+
+
+class HuginNotFound(RuntimeError):
+    """The Hugin CLI tools were not found on PATH or under ``hugin_bin_dir``."""
+
+
+class StitchFailed(RuntimeError):
+    """A stitch step failed, timed out, or produced a degenerate result."""
 
 
 def _cache_path(library_root: Path | str, source: Path, kind: str, ext: str) -> Path:
@@ -136,4 +170,139 @@ def proxy(library_root: Path | str, source: Path | str, codec: str | None) -> Pa
              "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(dest)]
         ),
     )
+    return out
+
+
+def find_hugin(hugin_bin_dir: Path | str | None = None) -> dict[str, str] | None:
+    """Locate the Hugin CLI tools, or ``None`` if any is missing.
+
+    Each tool is resolved with :func:`shutil.which` (which appends the platform's
+    executable extensions, so ``.exe`` is found on Windows) on PATH, or under
+    ``hugin_bin_dir`` when that optional config key is set. Returns a
+    ``name -> resolved path`` dict only when **every** tool in ``_HUGIN_TOOLS`` is
+    present; a single missing tool yields ``None`` so the caller falls back to the
+    B12 gallery (Hugin is an optional, runtime-detected dependency — no hard import).
+    """
+    base = Path(hugin_bin_dir) if hugin_bin_dir else None
+    tools: dict[str, str] = {}
+    for name in _HUGIN_TOOLS:
+        target = str(base / name) if base is not None else name
+        found = shutil.which(target)
+        if found is None:
+            return None
+        tools[name] = found
+    return tools
+
+
+def stitch_cache_path(library_root: Path | str, primary_source: Path | str) -> Path:
+    """The cache location of a panorama's stitched hero (whether or not it exists).
+
+    Shared by :func:`panorama_stitch` (the writer) and the ``/api/stitch`` serve
+    route (the reader) so both agree on the path without the route reaching into
+    the private cache helper. Keyed on the primary tile, like every derived asset.
+    """
+    return _cache_path(library_root, Path(primary_source), "stitch", ".jpg")
+
+
+def _run_hugin(cmd: list[str], *, timeout: int = STITCH_STEP_TIMEOUT_S) -> None:
+    """Run one Hugin pipeline step (list-form, never ``shell=True``).
+
+    Mirrors :func:`_run_ffmpeg` but adds a hard ``timeout`` per step and maps both
+    a non-zero exit and a timeout to :class:`StitchFailed` so the caller can fall
+    back to the gallery.
+    """
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise StitchFailed(f"{Path(cmd[0]).name} timed out after {timeout}s") from exc
+    if proc.returncode != 0:
+        raise StitchFailed(
+            f"{Path(cmd[0]).name} failed ({proc.returncode}): {proc.stderr.strip()}"
+        )
+
+
+def _stitch_gate(path: Path) -> None:
+    """Raise :class:`StitchFailed` unless ``path`` is a plausible equirectangular.
+
+    The cv2 failure mode the spike rejected was a warped partial with a ~45% black
+    void. The gate verifies a sane size, a wide (equirectangular-like) aspect, and a
+    near-black-pixel fraction under :data:`STITCH_MAX_BLACK_FRAC`, so a degenerate or
+    failed stitch is never cached or served.
+    """
+    with Image.open(path) as img:
+        width, height = img.size
+        long_edge = max(width, height)
+        if not (STITCH_MIN_LONG_EDGE <= long_edge <= STITCH_LONG_EDGE_CAP):
+            raise StitchFailed(f"stitch long-edge {long_edge}px out of range")
+        aspect = width / height if height else 0.0
+        if not (STITCH_MIN_ASPECT <= aspect <= STITCH_MAX_ASPECT):
+            raise StitchFailed(f"stitch aspect {aspect:.2f} not equirectangular-like")
+        small = img.convert("L")
+        small.thumbnail((512, 512))  # sample cheaply; the void fraction is global
+        histogram = small.histogram()  # 256 luminance buckets
+        total = small.size[0] * small.size[1]
+        black = sum(histogram[:8])  # near-black (luminance < 8) pixels
+        frac = black / total if total else 1.0
+    if frac > STITCH_MAX_BLACK_FRAC:
+        raise StitchFailed(f"stitch is {frac:.0%} black void — degenerate")
+
+
+def panorama_stitch(
+    library_root: Path | str,
+    primary_source: Path | str,
+    frame_sources: Sequence[Path | str],
+    *,
+    hugin_bin_dir: Path | str | None = None,
+) -> Path:
+    """Return a cached 360 equirectangular JPEG stitched from a panorama's tiles.
+
+    Runs the spike-proven Hugin pipeline (``pto_gen -> cpfind --multirow --celeste
+    -> cpclean -> autooptimiser -> pano_modify (equirectangular) -> hugin_executor``)
+    in a private temp dir, each step a list-form subprocess with a timeout, strictly
+    off the crash-safe move path (called only by the background stitch job). The
+    result is mtime-cached under ``library_root/.geosorter-cache/stitch/`` (fresh
+    while no tile is newer than the cache) and validity-gated before caching.
+
+    Raises :class:`HuginNotFound` when Hugin is absent (caller keeps the gallery) and
+    :class:`StitchFailed` on any step failure, timeout, or degenerate output.
+    """
+    primary_source = Path(primary_source)
+    tiles = [primary_source, *(Path(f) for f in frame_sources)]
+    out = stitch_cache_path(library_root, primary_source)
+    newest = max(t.stat().st_mtime for t in tiles)
+    if out.exists() and out.stat().st_mtime >= newest:
+        return out
+
+    tools = find_hugin(hugin_bin_dir)
+    if tools is None:
+        raise HuginNotFound("Hugin CLI tools not found on PATH or under hugin_bin_dir")
+
+    with tempfile.TemporaryDirectory(prefix="geosorter-stitch-") as tmp:
+        work = Path(tmp)
+        pto = str(work / "project.pto")
+        prefix = str(work / "out")
+        _run_hugin([tools["pto_gen"], "-o", pto, *[str(t) for t in tiles]])
+        _run_hugin([tools["cpfind"], "--multirow", "--celeste", "-o", pto, pto])
+        _run_hugin([tools["cpclean"], "-o", pto, pto])
+        _run_hugin([tools["autooptimiser"], "-a", "-m", "-l", "-s", "-o", pto, pto])
+        _run_hugin(
+            [tools["pano_modify"], "--projection=2", f"--canvas={STITCH_CANVAS}",
+             "--crop=AUTO", "-o", pto, pto]
+        )
+        _run_hugin([tools["hugin_executor"], "--stitching", f"--prefix={prefix}", pto])
+
+        tifs = sorted(work.glob("out*.tif"))
+        if not tifs:
+            raise StitchFailed("hugin_executor produced no output TIFF")
+        tif = tifs[0]
+        _stitch_gate(tif)  # raises before anything is cached
+
+        def _produce(dest: Path) -> None:
+            with Image.open(tif) as img:
+                img = img.convert("RGB")
+                if max(img.size) > STITCH_LONG_EDGE_CAP:
+                    img.thumbnail((STITCH_LONG_EDGE_CAP, STITCH_LONG_EDGE_CAP))
+                img.save(dest, "JPEG", quality=90)
+
+        _atomic_write(out, _produce)
     return out

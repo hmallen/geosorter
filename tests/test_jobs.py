@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
+from types import SimpleNamespace
 
+from geosorter import db
+from geosorter.derived import HuginNotFound, StitchFailed
 from geosorter.jobs import JobManager
 from geosorter.organize import BatchReport
 from geosorter.retag import RetagReport
@@ -216,3 +220,151 @@ def test_retag_exception_becomes_error_state():
     st = _wait_retag(mgr, job_id)
     assert st.state == "error"
     assert "retag-boom" in st.error
+
+
+# --------------------------------------------------------------------------- #
+# Panorama stitch jobs (B13) — run on a dedicated pool, write files.stitch_status.
+def _wait_stitch(mgr, job_id, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = mgr.stitch_status(job_id)
+        if st is not None and st.state in ("done", "error"):
+            return st
+        time.sleep(0.01)
+    raise AssertionError(f"stitch job {job_id} did not finish: {mgr.stitch_status(job_id)}")
+
+
+def _build_index_with_panorama(tmp_path):
+    """Create a real index DB with one panorama primary + 2 frame-tile companions."""
+    lib = tmp_path / "lib"
+    (lib / "pano").mkdir(parents=True)
+    primary = lib / "pano" / "PANO_0001.JPG"
+    primary.write_bytes(b"x")
+    frames = []
+    for i in (2, 3):
+        f = lib / "pano" / f"PANO_000{i}.JPG"
+        f.write_bytes(b"x")
+        frames.append(f)
+    idx = tmp_path / "index.db"
+    conn = db.connect(idx)
+    db.init_index_schema(conn)
+    cur = conn.execute(
+        "INSERT INTO files (dest_path, filename, media_type, sha256, status, "
+        "capture_kind, frame_count) VALUES (?, 'PANO_0001.JPG', 'photo', 'h', "
+        "'organized', 'panorama', 3)",
+        (str(primary),),
+    )
+    file_id = cur.lastrowid
+    for f in frames:
+        conn.execute(
+            "INSERT INTO file_companions (primary_file_id, dest_path, companion_type) "
+            "VALUES (?, ?, 'panorama_frame')",
+            (file_id, str(f)),
+        )
+    conn.commit()
+    conn.close()
+    cfg = SimpleNamespace(index_db_path=idx, library_root=lib, hugin_bin_dir=None)
+    return cfg, file_id, primary, frames
+
+
+def _read_stitch_status(cfg, file_id):
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    try:
+        return conn.execute(
+            "SELECT stitch_status FROM files WHERE id=?", (file_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_submit_stitch_success_writes_ok(tmp_path):
+    cfg, file_id, primary, frames = _build_index_with_panorama(tmp_path)
+    seen = {}
+
+    def fake_stitch(library_root, prim, frms, *, hugin_bin_dir):
+        seen["primary"] = prim
+        seen["frames"] = list(frms)
+        return Path("stitched.jpg")
+
+    mgr = JobManager(cfg, stitch_fn=fake_stitch)
+    job_id = mgr.submit_stitch(file_id)
+    st = _wait_stitch(mgr, job_id)
+    assert st.state == "done"
+    assert st.status == "ok"
+    assert _read_stitch_status(cfg, file_id) == "ok"
+    # the job loaded the primary + frame tiles from the DB and passed them through
+    assert seen["primary"] == str(primary)
+    assert seen["frames"] == [str(f) for f in frames]
+
+
+def test_submit_stitch_failed_writes_failed(tmp_path):
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+
+    def boom(library_root, prim, frms, *, hugin_bin_dir):
+        raise StitchFailed("cpfind lost the sky")
+
+    mgr = JobManager(cfg, stitch_fn=boom)
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id))
+    assert st.state == "done"
+    assert st.status == "failed"
+    assert _read_stitch_status(cfg, file_id) == "failed"
+
+
+def test_submit_stitch_unavailable_when_hugin_missing(tmp_path):
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+
+    def no_hugin(library_root, prim, frms, *, hugin_bin_dir):
+        raise HuginNotFound("no hugin")
+
+    mgr = JobManager(cfg, stitch_fn=no_hugin)
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id))
+    assert st.state == "done"
+    assert st.status == "unavailable"
+    # Hugin absent -> the row keeps NULL (no hero), not 'failed'
+    assert _read_stitch_status(cfg, file_id) is None
+
+
+def test_stitch_status_unknown_returns_none(tmp_path):
+    cfg, _, _, _ = _build_index_with_panorama(tmp_path)
+    mgr = JobManager(cfg, stitch_fn=lambda *a, **k: Path("x.jpg"))
+    assert mgr.stitch_status("does-not-exist") is None
+
+
+def test_submit_stitch_dedups_inflight_and_marks_pending(tmp_path):
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def blocking_stitch(library_root, prim, frms, *, hugin_bin_dir):
+        entered.set()
+        release.wait(2.0)
+        return Path("stitched.jpg")
+
+    mgr = JobManager(cfg, stitch_fn=blocking_stitch)
+    j1 = mgr.submit_stitch(file_id)
+    assert entered.wait(2.0)  # first stitch is now running
+    assert _read_stitch_status(cfg, file_id) == "pending"  # pending while in-flight
+    j2 = mgr.submit_stitch(file_id)  # same file, in-flight -> dedup
+    assert j2 == j1
+    release.set()
+    st = _wait_stitch(mgr, j1)
+    assert st.status == "ok"
+    assert _read_stitch_status(cfg, file_id) == "ok"
+
+
+def test_stitch_pool_independent_of_destructive_pool(tmp_path):
+    # A 7-min read-only stitch must NOT wait behind a destructive organize job:
+    # the stitch finishes while the organize worker is still held busy.
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+    org_block = threading.Event()
+
+    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress):
+        org_block.wait(3.0)  # occupy the destructive single worker
+        return BatchReport(batch_id="x")
+
+    mgr = JobManager(cfg, organize_fn=slow_organize,
+                     stitch_fn=lambda *a, **k: Path("x.jpg"))
+    mgr.submit()  # fills the destructive pool
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id))  # must complete anyway
+    assert st.status == "ok"
+    org_block.set()
