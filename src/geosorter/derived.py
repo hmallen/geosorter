@@ -15,14 +15,18 @@ ffmpeg/ffprobe are invoked as list-form subprocesses (mirroring
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from PIL import Image, ImageOps
+
+logger = logging.getLogger("geosorter.derived")
 
 THUMB_MAX = 512
 PREVIEW_MAX = 1920
@@ -253,6 +257,7 @@ def panorama_stitch(
     frame_sources: Sequence[Path | str],
     *,
     hugin_bin_dir: Path | str | None = None,
+    on_step: Callable[[int, int, str], None] | None = None,
 ) -> Path:
     """Return a cached 360 equirectangular JPEG stitched from a panorama's tiles.
 
@@ -262,6 +267,11 @@ def panorama_stitch(
     off the crash-safe move path (called only by the background stitch job). The
     result is mtime-cached under ``library_root/.geosorter-cache/stitch/`` (fresh
     while no tile is newer than the cache) and validity-gated before caching.
+
+    Each pipeline step is logged (with its elapsed time) and, when ``on_step`` is
+    given, reported as ``on_step(step_index, step_total, step_name)`` *before* the
+    step runs — so the background job and the map UI can show which of the six steps
+    is currently executing during the multi-minute run.
 
     Raises :class:`HuginNotFound` when Hugin is absent (caller keeps the gallery) and
     :class:`StitchFailed` on any step failure, timeout, or degenerate output.
@@ -275,21 +285,40 @@ def panorama_stitch(
 
     tools = find_hugin(hugin_bin_dir)
     if tools is None:
+        logger.warning(
+            "panorama stitch unavailable for %s: Hugin CLI tools not found on PATH or "
+            "under hugin_bin_dir=%s", primary_source.name, hugin_bin_dir,
+        )
         raise HuginNotFound("Hugin CLI tools not found on PATH or under hugin_bin_dir")
 
     with tempfile.TemporaryDirectory(prefix="geosorter-stitch-") as tmp:
         work = Path(tmp)
         pto = str(work / "project.pto")
         prefix = str(work / "out")
-        _run_hugin([tools["pto_gen"], "-o", pto, *[str(t) for t in tiles]])
-        _run_hugin([tools["cpfind"], "--multirow", "--celeste", "-o", pto, pto])
-        _run_hugin([tools["cpclean"], "-o", pto, pto])
-        _run_hugin([tools["autooptimiser"], "-a", "-m", "-l", "-s", "-o", pto, pto])
-        _run_hugin(
-            [tools["pano_modify"], "--projection=2", f"--canvas={STITCH_CANVAS}",
-             "--crop=AUTO", "-o", pto, pto]
-        )
-        _run_hugin([tools["hugin_executor"], "--stitching", f"--prefix={prefix}", pto])
+        # The six pipeline steps in order — looped so each one is logged + reported
+        # through on_step before it runs (the names match the _HUGIN_TOOLS order).
+        steps: list[tuple[str, list[str]]] = [
+            ("pto_gen", [tools["pto_gen"], "-o", pto, *[str(t) for t in tiles]]),
+            ("cpfind", [tools["cpfind"], "--multirow", "--celeste", "-o", pto, pto]),
+            ("cpclean", [tools["cpclean"], "-o", pto, pto]),
+            ("autooptimiser", [tools["autooptimiser"], "-a", "-m", "-l", "-s", "-o", pto, pto]),
+            ("pano_modify", [tools["pano_modify"], "--projection=2", f"--canvas={STITCH_CANVAS}",
+                             "--crop=AUTO", "-o", pto, pto]),
+            ("hugin_executor", [tools["hugin_executor"], "--stitching", f"--prefix={prefix}", pto]),
+        ]
+        total = len(steps)
+        for index, (name, cmd) in enumerate(steps, start=1):
+            if on_step is not None:
+                on_step(index, total, name)
+            logger.info(
+                "panorama stitch %s: step %d/%d %s", primary_source.name, index, total, name
+            )
+            started = time.perf_counter()
+            _run_hugin(cmd)
+            logger.info(
+                "panorama stitch %s: step %d/%d %s done in %.1fs",
+                primary_source.name, index, total, name, time.perf_counter() - started,
+            )
 
         tifs = sorted(work.glob("out*.tif"))
         if not tifs:

@@ -9,6 +9,10 @@ export interface StitchState {
   // | 'unavailable' (Hugin not installed)
   status: string
   file_id: number | null
+  // Live Hugin pipeline progress: which of the six steps is currently running.
+  step?: number
+  step_total?: number
+  step_name?: string
   error: string | null
 }
 

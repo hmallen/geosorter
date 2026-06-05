@@ -6,6 +6,7 @@ import Lightbox from './components/Lightbox'
 import Toolbar from './components/Toolbar'
 import { useLibrary } from './useLibrary'
 import { useRetagJob } from './useRetagJob'
+import { useStitch } from './useStitch'
 import { selectionFor } from './selection'
 import type { ClusterOrPoint } from './clusters'
 import type { FeatureProps, LibraryFeature } from './types'
@@ -15,6 +16,10 @@ export default function App() {
   const { features, reload } = useLibrary()
   const [selected, setSelected] = useState<LibraryFeature[]>([])
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
+  // progress survives the lightbox closing/reopening; reload on success so the hero
+  // + stitch_status persist on the map and in future selections.
+  const { byFile: stitchByFile, start: startStitch } = useStitch(reload)
 
   function handleSelect(index: Supercluster<FeatureProps>, item: ClusterOrPoint) {
     setSelected(selectionFor(index, item, features))
@@ -61,6 +66,8 @@ export default function App() {
           index={lightboxIndex}
           onIndex={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
+          stitchByFile={stitchByFile}
+          onStartStitch={startStitch}
         />
       )}
     </div>
