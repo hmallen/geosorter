@@ -163,3 +163,19 @@ Granularity: **Option B (Balanced)** — 4 tasks + 1 deferred spike.
 
 Ordering: **B9a → { B10 ∥ B11 } → B12 → [later] B13.**
 
+> **B13 resolved (2026-06-05): GO — via Hugin (not OpenCV `Stitcher`).** The spike
+> (`l-panorama-stitch-spike`) found off-the-shelf OpenCV `cv2.Stitcher` a NO-GO on
+> the real 35-frame `001_0002` pano (two hard-crash modes — FLANN knn assertion on a
+> 0-keypoint sky frame, OpenCL abort; even the forced success was 44 MP ~45 % black
+> void). **But the Hugin CLI pipeline** (`pto_gen → cpfind --multirow --celeste →
+> cpclean → autooptimiser → pano_modify equirectangular → hugin_executor`) ran on the
+> full 35-frame set with every stage `rc=0` and produced a **clean, 100 %-covered,
+> servable 16 MP 360° equirectangular** in ~7 min at ~434 MiB peak. `celeste` masks
+> the featureless sky that crashed cv2. Recommendation: implement a **Hugin-backed**
+> `derived.panorama_stitch()` as the existing-pattern external CLI tool (like
+> ffmpeg/exiftool) — runtime-detected, lazy/cached, subprocess+timeout, coverage-checked,
+> `/api/stitch/{id}` + a `stitch_status` column via the migration runner, **graceful
+> fallback to the B12 gallery** when Hugin is absent or a stitch fails. Tracked as the
+> follow-up task `m-panorama-stitch`. No `cv2`/`[panorama]` pip extra. See the archived
+> task `team-management/tasks/done/l-panorama-stitch-spike.md` for the full findings.
+

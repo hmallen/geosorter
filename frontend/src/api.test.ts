@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -12,6 +12,10 @@ describe('media URL builders', () => {
     expect(previewUrl(p)).toBe('/api/preview/X/y.jpg')
     expect(posterUrl(p)).toBe('/api/poster/X/y.jpg')
     expect(videoUrl(p)).toBe('/api/video/X/y.jpg')
+  })
+
+  it('builds the stitched-panorama hero URL from a file id', () => {
+    expect(stitchUrl(7)).toBe('/api/stitch/7')
   })
 })
 
