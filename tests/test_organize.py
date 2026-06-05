@@ -696,6 +696,63 @@ def test_prescan_warnings_surface_in_report(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Import selection — run_organize(selected_primaries=...) filters capture groups.
+# --------------------------------------------------------------------------- #
+def test_selected_primaries_filters_groups(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"capture-one")
+    _add(inbox, "DJI_0002.JPG", b"capture-two")  # distinct bytes (avoid dedup)
+    mapping = {"DJI_0001.JPG": _md(), "DJI_0002.JPG": _md()}
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        selected_primaries={"DJI_0001.JPG"},
+        extractor_factory=_factory(mapping),
+    )
+    assert report.organized == 1
+    assert not (inbox / "DJI_0001.JPG").exists()  # selected -> filed
+    assert (inbox / "DJI_0002.JPG").exists()  # not selected -> left in inbox
+
+
+def test_selected_primaries_none_organizes_all(tmp_path):
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"capture-one")
+    _add(inbox, "DJI_0002.JPG", b"capture-two")  # distinct bytes (avoid dedup)
+    mapping = {"DJI_0001.JPG": _md(), "DJI_0002.JPG": _md()}
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory(mapping)
+    )
+    assert report.organized == 2
+
+
+def test_partial_import_does_not_archive_catalog(tmp_path):
+    # On a partial import (a subset selected) star ratings are still applied to the
+    # selected files, but the destructive MISC-catalog ARCHIVE is skipped so a catalog
+    # is never archived away while unselected media remains in the inbox.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", b"video-bytes")
+    _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0002_D.MP4", b"video2-bytes")
+    catalog = _make_catalog(
+        inbox / "MISC" / "FC.db",
+        [("/mnt/media_rw/sdcard0/DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", 4)],
+    )
+    mapping = {
+        "DJI_20240825165234_0001_D.MP4": _md(media_type="video", codec="h264"),
+        "DJI_20240825165234_0002_D.MP4": _md(media_type="video", codec="h264"),
+    }
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        selected_primaries={"DCIM/DJI_001/DJI_20240825165234_0001_D.MP4"},
+        extractor_factory=_factory(mapping),
+    )
+    assert report.organized == 1
+    assert report.ratings_applied == 1  # ratings still applied to the selected file
+    assert catalog.exists()  # partial import -> catalog NOT archived
+    assert (inbox / "DCIM/DJI_001/DJI_20240825165234_0002_D.MP4").exists()
+
+
+# --------------------------------------------------------------------------- #
 # Real-ExifTool end-to-end (Phase 0a DoD). Uses the actual MetadataExtractor.
 # --------------------------------------------------------------------------- #
 def test_committed_mixed_footage_e2e(tmp_path):

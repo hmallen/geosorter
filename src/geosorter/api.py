@@ -45,6 +45,18 @@ from .jobs import JobManager
 logger = logging.getLogger("geosorter.api")
 
 
+class OrganizeRequest(BaseModel):
+    """Optional body of ``POST /api/organize``: import a chosen subset of the inbox.
+
+    ``primaries`` is a list of inbox-relative POSIX primary paths (the ``id`` field
+    from ``GET /api/inbox/list``). ``None`` (or a missing body) imports the whole
+    inbox — the map UI sends ``None`` when "Select All" is on, preserving today's
+    full-import behavior (including MISC-catalog archiving).
+    """
+
+    primaries: list[str] | None = None
+
+
 class RetagRequest(BaseModel):
     """Body of ``POST /api/retag``: re-file ``file_id`` to a clicked coordinate.
 
@@ -191,9 +203,14 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
     def inbox_count() -> dict:
         return asdict(inbox.count_inbox(cfg.inbox_path))
 
+    @app.get("/api/inbox/list")
+    def inbox_list() -> dict:
+        return {"groups": [asdict(g) for g in inbox.list_inbox(cfg.inbox_path)]}
+
     @app.post("/api/organize")
-    def organize_start() -> dict:
-        return {"job_id": jobs.submit()}
+    def organize_start(req: OrganizeRequest = OrganizeRequest()) -> dict:
+        selected = set(req.primaries) if req.primaries is not None else None
+        return {"job_id": jobs.submit(selected_primaries=selected)}
 
     @app.get("/api/organize/status/{job_id}")
     def organize_status(job_id: str) -> dict:
