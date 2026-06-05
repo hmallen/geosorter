@@ -572,18 +572,125 @@ def test_panorama_files_as_capture_unit(tmp_path):
     ]
 
 
-def test_prescan_warnings_surface_in_report(tmp_path):
-    # A MISC db (unclaimed until B11) + an orphan HYPERLAPSE dir (no matching
-    # render) must be reported, never silently dropped or quarantined as singles.
+def _make_catalog(path, rows):
+    """Build a minimal DJI-shaped MISC catalog DB at ``path``; ``rows`` = (file_name, star)."""
+    import sqlite3
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE gis_info_table (file_name TEXT, star INT)")
+    conn.executemany("INSERT INTO gis_info_table(file_name, star) VALUES (?,?)", rows)
+    conn.execute("CREATE TABLE image_info_table (exif BLOB)")
+    conn.execute("INSERT INTO image_info_table(exif) VALUES (?)", (b"\x00EXIF",))
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_catalog_ratings_applied_and_db_archived(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
-    _add(inbox, "MISC/FC8482.db", b"catalog")
+    _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", b"video-bytes")
+    catalog = _make_catalog(
+        inbox / "MISC" / "FC.db",
+        [("/mnt/media_rw/sdcard0/DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", 4)],
+    )
+    mapping = {"DJI_20240825165234_0001_D.MP4": _md(media_type="video", codec="h264")}
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+
+    assert report.organized == 1
+    assert report.ratings_applied == 1
+    assert report.unclaimed == 0  # the .db was archived, no longer stranded
+    assert not catalog.exists()  # inbox copy archived away
+    archive = Path(cfg.index_db_path).parent / "catalogs" / report.batch_id / "FC.db"
+    assert archive.is_file()
+
+    conn = _index(cfg)
+    try:
+        rating = conn.execute(
+            "SELECT star_rating FROM files WHERE batch_id=? AND status='organized'",
+            (report.batch_id,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert rating == 4
+
+
+def test_catalog_stale_db_applies_no_ratings(tmp_path):
+    # A catalog whose basenames match nothing organized this run -> no ratings, but
+    # the .db is still archived (preserved + decluttered).
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", b"video-bytes")
+    catalog = _make_catalog(
+        inbox / "MISC" / "stale.db",
+        [("/mnt/media_rw/sdcard0/DCIM/100MEDIA/DJI_9999.MOV", 5)],
+    )
+    mapping = {"DJI_20240825165234_0001_D.MP4": _md(media_type="video", codec="h264")}
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+
+    assert report.organized == 1
+    assert report.ratings_applied == 0
+    assert not catalog.exists()
+    assert (Path(cfg.index_db_path).parent / "catalogs" / report.batch_id / "stale.db").is_file()
+
+    conn = _index(cfg)
+    try:
+        rating = conn.execute(
+            "SELECT star_rating FROM files WHERE batch_id=? AND status='organized'",
+            (report.batch_id,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert rating is None  # never rated
+
+
+def test_catalog_archive_oserror_does_not_abort(tmp_path, monkeypatch):
+    # A catalog vanishing mid-archive (removable media) must NEVER abort post-move
+    # bookkeeping: the media is already filed, ratings already applied, codec_stats
+    # still written, and the failure is recorded rather than raised.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", b"video-bytes")
+    _make_catalog(
+        inbox / "MISC" / "FC.db",
+        [("/mnt/media_rw/sdcard0/DCIM/DJI_001/DJI_20240825165234_0001_D.MP4", 4)],
+    )
+    mapping = {"DJI_20240825165234_0001_D.MP4": _md(media_type="video", codec="h264")}
+
+    real_copy = organize.move_engine.copy_and_verify
+
+    def boom(conn, batch_id, src, dst, **kw):
+        if str(src).lower().endswith(".db"):
+            raise FileNotFoundError("catalog vanished mid-run")
+        return real_copy(conn, batch_id, src, dst, **kw)
+
+    monkeypatch.setattr(organize.move_engine, "copy_and_verify", boom)
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+
+    assert report.organized == 1  # the media still filed
+    assert report.ratings_applied == 1  # ratings applied before the archive failed
+    assert any("catalog archive error" in f for f in report.failures)
+    assert not report.aborted
+    conn = _index(cfg)
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM codec_stats WHERE batch_id=?", (report.batch_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 1  # post-move bookkeeping completed
+
+
+def test_prescan_warnings_surface_in_report(tmp_path):
+    # A non-.db MISC cache file (THM thumbnail, unclaimed) + an orphan HYPERLAPSE dir
+    # (no matching render) must be reported, never silently dropped or quarantined.
+    # (A MISC .db would be archived by B11, so it would NOT stay unclaimed.)
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "MISC/THM/THM0001.thm", b"thumb")
     orphan = _add(
         inbox, "DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0001.JPG", b"orphan-frame"
     )
     report = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({}))
     assert report.organized == 0
     assert report.quarantined == 0
-    assert report.unclaimed == 1  # the MISC db
+    assert report.unclaimed == 1  # the MISC THM cache file (left in the inbox)
     assert any("0099" in w for w in report.warnings)  # orphan hyperlapse dir
     assert orphan.exists()  # left in the inbox, not moved
 

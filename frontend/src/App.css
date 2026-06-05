@@ -298,6 +298,21 @@
   background: rgba(124, 77, 196, 0.85);
 }
 
+/* DJI in-app star rating (B11): bottom-left so it never collides with the
+   top-left capture-kind badge. Gold stars on a dark chip. */
+.badge--stars {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #f5c518;
+  pointer-events: none;
+}
+
 .frames-toggle {
   align-self: center;
   font-size: 13px;
