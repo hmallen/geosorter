@@ -44,13 +44,16 @@ _PRIMARY_EXT = {".jpg", ".jpeg", ".mp4", ".mov"}
 class CaptureGroup:
     """One logical capture: a primary file plus its companions.
 
-    ``companions`` pairs each companion path with its ``companion_type`` —
-    one of ``'dng'``/``'lrf'``/``'srt'``/``'hyperlapse_frame'``/``'other'`` (the
-    ``file_companions`` enum). Continuation video segments are ``'other'``.
+    ``companions`` pairs each companion path with its ``companion_type`` — one of
+    ``'dng'``/``'lrf'``/``'srt'``/``'hyperlapse_frame'``/``'panorama_frame'``/
+    ``'other'`` (the ``file_companions`` enum). Continuation video segments are
+    ``'other'``.
 
-    ``capture_kind`` is ``None`` for a normal capture, or ``'hyperlapse'`` when the
+    ``capture_kind`` is ``None`` for a normal capture, ``'hyperlapse'`` when the
     directory pre-scan (:func:`prescan_inbox`) has attached a HYPERLAPSE frame
-    directory's frames as ``hyperlapse_frame`` companions of this render.
+    directory's frames as ``hyperlapse_frame`` companions of this render, or
+    ``'panorama'`` for a PANORAMA frame directory modeled as one capture unit
+    (``PANO_0001.JPG`` as primary, the rest as ``panorama_frame`` companions).
     """
 
     primary: Path
@@ -125,8 +128,9 @@ _FRAME_DIR_RE = re.compile(r"^\d+_(?P<counter>\d+)$")
 # The 4-digit counter inside a modern render stem (``DJI_<14ts>_<counter>_<lens>``).
 _RENDER_COUNTER_RE = re.compile(r"^DJI_\d{14}_(?P<counter>\d+)_[A-Za-z]+", re.IGNORECASE)
 
-# DCIM subdirectories that are NOT flat media. HYPERLAPSE is handled here (B10);
-# PANORAMA and MISC are recognized but routed out as ``unclaimed`` (B11/B12).
+# DCIM subdirectories that are NOT flat media. HYPERLAPSE (B10) and PANORAMA
+# (B12) are modeled as capture units here; MISC is recognized but routed out as
+# ``unclaimed`` (B11).
 _SPECIAL_DIRS = {"HYPERLAPSE", "PANORAMA", "MISC"}
 _FRAME_DIRS = {"HYPERLAPSE", "PANORAMA"}
 
@@ -141,12 +145,13 @@ _HYPERLAPSE_LINK_WINDOW_S = 3600.0
 class PrescanResult:
     """Outcome of :func:`prescan_inbox`.
 
-    ``groups`` are the capture units to organize (flat captures plus hyperlapse
-    renders augmented with their frame companions). ``unclaimed`` are recognized
-    PANORAMA/MISC paths that B10 does not file (B11/B12 will) — surfaced so the
-    caller can warn rather than silently drop them. ``warnings`` are human-readable
-    notes for orphan/ambiguous frame directories (a frame dir with no single
-    matching render).
+    ``groups`` are the capture units to organize (flat captures, hyperlapse
+    renders augmented with their frame companions, and panorama frame directories
+    modeled as one unit). ``unclaimed`` are recognized MISC paths (and malformed
+    HYPERLAPSE/PANORAMA layouts) that this pass does not file (B11 will file MISC)
+    — surfaced so the caller can warn rather than silently drop them. ``warnings``
+    are human-readable notes for orphan/ambiguous frame directories (a frame dir
+    with no single matching render).
     """
 
     groups: list[CaptureGroup]
@@ -193,13 +198,20 @@ def prescan_inbox(
     unique match the render group becomes ``capture_kind='hyperlapse'`` with the
     frames attached as ``hyperlapse_frame`` companions (sorted by name). A frame dir
     with zero or several matching renders is left unlinked and noted in
-    ``warnings`` (never a raise, never a wrong-link). PANORAMA/MISC paths are
-    returned in ``unclaimed``.
+    ``warnings`` (never a raise, never a wrong-link). Each
+    ``PANORAMA/<seq>_<counter>/`` directory is modeled as one
+    ``capture_kind='panorama'`` group directly from its tiles (``PANO_0001.JPG`` as
+    primary, the rest as ``panorama_frame`` companions sorted by name) — there is no
+    flat render to link to. MISC paths (and malformed layouts) are returned in
+    ``unclaimed``.
     """
     inbox_root = Path(inbox_root)
     flat_paths: list[Path] = []
     # frame_dir -> (counter, [frame paths])
     hyperlapse: dict[Path, tuple[str, list[Path]]] = {}
+    # frame_dir -> [tile paths]; a panorama has no render to link, so the counter is
+    # only a well-formed-layout gate, not a join key.
+    panorama: dict[Path, list[Path]] = {}
     unclaimed: list[Path] = []
     warnings: list[str] = []
 
@@ -214,9 +226,11 @@ def prescan_inbox(
             flat_paths.append(path)
         elif kind == "hyperlapse" and counter is not None:
             hyperlapse.setdefault(path.parent, (counter, []))[1].append(path)
+        elif kind == "panorama" and counter is not None:
+            panorama.setdefault(path.parent, []).append(path)
         else:
-            # panorama, misc, or a malformed HYPERLAPSE/PANORAMA layout (no
-            # frame-dir counter) — recognized, but not filed by B10.
+            # misc, or a malformed HYPERLAPSE/PANORAMA layout (no frame-dir
+            # counter) — recognized, but not filed here.
             unclaimed.append(path)
 
     groups = group_companions(flat_paths, mtime_window_s=mtime_window_s)
@@ -248,6 +262,19 @@ def prescan_inbox(
             g,
             companions=g.companions + frame_companions,
             capture_kind="hyperlapse",
+        )
+
+    # Each PANORAMA dir is its own capture unit: PANO_0001 (first by name) is the
+    # primary, the rest are panorama_frame companions. No flat render to link.
+    for frame_dir in sorted(panorama):
+        tiles = sorted(panorama[frame_dir], key=lambda p: p.name)
+        primary, *rest = tiles
+        groups.append(
+            CaptureGroup(
+                primary=primary,
+                companions=[(p, "panorama_frame") for p in rest],
+                capture_kind="panorama",
+            )
         )
 
     return PrescanResult(groups=groups, unclaimed=unclaimed, warnings=warnings)

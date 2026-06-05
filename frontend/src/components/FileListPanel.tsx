@@ -36,6 +36,11 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
                   ⊞ ×{f.properties.frame_count}
                 </span>
               )}
+              {f.properties.capture_kind === 'panorama' && (f.properties.frame_count ?? 0) > 0 && (
+                <span className="badge badge--panorama" title="Panorama">
+                  ▦ ×{f.properties.frame_count}
+                </span>
+              )}
               <span>{f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}</span>
             </button>
             <button

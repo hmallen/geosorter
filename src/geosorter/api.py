@@ -160,7 +160,11 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
 
     @app.get("/api/frames/{file_id}")
     def frames(file_id: int) -> dict:
-        """List a hyperlapse render's source-frame relpaths (lightbox gallery, B10)."""
+        """List a capture's source-frame relpaths for the lightbox gallery.
+
+        Serves both a hyperlapse render's ``hyperlapse_frame`` companions (B10) and
+        a panorama primary's ``panorama_frame`` tiles (B12).
+        """
         conn = _index()
         try:
             if conn.execute(
@@ -169,7 +173,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail="unknown file")
             rows = conn.execute(
                 "SELECT dest_path FROM file_companions "
-                "WHERE primary_file_id=? AND companion_type='hyperlapse_frame' "
+                "WHERE primary_file_id=? "
+                "AND companion_type IN ('hyperlapse_frame', 'panorama_frame') "
                 "ORDER BY dest_path",
                 (file_id,),
             ).fetchall()

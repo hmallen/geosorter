@@ -32,6 +32,14 @@ def _hyperlapse_dir(inbox, counter, *, n_frames, base_mtime):
     return d
 
 
+def _panorama_dir(inbox, counter, *, n_frames, base_mtime=1000.0):
+    """Create DCIM/PANORAMA/001_<counter>/ with n_frames PANO tiles; return the dir."""
+    d = inbox / "DCIM" / "PANORAMA" / f"001_{counter}"
+    for i in range(1, n_frames + 1):
+        _touch(d / f"PANO_{i:04d}.JPG", base_mtime + i)
+    return d
+
+
 def test_prescan_links_hyperlapse_frames(tmp_path):
     inbox = tmp_path / "card"
     # Render lives in the flat DCIM/DJI_001/ partition; written shortly AFTER its
@@ -86,25 +94,78 @@ def test_prescan_orphan_frame_dir_warns(tmp_path):
     assert any("0099" in w for w in result.warnings)
 
 
-def test_prescan_panorama_and_misc_are_unclaimed(tmp_path):
+def test_prescan_routes_panorama_as_capture_unit(tmp_path):
+    inbox = tmp_path / "card"
+    # A panorama dir has no flat render: the group is built entirely from its tiles,
+    # PANO_0001 as primary and the rest as panorama_frame companions.
+    _panorama_dir(inbox, "0002", n_frames=3)
+
+    paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
+    result = grouping.prescan_inbox(paths, inbox_root=inbox)
+
+    assert len(result.groups) == 1
+    g = result.groups[0]
+    assert g.capture_kind == "panorama"
+    assert g.primary.name == "PANO_0001.JPG"
+    assert _names(g.companions) == {
+        ("PANO_0002.JPG", "panorama_frame"),
+        ("PANO_0003.JPG", "panorama_frame"),
+    }
+    assert result.unclaimed == []
+    assert result.warnings == []
+
+
+def test_prescan_panorama_single_frame_group(tmp_path):
+    inbox = tmp_path / "card"
+    _panorama_dir(inbox, "0002", n_frames=1)
+
+    paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
+    result = grouping.prescan_inbox(paths, inbox_root=inbox)
+
+    assert len(result.groups) == 1
+    g = result.groups[0]
+    assert g.capture_kind == "panorama"
+    assert g.primary.name == "PANO_0001.JPG"
+    assert g.companions == []
+    assert result.unclaimed == []
+
+
+def test_prescan_panorama_frames_sorted_by_name(tmp_path):
+    inbox = tmp_path / "card"
+    _panorama_dir(inbox, "0002", n_frames=5)
+
+    # Feed the paths in REVERSE so the prescan's own sort is what orders them.
+    paths = sorted(
+        (p for p in inbox.rglob("*") if p.is_file()), key=lambda p: p.name, reverse=True
+    )
+    g = grouping.prescan_inbox(paths, inbox_root=inbox).groups[0]
+    assert g.primary.name == "PANO_0001.JPG"
+    frame_names = [p.name for p, _ in g.companions]
+    assert frame_names == sorted(frame_names)  # ascending PANO_0002..0005
+
+
+def test_prescan_misc_is_unclaimed_panorama_is_grouped(tmp_path):
     inbox = tmp_path / "card"
     render = _touch(
         inbox / "DCIM" / "DJI_001" / "DJI_20240829183426_0021_D.MP4", 1100.0
     )
     _hyperlapse_dir(inbox, "0021", n_frames=2, base_mtime=1000.0)
-    pano = _touch(inbox / "DCIM" / "PANORAMA" / "001_0002" / "PANO_0001.JPG", 1000.0)
+    _panorama_dir(inbox, "0002", n_frames=2)
     misc = _touch(inbox / "MISC" / "FC8482.db", 1000.0)
 
     paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
     result = grouping.prescan_inbox(paths, inbox_root=inbox)
 
-    assert [g.primary for g in result.groups] == [render]
-    assert set(result.unclaimed) == {pano, misc}
-    # Unclaimed paths never leak into a flat group.
+    # The hyperlapse render and the panorama unit are both groups; only MISC strands.
+    kinds = sorted(g.capture_kind or "flat" for g in result.groups)
+    assert kinds == ["hyperlapse", "panorama"]
+    assert set(result.unclaimed) == {misc}
+    # The MISC db never leaks into a group.
     grouped = {p for g in result.groups for p, _ in g.companions} | {
         g.primary for g in result.groups
     }
-    assert pano not in grouped and misc not in grouped
+    assert misc not in grouped
+    assert render in grouped
 
 
 def test_prescan_mtime_guard_rejects_far_render(tmp_path):
