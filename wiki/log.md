@@ -11,6 +11,17 @@ incremental row cleanup + per-batch codec_stats drop) and extended
 the shared single-worker executor (organize/undo mutual exclusion). Updated the
 index entry and both pages' front-matter.
 
+## [2026-06-04] create | DJI MISC Catalog Databases
+Captured B11 (m-dji-catalog-ratings) domain knowledge: the `MISC/*.db` SQLite
+catalogs where DJI in-app **star ratings** live (the only place — media carry no
+`XMP:Rating`). Schema (`gis_info_table.file_name` full SD-card path + `star`;
+`image_info_table` EXIF BLOB never read), live-vs-stale catalog selection by
+basename overlap (the stale older-card DB scores zero), the rename-suffix join
+(`dest.endswith(catalog_basename)` since organized files are renamed and store no
+original name), and the read-only/immutable/`integrity_check`/fail-safe parsing +
+crash-safe archive of every `.db` to `<index_db_dir>/catalogs/<batch_id>/`
+(undo-reversible). No schema migration (`files.star_rating` from B9a).
+
 ## [2026-05-31] create | DJI SRT Telemetry Formats
 Captured DJI `.SRT` telemetry domain knowledge from task B2 (h-extract-srt-codec):
 bracket vs paren payload families, longitude-first ordering in `GPS(...)`,

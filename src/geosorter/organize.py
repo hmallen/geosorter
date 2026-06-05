@@ -28,7 +28,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import db, geocoder, grouping, inference, move_engine, pathing, tz_resolver
+from . import db, geocoder, grouping, inference, misc_parser, move_engine, pathing, tz_resolver
 from .metadata import MetadataExtractor
 
 # Disk-space safety margin over the raw source bytes (mirrors geonames_loader).
@@ -47,6 +47,7 @@ class BatchReport:
     companions: int = 0
     retained_frame_bytes: int = 0  # disk cost of retained hyperlapse frames (B10)
     unclaimed: int = 0  # recognized PANORAMA/MISC paths B10 does not file (B10)
+    ratings_applied: int = 0  # files given a star_rating from a MISC catalog (B11)
     warnings: list[str] = field(default_factory=list)  # orphan frame dirs etc. (B10)
     failures: list[str] = field(default_factory=list)
     per_place: dict[str, int] = field(default_factory=dict)
@@ -284,6 +285,7 @@ def run_organize(
                            byte_progress, cfg.retain_hyperlapse_frames)
 
         if not dry_run:
+            _apply_catalog_ratings(index, report, pre.unclaimed, cfg)
             index.execute(
                 "INSERT INTO codec_stats(batch_id, h264_count, h265_count, unknown_count) "
                 "VALUES (?,?,?,?)",
@@ -315,6 +317,64 @@ def _infer_batch(extracted, max_gap_minutes: float) -> dict:
         for idx, _group, md in extracted
     ]
     return inference.infer_locations(items, max_gap=timedelta(minutes=max_gap_minutes))
+
+
+def _apply_catalog_ratings(index, report, unclaimed, cfg) -> None:
+    """Read DJI MISC-catalog star ratings -> ``files.star_rating``, then archive the
+    catalog DBs outside ``library_root`` (B11).
+
+    A no-coordinate / stale / corrupt / ambiguous catalog yields no ratings and never
+    raises (``misc_parser`` is fail-safe; the apply loop is plain SQL). Every
+    ``MISC/*.db`` is preserved by a crash-safe copy to
+    ``<index_db_dir>/catalogs/<batch_id>/`` and its inbox source deleted, so the move
+    is logged in ``moves`` (``file_id`` NULL) and ``undo`` reverses it.
+    """
+    dbs = [p for p in unclaimed if p.suffix.lower() == ".db"]
+    if not dbs:
+        return
+
+    # Recover each organized file's lowercased dest filename. The catalog keys are the
+    # original DJI basenames, which are a SUFFIX of the renamed dest stem.
+    organized = [
+        (fid, Path(_strip(dest)).name.lower())
+        for fid, dest in index.execute(
+            "SELECT id, dest_path FROM files WHERE batch_id=? AND status='organized'",
+            (report.batch_id,),
+        ).fetchall()
+    ]
+    catalogs = {p: misc_parser.read_ratings(p) for p in dbs}
+    chosen = misc_parser.select_catalog(catalogs, [name for _fid, name in organized])
+    if chosen is not None:
+        ratings = catalogs[chosen]
+        for fid, name in organized:
+            # Prefer the longest matching basename so a (theoretical) shorter suffix
+            # never shadows the full DJI name.
+            match = max((cb for cb in ratings if name.endswith(cb)), key=len, default=None)
+            if match is not None:
+                index.execute(
+                    "UPDATE files SET star_rating=? WHERE id=?", (ratings[match], fid)
+                )
+                report.ratings_applied += 1
+        index.commit()
+
+    archive_dir = Path(cfg.index_db_path).parent / "catalogs" / report.batch_id
+    for p in dbs:
+        dest = str(archive_dir / p.name)
+        try:
+            if move_engine.is_already_moved(index, p):
+                continue
+            out = move_engine.copy_and_verify(index, report.batch_id, p, dest)
+            if out.status == "failed":
+                report.failures.append(f"{p}: catalog archive failed: {out.error}")
+                continue
+            move_engine.commit_delete(index, p, out.source_sha256)
+            # The .db is no longer stranded in the inbox: it left the unclaimed set.
+            report.unclaimed -= 1
+        except OSError as exc:
+            # A catalog vanishing mid-run (removable media) or any IO error must NEVER
+            # abort the post-move bookkeeping — the media is already filed. Record it
+            # and move on; the .db simply stays where it is.
+            report.failures.append(f"{p}: catalog archive error: {exc}")
 
 
 def _process_group(group, md, inferred, index, geonames, library, report, dry_run,

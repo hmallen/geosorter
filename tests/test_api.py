@@ -26,14 +26,15 @@ def _probe_codec(path: Path) -> str:
 
 
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
-          gps_source="exif", capture_kind=None, frame_count=None):
+          gps_source="exif", capture_kind=None, frame_count=None, star_rating=None):
     cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
-        "local_date, lat, lon, codec, gps_source, sha256, status, capture_kind, frame_count) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "local_date, lat, lon, codec, gps_source, sha256, status, capture_kind, "
+        "frame_count, star_rating) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
          "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status,
-         capture_kind, frame_count),
+         capture_kind, frame_count, star_rating),
     )
     return cur.lastrowid
 
@@ -226,6 +227,43 @@ def test_frames_lists_panorama_companions(tmp_path):
             "P/PANO_0001_frames/PANO_0003.JPG",
         ]
     }
+
+
+def test_library_exposes_star_rating(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    _seed(conn, dest_path=str(library / "A" / "rated.JPG"), filename="rated.JPG",
+          media_type="photo", status="organized", lat=40.0, lon=-105.0, star_rating=4)
+    _seed(conn, dest_path=str(library / "B" / "unrated.JPG"), filename="unrated.JPG",
+          media_type="photo", status="organized", lat=41.0, lon=-106.0, star_rating=None)
+    conn.commit()
+    conn.close()
+    client = TestClient(api.create_app(cfg))
+    by_name = {
+        f["properties"]["filename"]: f["properties"]
+        for f in client.get("/api/library").json()["features"]
+    }
+    assert by_name["rated.JPG"]["star_rating"] == 4
+    assert by_name["unrated.JPG"]["star_rating"] is None
+
+
+def test_media_db_extension_blocked(client_and_lib):
+    # Catalog DBs live outside library_root, but belt-and-suspenders: never serve a
+    # .db even if one is somehow under the library.
+    client, library = client_and_lib
+    (library / "catalog.db").write_bytes(b"SQLite format 3\x00")
+    resp = client.get("/api/media/catalog.db")
+    assert resp.status_code == 403
 
 
 def test_media_range_request_returns_206(client_and_lib):
