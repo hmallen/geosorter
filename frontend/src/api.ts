@@ -37,6 +37,10 @@ export async function fetchFrames(
   return ((await resp.json()) as { frames: string[] }).frames
 }
 
+// Panorama stitched hero (B13): the cached 360 equirectangular for a panorama
+// primary. 404 until generated (the lightbox falls back to the tile gallery).
+export const stitchUrl = (id: number): string => `/api/stitch/${id}`
+
 // Inbox counter (B8): how much is waiting for the next organize run.
 export interface InboxCount {
   files: number

@@ -53,6 +53,12 @@ spatial_index = 'rtree'
 # alongside the rendered video, filed into a `<render>_frames/` subfolder. Set to
 # false to file only the render and leave the frames in the inbox (saves disk).
 # retain_hyperlapse_frames = true
+
+# Optional directory holding the Hugin CLI tools (pto_gen, cpfind, hugin_executor,
+# ...), used to stitch a 360 panorama hero from a DJI PANORAMA tile set. Leave unset
+# to detect them on PATH. When neither finds Hugin, panorama stitching is silently
+# unavailable and the map UI keeps the tile gallery (no hard dependency).
+# hugin_bin_dir = 'C:\\Program Files\\Hugin\\bin'
 """
 
 
@@ -68,6 +74,7 @@ class Config:
     feature_proximity_km: float = 5.0
     inference_max_gap_minutes: float = 30.0
     retain_hyperlapse_frames: bool = True
+    hugin_bin_dir: Path | None = None
 
 
 def default_data_dir() -> Path:
@@ -126,6 +133,7 @@ def load(path: str | Path | None = None) -> Config:
         feature_proximity_km=float(data.get("feature_proximity_km", 5.0)),
         inference_max_gap_minutes=float(data.get("inference_max_gap_minutes", 30.0)),
         retain_hyperlapse_frames=bool(data.get("retain_hyperlapse_frames", True)),
+        hugin_bin_dir=_opt_path(data.get("hugin_bin_dir")),
     )
 
 
