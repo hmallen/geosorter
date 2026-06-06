@@ -567,6 +567,32 @@ def test_retag_job_lifecycle(client_and_lib):
     assert client.get("/api/retag/status/does-not-exist").status_code == 404
 
 
+def test_rescan_job_lifecycle(client_and_lib):
+    # The fixture seeds 4 files rows but writes no files on disk, so a rescan finds
+    # all four dest_paths missing and prunes them — exercising the route + job + the
+    # real run_rescan end to end.
+    client, _ = client_and_lib
+    resp = client.post("/api/rescan")
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    st = None
+    for _ in range(300):
+        st = client.get(f"/api/rescan/status/{job_id}").json()
+        if st["state"] in ("done", "error"):
+            break
+        time.sleep(0.02)
+    assert st["state"] == "done"
+    assert st["checked"] == 4
+    assert st["pruned"] == 4
+    assert st["kept"] == 0
+
+    # The map feed is now empty (all phantom rows pruned).
+    assert client.get("/api/library").json()["features"] == []
+
+    assert client.get("/api/rescan/status/does-not-exist").status_code == 404
+
+
 def test_cancel_routes_are_partitioned_by_job_kind(client_and_lib):
     # A cancel route must not accept the other kind's job id (job ids never migrate
     # between the organize and undo tables, so this is timing-independent).

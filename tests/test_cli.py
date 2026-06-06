@@ -111,6 +111,7 @@ def test_help_lists_organize_verbs():
     result = CliRunner().invoke(cli, ["--help"])
     assert "organize" in result.output
     assert "verify-library" in result.output
+    assert "rescan" in result.output
 
 
 def test_organize_requires_inbox_and_library(tmp_path):
@@ -184,6 +185,45 @@ def test_organize_then_undo_cli(tmp_path):
     assert "restored:  1" in r2.output
     assert (inbox / "DJI_0001.JPG").exists()  # back in the inbox
     assert not any(p.is_file() for p in library.rglob("*"))  # library copy gone
+
+
+def test_rescan_prunes_missing_cli(tmp_path):
+    # Organize a photo, move it out of the library by hand, then rescan: the stale
+    # index row is pruned so verify-library has nothing left to check.
+    cfg, inbox, library = _write_cfg_organize(tmp_path)
+    import shutil
+
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")
+    r1 = CliRunner().invoke(cli, ["organize", "--yes", "--config", str(cfg)])
+    assert r1.exit_code == 0, r1.output
+    dest = next(p for p in library.rglob("*") if p.is_file())
+    dest.unlink()  # capture moved out of the library
+
+    r2 = CliRunner().invoke(cli, ["rescan", "--yes", "--config", str(cfg)])
+    assert r2.exit_code == 0, r2.output
+    assert "pruned: 1" in r2.output
+
+    r3 = CliRunner().invoke(cli, ["verify-library", "--config", str(cfg)])
+    assert r3.exit_code == 0, r3.output
+    assert "checked 0" in r3.output  # the pruned row is gone
+
+
+def test_rescan_dry_run_writes_nothing_cli(tmp_path):
+    cfg, inbox, library = _write_cfg_organize(tmp_path)
+    import shutil
+
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")
+    CliRunner().invoke(cli, ["organize", "--yes", "--config", str(cfg)])
+    next(p for p in library.rglob("*") if p.is_file()).unlink()
+
+    r1 = CliRunner().invoke(cli, ["rescan", "--dry-run", "--config", str(cfg)])
+    assert r1.exit_code == 0, r1.output
+    assert "dry run" in r1.output.lower()
+    assert "would prune: 1" in r1.output
+
+    # Nothing was written: a second dry-run still finds the same stale row.
+    r2 = CliRunner().invoke(cli, ["rescan", "--dry-run", "--config", str(cfg)])
+    assert "would prune: 1" in r2.output
 
 
 def _feature_src(tmp_path: Path) -> Path:
