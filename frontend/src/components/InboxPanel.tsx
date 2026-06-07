@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useInboxList } from '../useInboxList'
 import {
   buildTree,
   allIds,
@@ -7,6 +6,7 @@ import {
   selectAllState,
   toggleDir,
   toggleGroup,
+  type InboxGroup,
   type TreeDir,
   type TriState,
 } from '../inboxTree'
@@ -17,6 +17,11 @@ interface Props {
   onProcess: (primaries: string[] | null, total: number) => void
   onClose: () => void
   busy: boolean
+  // The inbox listing is fetched + owned by Toolbar (scanned at startup) and passed
+  // down so this panel opens pre-populated.
+  groups: InboxGroup[]
+  loading: boolean
+  error: string | null
 }
 
 // A checkbox that renders the 'some' tri-state as the native indeterminate dash.
@@ -82,22 +87,27 @@ function DirNode({
   )
 }
 
-export default function InboxPanel({ onProcess, onClose, busy }: Props) {
-  const { groups, loading, error, load } = useInboxList()
+export default function InboxPanel({ onProcess, onClose, busy, groups, loading, error }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
-
-  // Fetch the inbox listing once when the panel opens.
-  useEffect(() => {
-    load()
-  }, [load])
 
   const tree = useMemo(() => buildTree(groups), [groups])
 
-  // Default selection = everything (select-all is used by default); re-applied
-  // whenever the listing changes.
+  // Default selection = everything (select-all is the default). Re-seeded only when
+  // the SET of capture-group ids actually changes — NOT on every Toolbar-driven
+  // refresh, which hands down a fresh array of identical groups (new object ref).
+  // Keying on the id set rather than the `tree` object preserves a user's manual
+  // deselection when an in-flight on-open / afterRun refresh resolves with unchanged
+  // inbox contents (scans can be slow, so that window is real).
+  const ids = useMemo(() => allIds(tree), [tree])
+  const seeded = useRef<Set<string> | null>(null)
   useEffect(() => {
-    setSelected(new Set(allIds(tree)))
-  }, [tree])
+    const prev = seeded.current
+    const unchanged =
+      prev !== null && prev.size === ids.length && ids.every((id) => prev.has(id))
+    if (unchanged) return
+    seeded.current = new Set(ids)
+    setSelected(new Set(ids))
+  }, [ids])
 
   const masterState = selectAllState(tree, selected)
   const selectedCount = selected.size
@@ -114,7 +124,7 @@ export default function InboxPanel({ onProcess, onClose, busy }: Props) {
         <button onClick={onClose} aria-label="Close">×</button>
       </div>
 
-      {loading && (
+      {loading && groups.length === 0 && (
         <p className="inbox-note inbox-loading">
           <span className="spinner" aria-hidden="true" /> Scanning inbox…
         </p>

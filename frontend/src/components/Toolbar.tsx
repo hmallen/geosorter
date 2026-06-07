@@ -1,19 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useOrganizeJob } from '../useOrganizeJob'
 import { useUndoJob } from '../useUndoJob'
 import { useRescanJob } from '../useRescanJob'
 import { useInboxCount } from '../useInboxCount'
+import { useInboxList } from '../useInboxList'
 import { progressLabel, loadProgressLabel, resultLabel } from '../organizeJob'
 import InboxPanel from './InboxPanel'
 
 export default function Toolbar({ onDone }: { onDone: () => void }) {
   const { count, refresh } = useInboxCount()
+  // The inbox listing is owned here (Toolbar is alive from app startup) so the scan
+  // runs once on mount and the Process Inbox panel opens pre-populated instead of
+  // showing a "Scanning inbox…" delay each time.
+  const { groups, loading: inboxLoading, error: inboxError, load: loadInbox } = useInboxList()
   const [picking, setPicking] = useState(false)
+
+  useEffect(() => {
+    loadInbox()
+  }, [loadInbox])
+
   // After an organize OR undo run, reload the library AND refresh the inbox badge
   // (organize empties the inbox, undo refills it) without waiting for the next poll.
+  // Also refresh the inbox listing so the panel reflects the new on-disk state.
   const afterRun = () => {
     onDone()
     refresh()
+    loadInbox()
   }
   const { job, running, total, start } = useOrganizeJob(afterRun)
   const { undo, undoing, startUndo } = useUndoJob(afterRun)
@@ -22,12 +34,15 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="toolbar">
-      <button onClick={() => setPicking(true)} disabled={busy}>
+      <button onClick={() => { setPicking(true); loadInbox() }} disabled={busy}>
         {running ? 'Processing…' : 'Process Inbox'}
       </button>
       {picking && (
         <InboxPanel
           busy={busy}
+          groups={groups}
+          loading={inboxLoading}
+          error={inboxError}
           onClose={() => setPicking(false)}
           onProcess={(primaries, count) => start(primaries, count)}
         />
