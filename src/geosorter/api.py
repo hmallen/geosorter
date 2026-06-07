@@ -15,6 +15,10 @@ Exposes the organized library over HTTP for the B7 frontend:
 * ``POST /api/retag`` (``{file_id, lat, lon}``) / ``GET /api/retag/status/{id}`` —
   re-file an organized capture to a map-clicked location as a background job (B8;
   see :mod:`geosorter.retag`). Shares the single-worker pool with organize/undo.
+* ``POST /api/rescan`` / ``GET /api/rescan/status/{id}`` — reconcile the index with
+  on-disk state, pruning rows for files no longer in the library, as a background
+  job (see :mod:`geosorter.rescan`). Shares the single-worker pool with
+  organize/undo/retag; no cancel route (it is a fast index-only pass).
 * ``GET  /api/media/{relpath}`` — original file, range-capable (video seek),
   path-traversal-guarded.
 * ``GET  /api/thumb/{relpath}`` / ``GET /api/poster/{relpath}`` — lazily generated,
@@ -256,6 +260,17 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     @app.get("/api/retag/status/{job_id}")
     def retag_status(job_id: str) -> dict:
         state = jobs.retag_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
+
+    @app.post("/api/rescan")
+    def rescan_start() -> dict:
+        return {"job_id": jobs.submit_rescan()}
+
+    @app.get("/api/rescan/status/{job_id}")
+    def rescan_status(job_id: str) -> dict:
+        state = jobs.rescan_status(job_id)
         if state is None:
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)

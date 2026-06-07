@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useOrganizeJob } from '../useOrganizeJob'
 import { useUndoJob } from '../useUndoJob'
+import { useRescanJob } from '../useRescanJob'
 import { useInboxCount } from '../useInboxCount'
 import { progressLabel, loadProgressLabel, resultLabel } from '../organizeJob'
 import InboxPanel from './InboxPanel'
@@ -16,7 +17,8 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
   }
   const { job, running, total, start } = useOrganizeJob(afterRun)
   const { undo, undoing, startUndo } = useUndoJob(afterRun)
-  const busy = running || undoing
+  const { rescan, rescanning, startRescan } = useRescanJob(afterRun)
+  const busy = running || undoing || rescanning
 
   return (
     <div className="toolbar">
@@ -38,6 +40,9 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
       </span>
       <button onClick={startUndo} disabled={busy}>
         {undoing ? 'Undoing…' : 'Undo Last Batch'}
+      </button>
+      <button onClick={startRescan} disabled={busy}>
+        {rescanning ? 'Rescanning…' : 'Rescan Library'}
       </button>
       {job && job.state === 'running' && total !== null && (
         <span className="job job--progress" title={progressLabel(job)}>
@@ -65,6 +70,18 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
               : `${undo.state}: restored ${undo.restored}` +
                 (undo.conflicts.length ? `, conflicts ${undo.conflicts.length}` : '') +
                 (undo.failures.length ? `, errors ${undo.failures.length}` : '')}
+        </span>
+      )}
+      {rescan && (
+        <span
+          className={`job${rescan.state === 'error' ? ' job--error' : ''}`}
+          title={rescan.error ?? undefined}
+        >
+          {rescan.state === 'running'
+            ? `rescanning ${rescan.processed}${rescan.current ? ` — ${rescan.current}` : ''}`
+            : `${rescan.state}: pruned ${rescan.pruned}` +
+              (rescan.warnings.length ? `, warnings ${rescan.warnings.length}` : '') +
+              (rescan.orphaned.length ? `, orphaned ${rescan.orphaned.length}` : '')}
         </span>
       )}
     </div>

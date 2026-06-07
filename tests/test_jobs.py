@@ -11,6 +11,7 @@ from geosorter import db
 from geosorter.derived import HuginNotFound, StitchFailed
 from geosorter.jobs import JobManager
 from geosorter.organize import BatchReport
+from geosorter.rescan import RescanReport
 from geosorter.retag import RetagReport
 from geosorter.undo import UndoReport
 
@@ -224,6 +225,52 @@ def test_retag_exception_becomes_error_state():
     st = _wait_retag(mgr, job_id)
     assert st.state == "error"
     assert "retag-boom" in st.error
+
+
+# --------------------------------------------------------------------------- #
+def _wait_rescan(mgr, job_id, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = mgr.rescan_status(job_id)
+        if st is not None and st.state in ("done", "error"):
+            return st
+        time.sleep(0.01)
+    raise AssertionError(f"rescan job {job_id} did not finish: {mgr.rescan_status(job_id)}")
+
+
+def test_submit_rescan_runs_and_completes():
+    def fake_rescan(cfg, *, dry_run=False, progress):
+        progress("  2024-07-04_09-15-00_DJI_0001.JPG")
+        return RescanReport(
+            checked=3, kept=2, pruned=1, warnings=["w"], orphaned=["/x/y.SRT"]
+        )
+
+    mgr = JobManager(None, rescan_fn=fake_rescan)
+    job_id = mgr.submit_rescan()
+    st = _wait_rescan(mgr, job_id)
+    assert st.state == "done"
+    assert st.checked == 3
+    assert st.kept == 2
+    assert st.pruned == 1
+    assert st.warnings == ["w"]
+    assert st.orphaned == ["/x/y.SRT"]
+    assert st.processed == 1
+
+
+def test_rescan_status_unknown_returns_none():
+    mgr = JobManager(None, rescan_fn=lambda *a, **k: RescanReport())
+    assert mgr.rescan_status("does-not-exist") is None
+
+
+def test_rescan_exception_becomes_error_state():
+    def boom(cfg, *, dry_run=False, progress):
+        raise RuntimeError("rescan-boom")
+
+    mgr = JobManager(None, rescan_fn=boom)
+    job_id = mgr.submit_rescan()
+    st = _wait_rescan(mgr, job_id)
+    assert st.state == "error"
+    assert "rescan-boom" in st.error
 
 
 # --------------------------------------------------------------------------- #

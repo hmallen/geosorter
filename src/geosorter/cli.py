@@ -22,6 +22,7 @@ from . import __version__, api, config, db, geocoder, geonames_loader
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
+from .rescan import RescanReport, run_rescan
 from .undo import UndoReport, latest_batch_id, run_undo
 
 _CONFIG_OPTION = click.option(
@@ -321,6 +322,53 @@ def _render_undo_report(report: UndoReport) -> None:
             f"{len(report.conflicts)} conflict(s), {len(report.failures)} failure(s); "
             "some files were not restored."
         )
+
+
+@cli.command()
+@_CONFIG_OPTION
+@click.option("--dry-run", is_flag=True, help="Preview what would be pruned; write nothing.")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
+def rescan(config_path: str | None, dry_run: bool, yes: bool) -> None:
+    """Reconcile the index with disk — prune rows for files no longer in the library.
+
+    Detects captures that left ``library_root`` (e.g. moved back to the inbox by
+    hand) and removes their stale index rows so the map stops showing them. Mutates
+    the index DB only — it never deletes or moves a file on disk.
+    """
+    cfg = config.load(config_path)
+    if not dry_run and not yes and not click.confirm(
+        "Rescan the library and prune index rows for files no longer on disk?",
+        default=False,
+    ):
+        click.echo("Aborted. Nothing was pruned.")
+        return
+    try:
+        report = run_rescan(cfg, dry_run=dry_run, progress=lambda msg: click.echo(msg))
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_rescan_report(report)
+
+
+def _render_rescan_report(report: RescanReport) -> None:
+    verb = "would prune" if report.dry_run else "pruned"
+    click.echo("Rescan complete." + (" (dry run — no changes written)" if report.dry_run else ""))
+    click.echo(f"  checked: {report.checked}")
+    click.echo(f"  kept:    {report.kept}")
+    click.echo(f"  {verb}: {report.pruned}")
+    if report.warnings:
+        click.echo(
+            f"  warnings: {len(report.warnings)} "
+            "(primary present, companion missing on disk — left in place):"
+        )
+        for w in report.warnings:
+            click.echo(f"    ! {w}")
+    if report.orphaned:
+        click.echo(
+            f"  orphaned: {len(report.orphaned)} "
+            "(companion still on disk after its capture was pruned — left in place):"
+        )
+        for o in report.orphaned:
+            click.echo(f"    ! {o}")
 
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}

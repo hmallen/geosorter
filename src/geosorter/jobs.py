@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from . import db
 from .derived import HuginNotFound, StitchFailed, panorama_stitch
 from .organize import run_organize
+from .rescan import run_rescan
 from .retag import retag_file
 from .undo import run_undo
 
@@ -83,6 +84,22 @@ class RetagJobState:
 
 
 @dataclass
+class RescanJobState:
+    """Serializable snapshot of one rescan job's progress."""
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    checked: int = 0
+    pruned: int = 0
+    kept: int = 0
+    processed: int = 0  # files seen so far (progress callback ticks)
+    current: str | None = None  # most recent file checked
+    error: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    orphaned: list[str] = field(default_factory=list)
+
+
+@dataclass
 class StitchJobState:
     """Serializable snapshot of one panorama-stitch job's progress (B13)."""
 
@@ -111,11 +128,12 @@ class JobManager:
     """
 
     def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
-                 retag_fn=retag_file, stitch_fn=panorama_stitch):
+                 retag_fn=retag_file, rescan_fn=run_rescan, stitch_fn=panorama_stitch):
         self._cfg = cfg
         self._organize_fn = organize_fn
         self._undo_fn = undo_fn
         self._retag_fn = retag_fn
+        self._rescan_fn = rescan_fn
         self._stitch_fn = stitch_fn
         self._executor = ThreadPoolExecutor(max_workers=1)
         # A panorama stitch is read-only (~7 min) and strictly off the crash-safe
@@ -125,6 +143,7 @@ class JobManager:
         self._jobs: dict[str, JobState] = {}
         self._undo_jobs: dict[str, UndoJobState] = {}
         self._retag_jobs: dict[str, RetagJobState] = {}
+        self._rescan_jobs: dict[str, RescanJobState] = {}
         self._stitch_jobs: dict[str, StitchJobState] = {}
         self._cancels: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
@@ -283,6 +302,44 @@ class JobManager:
             state.error = report.error
         else:
             state.state = "done"
+
+    # ----- rescan jobs (share the executor with organize/undo/retag) --------- #
+
+    def submit_rescan(self) -> str:
+        """Queue an index/disk reconciliation job and return its id (no cancel)."""
+        job_id = uuid.uuid4().hex
+        with self._lock:
+            self._rescan_jobs[job_id] = RescanJobState(job_id=job_id)
+        self._executor.submit(self._run_rescan, job_id)
+        return job_id
+
+    def rescan_status(self, job_id: str) -> RescanJobState | None:
+        """Consistent point-in-time snapshot of a rescan job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._rescan_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def _run_rescan(self, job_id: str) -> None:
+        state = self._rescan_jobs[job_id]
+        state.state = "running"
+
+        def progress(msg: str) -> None:
+            state.processed += 1
+            state.current = msg.strip()
+
+        try:
+            report = self._rescan_fn(self._cfg, progress=progress)
+        except Exception as exc:  # surface any failure as a job error
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        state.checked = report.checked
+        state.pruned = report.pruned
+        state.kept = report.kept
+        state.warnings = list(report.warnings)
+        state.orphaned = list(report.orphaned)
+        state.state = "done"
 
     # ----- stitch jobs (dedicated pool — independent of the destructive one) -- #
 
