@@ -1,5 +1,7 @@
 """Tests for the crash-safe move engine (copy → verify → delete, recoverable)."""
 
+import errno
+
 from geosorter import db, move_engine
 
 BATCH = "20260531T120000-abcdef"
@@ -248,6 +250,91 @@ def test_copy_and_verify_provided_hash_resume_skips_recopy(tmp_path, monkeypatch
         assert calls["n"] == 0  # resumed from the copy_verified row, no re-copy
     finally:
         conn.close()
+
+
+def test_copy_retries_transient_oserror(tmp_path, monkeypatch):
+    # A transient OSError (e.g. an SMB blip) on the copy is retried; the next attempt
+    # succeeds and the move completes as copy_verified.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    monkeypatch.setattr(move_engine.time, "sleep", lambda _s: None)  # no real backoff wait
+    real = move_engine._copy_file
+    calls = {"n": 0}
+
+    def _flaky(s, d, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError(errno.ECONNRESET, "connection reset by peer")
+        return real(s, d, **k)
+
+    monkeypatch.setattr(move_engine, "_copy_file", _flaky)
+    try:
+        outcome = move_engine.copy_and_verify(
+            conn, BATCH, src, dest, retry_attempts=3, retry_backoff_s=0
+        )
+        row = _moves_row(conn, src)
+    finally:
+        conn.close()
+    assert calls["n"] == 2  # failed once, succeeded on the retry
+    assert outcome.status == "copy_verified"
+    assert (tmp_path / "library" / "out.JPG").read_bytes() == b"hello-capture"
+    assert row[0] == "copy_verified"
+
+
+def test_enospc_not_retried(tmp_path, monkeypatch):
+    # ENOSPC is NOT transient — retrying cannot help, so it fails immediately even
+    # with retry_attempts > 1 (the free-space recheck owns disk-full, not the retry).
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    monkeypatch.setattr(move_engine.time, "sleep", lambda _s: None)
+    calls = {"n": 0}
+
+    def _full(s, d, *a, **k):
+        calls["n"] += 1
+        with open(d, "wb") as fh:
+            fh.write(b"partial")
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(move_engine, "_copy_file", _full)
+    try:
+        outcome = move_engine.copy_and_verify(
+            conn, BATCH, src, dest, retry_attempts=3, retry_backoff_s=0
+        )
+    finally:
+        conn.close()
+    assert calls["n"] == 1  # not retried
+    assert outcome.status == "failed"
+    assert not (tmp_path / "library" / "out.JPG.partial").exists()  # partial cleaned
+
+
+def test_retry_exhausts_then_fails(tmp_path, monkeypatch):
+    # Every attempt blips → after retry_attempts the move is marked failed (the
+    # group-atomic abort contract is preserved) and the partial is cleaned.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    monkeypatch.setattr(move_engine.time, "sleep", lambda _s: None)
+    calls = {"n": 0}
+
+    def _always_blip(s, d, *a, **k):
+        calls["n"] += 1
+        raise OSError(errno.ECONNRESET, "connection reset by peer")
+
+    monkeypatch.setattr(move_engine, "_copy_file", _always_blip)
+    try:
+        outcome = move_engine.copy_and_verify(
+            conn, BATCH, src, dest, retry_attempts=3, retry_backoff_s=0
+        )
+        row = _moves_row(conn, src)
+    finally:
+        conn.close()
+    assert calls["n"] == 3  # all three attempts used
+    assert outcome.status == "failed"
+    assert src.exists()
+    assert not (tmp_path / "library" / "out.JPG.partial").exists()
+    assert row[0] == "failed"
 
 
 def test_pending_recovery_recopies(tmp_path):

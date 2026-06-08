@@ -44,9 +44,28 @@ from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from . import db, derived, inbox
-from .jobs import JobManager
+from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
+
+
+def _submit_or_409(submit) -> dict:
+    """Run a destructive-job submission, mapping :class:`WorkerBusy` to HTTP 409.
+
+    undo/retag/rescan share the single destructive worker with ``organize``; when one
+    is in flight, submitting another answers ``409`` with the blocking job id rather
+    than silently queueing behind a multi-hour run.
+    """
+    try:
+        return {"job_id": submit()}
+    except WorkerBusy as busy:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "a destructive job is already running",
+                "blocking_job_id": busy.blocking_job_id,
+            },
+        )
 
 
 class OrganizeRequest(BaseModel):
@@ -238,7 +257,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
 
     @app.post("/api/undo")
     def undo_start() -> dict:
-        return {"job_id": jobs.submit_undo()}
+        return _submit_or_409(jobs.submit_undo)
 
     @app.get("/api/undo/status/{job_id}")
     def undo_status(job_id: str) -> dict:
@@ -255,7 +274,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
 
     @app.post("/api/retag")
     def retag_start(req: RetagRequest) -> dict:
-        return {"job_id": jobs.submit_retag(req.file_id, req.lat, req.lon)}
+        return _submit_or_409(lambda: jobs.submit_retag(req.file_id, req.lat, req.lon))
 
     @app.get("/api/retag/status/{job_id}")
     def retag_status(job_id: str) -> dict:
@@ -266,7 +285,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
 
     @app.post("/api/rescan")
     def rescan_start() -> dict:
-        return {"job_id": jobs.submit_rescan()}
+        return _submit_or_409(jobs.submit_rescan)
 
     @app.get("/api/rescan/status/{job_id}")
     def rescan_status(job_id: str) -> dict:

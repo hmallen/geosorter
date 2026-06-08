@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from PIL import Image
 from geosorter import api, db, derived
 from geosorter.config import Config
 from geosorter.jobs import JobManager
+from geosorter.organize import BatchReport
 
 MEDIA = Path(__file__).parent / "fixtures" / "media"
 
@@ -521,6 +523,10 @@ def test_organize_job_lifecycle(client_and_lib):
         time.sleep(0.02)
     assert st["state"] == "done"  # empty inbox -> clean completion
     assert st["organized"] == 0
+    # The status payload surfaces the plan totals + bytes-based ETA (empty inbox -> 0/None).
+    assert st["total_groups"] == 0
+    assert st["total_bytes"] == 0
+    assert "eta_seconds" in st
 
     assert client.get("/api/organize/status/does-not-exist").status_code == 404
     assert client.post("/api/organize/cancel/does-not-exist").status_code == 404
@@ -591,6 +597,40 @@ def test_rescan_job_lifecycle(client_and_lib):
     assert client.get("/api/library").json()["features"] == []
 
     assert client.get("/api/rescan/status/does-not-exist").status_code == 404
+
+
+def test_undo_retag_rescan_return_409_while_organize_running(tmp_path):
+    # The single destructive worker is shared; submitting undo/retag/rescan while a
+    # multi-hour organize holds it returns 409 + the blocking job id (no silent queue).
+    library = tmp_path / "library"
+    library.mkdir()
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    block = threading.Event()
+
+    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
+        block.wait(3.0)
+        return BatchReport(batch_id="x")
+
+    jm = JobManager(cfg, organize_fn=slow_organize)
+    client = TestClient(api.create_app(cfg, job_manager=jm))
+    try:
+        org_id = client.post("/api/organize").json()["job_id"]
+        undo = client.post("/api/undo")
+        assert undo.status_code == 409
+        assert undo.json()["detail"]["blocking_job_id"] == org_id
+        assert client.post(
+            "/api/retag", json={"file_id": 1, "lat": 0.0, "lon": 0.0}
+        ).status_code == 409
+        assert client.post("/api/rescan").status_code == 409
+    finally:
+        block.set()
 
 
 def test_cancel_routes_are_partitioned_by_job_kind(client_and_lib):

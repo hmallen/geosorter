@@ -86,3 +86,49 @@ def test_hugin_bin_dir_override(tmp_path):
     cfg_path.write_text("hugin_bin_dir = 'C:\\\\Program Files\\\\Hugin\\\\bin'\n", encoding="utf-8")
     cfg = config.load(cfg_path)
     assert cfg.hugin_bin_dir == Path("C:\\Program Files\\Hugin\\bin")
+
+
+# --- Organize-resilience knobs (m-organize-resilience) ---------------------- #
+def test_resilience_knobs_defaults(tmp_path):
+    # No config file → the upload-resilience knobs fall back to their defaults.
+    cfg = config.load(tmp_path / "nope.toml")
+    assert cfg.disk_margin_gb == 5.0
+    assert cfg.copy_retry_attempts == 3
+    assert cfg.copy_retry_backoff_s == 0.5
+    assert cfg.extract_chunk_size == 500
+    assert cfg.extract_max_failures == 3
+
+
+def test_resilience_knobs_override(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(
+        "disk_margin_gb = 10\n"
+        "copy_retry_attempts = 5\n"
+        "copy_retry_backoff_s = 1.5\n"
+        "extract_chunk_size = 250\n"
+        "extract_max_failures = 2\n",
+        encoding="utf-8",
+    )
+    cfg = config.load(cfg_path)
+    assert cfg.disk_margin_gb == 10.0
+    assert cfg.copy_retry_attempts == 5
+    assert cfg.copy_retry_backoff_s == 1.5
+    assert cfg.extract_chunk_size == 250
+    assert cfg.extract_max_failures == 2
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "disk_margin_gb = -1\n",
+        "copy_retry_attempts = 0\n",
+        "copy_retry_backoff_s = -0.1\n",
+        "extract_chunk_size = 0\n",
+        "extract_max_failures = 0\n",
+    ],
+)
+def test_resilience_knobs_invalid_raises(tmp_path, line):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(line, encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load(cfg_path)

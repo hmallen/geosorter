@@ -59,6 +59,19 @@ spatial_index = 'rtree'
 # to detect them on PATH. When neither finds Hugin, panorama stitching is silently
 # unavailable and the map UI keeps the tile gallery (no hard dependency).
 # hugin_bin_dir = 'C:\\Program Files\\Hugin\\bin'
+
+# --- Upload-resilience knobs (sized for a multi-hour, 5-20k-file bulk import) ---
+# Free-space headroom (GB) required over the source bytes before/during a move;
+# a mid-run recheck aborts cleanly before the share fills.
+# disk_margin_gb = 5.0
+# Per-file copy attempts on a transient OSError (e.g. an SMB blip), with an
+# exponential backoff whose base (seconds) is copy_retry_backoff_s.
+# copy_retry_attempts = 3
+# copy_retry_backoff_s = 0.5
+# ExifTool pass-1 chunking: groups per daemon before a fresh restart, and the
+# per-file extract attempts before a file is quarantined as unreadable.
+# extract_chunk_size = 500
+# extract_max_failures = 3
 """
 
 
@@ -75,6 +88,13 @@ class Config:
     inference_max_gap_minutes: float = 30.0
     retain_hyperlapse_frames: bool = True
     hugin_bin_dir: Path | None = None
+    # Organize-resilience knobs (m-organize-resilience) — sized for a multi-hour,
+    # 5–20k-file bulk upload over SMB.
+    disk_margin_gb: float = 5.0  # free-space headroom over the source bytes
+    copy_retry_attempts: int = 3  # per-file copy attempts on a transient OSError
+    copy_retry_backoff_s: float = 0.5  # base of the exponential copy-retry backoff
+    extract_chunk_size: int = 500  # groups per ExifTool daemon before a fresh restart
+    extract_max_failures: int = 3  # per-file extract attempts before quarantine
 
 
 def default_data_dir() -> Path:
@@ -124,6 +144,22 @@ def load(path: str | Path | None = None) -> Config:
     if spatial_index not in ("rtree", "columnar"):
         raise ValueError(f"invalid spatial_index in config: {spatial_index!r}")
 
+    disk_margin_gb = float(data.get("disk_margin_gb", 5.0))
+    copy_retry_attempts = int(data.get("copy_retry_attempts", 3))
+    copy_retry_backoff_s = float(data.get("copy_retry_backoff_s", 0.5))
+    extract_chunk_size = int(data.get("extract_chunk_size", 500))
+    extract_max_failures = int(data.get("extract_max_failures", 3))
+    if disk_margin_gb < 0:
+        raise ValueError(f"disk_margin_gb must be >= 0: {disk_margin_gb!r}")
+    if copy_retry_attempts < 1:
+        raise ValueError(f"copy_retry_attempts must be >= 1: {copy_retry_attempts!r}")
+    if copy_retry_backoff_s < 0:
+        raise ValueError(f"copy_retry_backoff_s must be >= 0: {copy_retry_backoff_s!r}")
+    if extract_chunk_size < 1:
+        raise ValueError(f"extract_chunk_size must be >= 1: {extract_chunk_size!r}")
+    if extract_max_failures < 1:
+        raise ValueError(f"extract_max_failures must be >= 1: {extract_max_failures!r}")
+
     return Config(
         inbox_path=_opt_path(data.get("inbox_path")),
         library_root=_opt_path(data.get("library_root")),
@@ -134,6 +170,11 @@ def load(path: str | Path | None = None) -> Config:
         inference_max_gap_minutes=float(data.get("inference_max_gap_minutes", 30.0)),
         retain_hyperlapse_frames=bool(data.get("retain_hyperlapse_frames", True)),
         hugin_bin_dir=_opt_path(data.get("hugin_bin_dir")),
+        disk_margin_gb=disk_margin_gb,
+        copy_retry_attempts=copy_retry_attempts,
+        copy_retry_backoff_s=copy_retry_backoff_s,
+        extract_chunk_size=extract_chunk_size,
+        extract_max_failures=extract_max_failures,
     )
 
 
