@@ -301,10 +301,10 @@ def test_group_atomic_companion_failure_keeps_primary(tmp_path, monkeypatch):
 
     real = move_engine.copy_and_verify
 
-    def _fail_srt(conn, batch, sp, dp, *, progress=None):
+    def _fail_srt(conn, batch, sp, dp, *, source_sha256=None, progress=None):
         if str(sp).endswith(".SRT"):
             return move_engine.MoveOutcome("failed", "x", None, dp, "injected")
-        return real(conn, batch, sp, dp, progress=progress)
+        return real(conn, batch, sp, dp, source_sha256=source_sha256, progress=progress)
 
     monkeypatch.setattr(organize.move_engine, "copy_and_verify", _fail_srt)
     report = organize.run_organize(

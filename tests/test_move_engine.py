@@ -178,6 +178,78 @@ def test_is_already_moved(tmp_path):
         conn.close()
 
 
+def test_copy_and_verify_uses_provided_source_hash(tmp_path, monkeypatch):
+    # When the caller threads in an already-computed source hash, copy_and_verify
+    # must NOT re-read the source to hash it — the only sha256_file call is the
+    # destination .partial read-back (the integrity check is retained).
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    digest = move_engine.sha256_file(src)  # computed BEFORE patching (real impl)
+    calls = {"n": 0}
+    real = move_engine.sha256_file
+
+    def _counting(path, **kwargs):
+        calls["n"] += 1
+        return real(path, **kwargs)
+
+    monkeypatch.setattr(move_engine, "sha256_file", _counting)
+    try:
+        outcome = move_engine.copy_and_verify(conn, BATCH, src, dest, source_sha256=digest)
+        row = _moves_row(conn, src)
+    finally:
+        conn.close()
+    assert calls["n"] == 1  # ONLY the dest read-back; source is never re-hashed
+    assert outcome.status == "copy_verified"
+    assert (tmp_path / "library" / "out.JPG").read_bytes() == b"hello-capture"
+    assert row[0] == "copy_verified"
+    assert row[1] == digest  # stored source_sha256 == the provided digest
+    assert row[1] == row[2]  # source == dest hash
+
+
+def test_copy_and_verify_provided_hash_mismatch_aborts(tmp_path):
+    # A wrong provided hash must still be caught by the dest read-back and abort —
+    # the verification guarantee is not weakened by trusting the caller's digest.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    try:
+        outcome = move_engine.copy_and_verify(conn, BATCH, src, dest, source_sha256="00" * 32)
+        row = _moves_row(conn, src)
+    finally:
+        conn.close()
+    assert outcome.status == "failed"
+    assert src.exists()
+    assert not (tmp_path / "library" / "out.JPG").exists()
+    assert not (tmp_path / "library" / "out.JPG.partial").exists()
+    assert row[0] == "failed"
+
+
+def test_copy_and_verify_provided_hash_resume_skips_recopy(tmp_path, monkeypatch):
+    # The provided-hash path keeps idempotent resume: a second call after a
+    # copy_verified row short-circuits without re-copying.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    digest = move_engine.sha256_file(src)
+    try:
+        first = move_engine.copy_and_verify(conn, BATCH, src, dest, source_sha256=digest)
+        assert first.status == "copy_verified"
+        calls = {"n": 0}
+        real_copy = move_engine._copy_file
+
+        def _counting_copy(s, d, **k):
+            calls["n"] += 1
+            return real_copy(s, d, **k)
+
+        monkeypatch.setattr(move_engine, "_copy_file", _counting_copy)
+        second = move_engine.copy_and_verify(conn, BATCH, src, dest, source_sha256=digest)
+        assert second.status == "copy_verified"
+        assert calls["n"] == 0  # resumed from the copy_verified row, no re-copy
+    finally:
+        conn.close()
+
+
 def test_pending_recovery_recopies(tmp_path):
     # A 'pending' row (crashed mid-copy, partial untrusted) recovers by re-copying
     # since the source is still present.
