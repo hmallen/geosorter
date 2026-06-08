@@ -75,6 +75,34 @@ def _place_folder(geocode: GeocodeResult) -> str:
     return f"{city}, {remainder}" if remainder else city
 
 
+def _strip_long_prefix(path: str) -> str:
+    r"""Drop the Windows ``\\?\`` long-path prefix if present."""
+    return path[4:] if path.startswith("\\\\?\\") else path
+
+
+def library_rel_key(library_root: str | Path, dest_path: str | Path) -> str:
+    r"""Library-relative POSIX key for a stored ``dest_path`` — the derived-cache key.
+
+    Purely **lexical**: it string-strips the ``library_root`` prefix from ``dest_path``
+    (case-insensitive on Windows, via :func:`os.path.relpath`) and never calls
+    ``.resolve()`` — which is unreliable on a mapped SMB drive (it may rewrite ``Z:\``
+    to a UNC path inconsistently, the bug behind the old wrong-thumbnail collision).
+    When ``dest_path`` is not under ``library_root`` (e.g. a different drive), it
+    returns the drive-sanitized **full** path rather than a bare filename, so two
+    same-basename files in different folders never share a cache key.
+    """
+    dest = _strip_long_prefix(str(dest_path))
+    try:
+        rel = os.path.relpath(dest, str(library_root))
+    except ValueError:  # different drive — os.path.relpath cannot relativize
+        rel = os.pardir
+    if rel == os.pardir or rel.startswith(os.pardir + os.sep):
+        # Not under library_root: mirror the full path (drop the drive colon + seps),
+        # never a bare filename — that would collide same-basename files.
+        return re.sub(r"[\\/]+", "/", dest.replace(":", "")).strip("/")
+    return Path(rel).as_posix()
+
+
 def compute_dest_path(
     library_root: Path,
     geocode: GeocodeResult,

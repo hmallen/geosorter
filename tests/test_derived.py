@@ -1,7 +1,14 @@
-"""Tests for lazy, cached derived-asset generation (thumbnails/posters/proxies)."""
+"""Tests for lazy, cached derived-asset generation (thumbnails/posters/proxies).
+
+The cache is tiered (m-cache-tiering-safety): callers pass an explicit ``cache_root``
+(thumbs/posters/previews → a local SSD ``cache_dir``; proxies/stitch → ``proxy_cache_dir``)
+and a ``rel_key`` (the source's library-relative path) so same-basename files in
+different folders never collide. Each test supplies a tmp ``cache_root`` + ``rel_key``.
+"""
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -11,6 +18,7 @@ from PIL import Image
 from geosorter import derived
 
 FIXTURES = Path(__file__).parent / "fixtures" / "media"
+CACHE = ".geosorter-cache"
 
 
 def _probe_codec(path: Path) -> str:
@@ -23,12 +31,13 @@ def _probe_codec(path: Path) -> str:
 
 
 def test_thumbnail_creates_512px_jpeg(tmp_path):
-    out = derived.thumbnail(tmp_path, FIXTURES / "dji_photo.jpg")
+    cache = tmp_path / "cache"
+    out = derived.thumbnail(cache, "dji_photo.jpg", FIXTURES / "dji_photo.jpg")
     assert out.exists()
     with Image.open(out) as img:
         assert img.format == "JPEG"
         assert max(img.size) == 512  # 800x600 source -> 512x384
-    assert out.is_relative_to(tmp_path / ".geosorter-cache")
+    assert out.is_relative_to(cache / CACHE / "thumbs")
 
 
 def test_thumbnail_applies_exif_transpose(tmp_path):
@@ -39,22 +48,54 @@ def test_thumbnail_applies_exif_transpose(tmp_path):
     exif[0x0112] = 6  # Orientation: rotate 90 CW on display
     img.save(src, exif=exif)
 
-    out = derived.thumbnail(tmp_path, src)
+    out = derived.thumbnail(tmp_path / "cache", "oriented.jpg", src)
     with Image.open(out) as thumb:
         # exif_transpose must have swapped dimensions: height now exceeds width.
         assert thumb.size[1] > thumb.size[0]
 
 
 def test_thumbnail_cache_hit_does_not_regenerate(tmp_path):
-    out = derived.thumbnail(tmp_path, FIXTURES / "dji_photo.jpg")
+    cache = tmp_path / "cache"
+    out = derived.thumbnail(cache, "dji_photo.jpg", FIXTURES / "dji_photo.jpg")
     first = out.stat().st_mtime_ns
-    again = derived.thumbnail(tmp_path, FIXTURES / "dji_photo.jpg")
+    again = derived.thumbnail(cache, "dji_photo.jpg", FIXTURES / "dji_photo.jpg")
     assert again == out
     assert again.stat().st_mtime_ns == first  # not regenerated
 
 
+def test_same_basename_different_folders_no_collision(tmp_path):
+    # The headline correctness fix: two DJI_0001.JPG in different folders must get
+    # DISTINCT cache files (the old bare-filename fallback served the wrong thumbnail).
+    cache = tmp_path / "cache"
+    (tmp_path / "A").mkdir()
+    (tmp_path / "B").mkdir()
+    src_a = tmp_path / "A" / "DJI_0001.JPG"
+    src_b = tmp_path / "B" / "DJI_0001.JPG"
+    Image.new("RGB", (40, 30), "red").save(src_a)
+    Image.new("RGB", (30, 40), "blue").save(src_b)
+
+    out_a = derived.thumbnail(cache, "A/DJI_0001.JPG", src_a)
+    out_b = derived.thumbnail(cache, "B/DJI_0001.JPG", src_b)
+    assert out_a != out_b  # distinct cache files, no collision
+    with Image.open(out_a) as ia, Image.open(out_b) as ib:
+        assert ia.size[0] > ia.size[1]  # A is landscape
+        assert ib.size[1] > ib.size[0]  # B is portrait — not A's content
+
+
+def test_cache_freshness_pinned_to_source_mtime(tmp_path):
+    # After generation the cache mtime is os.utime'd to the SOURCE mtime (not the
+    # write time), so freshness is immune to SMB's coarse mtime granularity.
+    cache = tmp_path / "cache"
+    src = tmp_path / "photo.jpg"
+    Image.new("RGB", (40, 30), "red").save(src)
+    os.utime(src, (1_000_000.0, 1_000_000.0))  # a fixed, old source mtime
+
+    out = derived.thumbnail(cache, "photo.jpg", src)
+    assert out.stat().st_mtime == pytest.approx(1_000_000.0)  # pinned to the source
+
+
 def test_poster_extracts_frame(tmp_path):
-    out = derived.poster(tmp_path, FIXTURES / "h264_tiny.mp4")
+    out = derived.poster(tmp_path / "cache", "h264_tiny.mp4", FIXTURES / "h264_tiny.mp4")
     assert out.exists()
     with Image.open(out) as img:
         assert img.format == "JPEG"
@@ -62,7 +103,7 @@ def test_poster_extracts_frame(tmp_path):
 
 
 def test_proxy_transcodes_hevc_to_h264(tmp_path):
-    out = derived.proxy(tmp_path, FIXTURES / "h265_tiny.mp4", "h265")
+    out = derived.proxy(tmp_path / "cache", "h265_tiny.mp4", FIXTURES / "h265_tiny.mp4", "h265")
     assert out.exists()
     assert out != FIXTURES / "h265_tiny.mp4"
     assert _probe_codec(out) == "h264"
@@ -70,33 +111,65 @@ def test_proxy_transcodes_hevc_to_h264(tmp_path):
 
 def test_proxy_passthrough_for_h264(tmp_path):
     src = FIXTURES / "h264_tiny.mp4"
-    out = derived.proxy(tmp_path, src, "h264")
+    out = derived.proxy(tmp_path / "cache", "h264_tiny.mp4", src, "h264")
     assert out == src  # no transcode for already-playable codecs
 
 
 def test_proxy_cache_hit_does_not_regenerate(tmp_path):
-    out = derived.proxy(tmp_path, FIXTURES / "h265_tiny.mp4", "h265")
+    cache = tmp_path / "cache"
+    out = derived.proxy(cache, "h265_tiny.mp4", FIXTURES / "h265_tiny.mp4", "h265")
     first = out.stat().st_mtime_ns
-    again = derived.proxy(tmp_path, FIXTURES / "h265_tiny.mp4", "h265")
+    again = derived.proxy(cache, "h265_tiny.mp4", FIXTURES / "h265_tiny.mp4", "h265")
     assert again.stat().st_mtime_ns == first
 
 
+def test_proxy_lands_under_proxy_tier(tmp_path):
+    # Proxies are written under the (SSD-SMB) proxy cache root, kind 'proxies'.
+    proxy_root = tmp_path / "proxytier"
+    out = derived.proxy(proxy_root, "clips/v.mp4", FIXTURES / "h265_tiny.mp4", "h265")
+    assert out.is_relative_to(proxy_root / CACHE / "proxies")
+
+
 def test_preview_caps_long_edge_at_1920(tmp_path):
+    cache = tmp_path / "cache"
     src = tmp_path / "big.jpg"
     Image.new("RGB", (4000, 3000), "red").save(src)
-    out = derived.preview(tmp_path, src)
+    out = derived.preview(cache, "big.jpg", src)
     assert out.exists()
     with Image.open(out) as img:
         assert img.format == "JPEG"
         assert max(img.size) == 1920  # 4000x3000 -> 1920x1440
-    assert out.is_relative_to(tmp_path / ".geosorter-cache" / "previews")
+    assert out.is_relative_to(cache / CACHE / "previews")
 
 
 def test_preview_passthrough_small(tmp_path):
     # An 800px source is already under the 1920 cap; no upscale.
-    out = derived.preview(tmp_path, FIXTURES / "dji_photo.jpg")
+    out = derived.preview(tmp_path / "cache", "dji_photo.jpg", FIXTURES / "dji_photo.jpg")
     with Image.open(out) as img:
         assert max(img.size) == 800
+
+
+def test_run_ffmpeg_wraps_timeout_as_runtimeerror(monkeypatch):
+    def _timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=1)
+
+    monkeypatch.setattr(derived.subprocess, "run", _timeout)
+    with pytest.raises(RuntimeError):
+        derived._run_ffmpeg(["ffmpeg", "x"], timeout=1)
+
+
+def test_run_ffmpeg_timeout_leaves_no_partial(tmp_path, monkeypatch):
+    # A timed-out transcode raises and _atomic_write removes the temp (no half file).
+    out = tmp_path / "cache" / CACHE / "proxies" / "v.mp4"
+
+    def _timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=1)
+
+    monkeypatch.setattr(derived.subprocess, "run", _timeout)
+    with pytest.raises(RuntimeError):
+        derived._atomic_write(out, lambda dest: derived._run_ffmpeg(["ffmpeg", str(dest)]))
+    assert not out.exists()
+    assert not (out.parent.exists() and list(out.parent.iterdir()))
 
 
 def test_find_hugin_returns_none_when_any_tool_missing(monkeypatch):
@@ -178,19 +251,20 @@ def _fake_run_factory(fill: str = "skyblue", size: tuple[int, int] = (3000, 1400
 def test_panorama_stitch_success_caches_and_is_idempotent(tmp_path, monkeypatch):
     library_root = tmp_path / "lib"
     primary, frames = _make_pano_tiles(library_root)
+    cache = tmp_path / "proxytier"
     monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
     run, calls = _fake_run_factory()
     monkeypatch.setattr(derived, "_run_hugin", run)
 
-    out = derived.panorama_stitch(library_root, primary, frames)
+    out = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
     assert out.exists()
     with Image.open(out) as img:
         assert img.format == "JPEG"
-    assert out.is_relative_to(library_root / ".geosorter-cache" / "stitch")
+    assert out.is_relative_to(cache / CACHE / "stitch")
     first_calls = len(calls)
     assert first_calls >= 6  # the full 6-step pipeline ran
 
-    out2 = derived.panorama_stitch(library_root, primary, frames)
+    out2 = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
     assert out2 == out
     assert len(calls) == first_calls  # cache hit -> no further hugin invocations
 
@@ -206,7 +280,8 @@ def test_panorama_stitch_reports_steps(tmp_path, monkeypatch):
 
     steps: list[tuple[int, int, str]] = []
     derived.panorama_stitch(
-        library_root, primary, frames, on_step=lambda i, n, name: steps.append((i, n, name))
+        tmp_path / "proxytier", "pano/PANO_0001.JPG", primary, frames,
+        on_step=lambda i, n, name: steps.append((i, n, name)),
     )
 
     assert [name for _i, _n, name in steps] == [
@@ -221,12 +296,13 @@ def test_panorama_stitch_missing_hugin_raises(tmp_path, monkeypatch):
     primary, frames = _make_pano_tiles(library_root)
     monkeypatch.setattr(derived, "find_hugin", lambda hugin_bin_dir=None: None)
     with pytest.raises(derived.HuginNotFound):
-        derived.panorama_stitch(library_root, primary, frames)
+        derived.panorama_stitch(tmp_path / "proxytier", "pano/PANO_0001.JPG", primary, frames)
 
 
 def test_panorama_stitch_pipeline_failure_raises_and_caches_nothing(tmp_path, monkeypatch):
     library_root = tmp_path / "lib"
     primary, frames = _make_pano_tiles(library_root)
+    cache = tmp_path / "proxytier"
     monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
 
     def _boom(cmd, *, timeout: int = derived.STITCH_STEP_TIMEOUT_S):
@@ -234,8 +310,8 @@ def test_panorama_stitch_pipeline_failure_raises_and_caches_nothing(tmp_path, mo
 
     monkeypatch.setattr(derived, "_run_hugin", _boom)
     with pytest.raises(derived.StitchFailed):
-        derived.panorama_stitch(library_root, primary, frames)
-    stitch_cache = library_root / ".geosorter-cache" / "stitch"
+        derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
+    stitch_cache = cache / CACHE / "stitch"
     assert not (stitch_cache.exists() and list(stitch_cache.rglob("*.jpg")))
 
 
@@ -246,7 +322,7 @@ def test_panorama_stitch_rejects_degenerate_black_output(tmp_path, monkeypatch):
     run, _ = _fake_run_factory(fill="black")  # ~100% black void
     monkeypatch.setattr(derived, "_run_hugin", run)
     with pytest.raises(derived.StitchFailed):
-        derived.panorama_stitch(library_root, primary, frames)
+        derived.panorama_stitch(tmp_path / "proxytier", "pano/PANO_0001.JPG", primary, frames)
 
 
 def test_panorama_stitch_real_hugin_e2e(tmp_path):
@@ -260,7 +336,7 @@ def test_panorama_stitch_real_hugin_e2e(tmp_path):
     if len(tiles) < 2:
         pytest.skip(f"no local panorama tiles at {pano_dir}")
 
-    out = derived.panorama_stitch(tmp_path, tiles[0], tiles[1:])
+    out = derived.panorama_stitch(tmp_path, "PANO_0001.JPG", tiles[0], tiles[1:])
     assert out.is_file()
     derived._stitch_gate(out)  # the real output passes the equirectangular gate
 
@@ -268,7 +344,7 @@ def test_panorama_stitch_real_hugin_e2e(tmp_path):
 def test_atomic_write_failure_publishes_nothing(tmp_path):
     # A failed generation must never leave a half-written cache file at `out`,
     # nor a leftover temp in the cache dir (concurrent-request corruption guard).
-    out = tmp_path / ".geosorter-cache" / "thumbs" / "x.jpg"
+    out = tmp_path / CACHE / "thumbs" / "x.jpg"
 
     def boom(dest):
         dest.write_bytes(b"partial-bytes")  # wrote to the temp...

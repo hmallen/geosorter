@@ -43,10 +43,26 @@ from pydantic import BaseModel, Field
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
-from . import db, derived, inbox
+from . import config, db, derived, inbox, pathing
 from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
+
+
+def _safe_cache_path(path: Path, *roots: Path) -> Path:
+    """Assert a served derived file lives under one of its cache ``roots``, else 403.
+
+    Once the cache can live outside ``library_root`` (tiered), the ``_safe_path``
+    traversal guard (which checks under ``library_root``) no longer covers a served
+    derived ``FileResponse``. This is the defense-in-depth equivalent for the cache
+    tiers: both sides are ``.resolve()``d (mapped-drive-safe, like ``_safe_path``), and
+    the video route passes both ``proxy_cache_dir`` AND ``library_root`` so an h264
+    passthrough (which returns the source itself) is allowed alongside a real proxy.
+    """
+    resolved = path.resolve()
+    if not any(resolved.is_relative_to(Path(r).resolve()) for r in roots):
+        raise HTTPException(status_code=403, detail="derived path outside cache")
+    return path
 
 
 def _submit_or_409(submit) -> dict:
@@ -137,6 +153,15 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     # root above no longer matches them. _relpath tries url_root first, library_root
     # as a backstop. The traversal guard / derived cache keep using library_root.
     url_root = Path(cfg.library_root)
+    # Per-kind cache tiers (m-cache-tiering-safety): thumbs/posters/previews on the
+    # local SSD cache_dir (off the LAN); proxies/stitch on proxy_cache_dir (default
+    # library_root). cfg.cache_dir is filled by config.load; a directly-constructed
+    # Config (tests) may leave it None -> the local platformdirs default.
+    cache_dir = Path(cfg.cache_dir) if cfg.cache_dir else config.default_cache_dir()
+    # Proxy/stitch tier — the SAME helper jobs._run_stitch uses, so the stitch
+    # generator and the serve route compute the identical cached-hero path (raw
+    # library_root by default, never .resolve()d; see resolve_proxy_cache_dir).
+    proxy_cache_dir = config.resolve_proxy_cache_dir(cfg)
     jobs = job_manager if job_manager is not None else JobManager(cfg)
 
     # Run schema creation + migration ONCE at startup on a dedicated connection,
@@ -329,10 +354,11 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         artifacts are structurally unservable.
         """
         row = _panorama_row(file_id)
-        out = derived.stitch_cache_path(library_root, Path(_strip(row["dest_path"])))
+        rel_key = pathing.library_rel_key(url_root, row["dest_path"])
+        out = derived.stitch_cache_path(proxy_cache_dir, rel_key)
         if not out.is_file():
             raise HTTPException(status_code=404, detail="stitch not generated")
-        return FileResponse(out, media_type="image/jpeg")
+        return FileResponse(_safe_cache_path(out, proxy_cache_dir), media_type="image/jpeg")
 
     @app.get("/api/media/{relpath:path}")
     def media(relpath: str) -> FileResponse:
@@ -340,24 +366,26 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
 
     @app.get("/api/thumb/{relpath:path}")
     def thumb(relpath: str) -> FileResponse:
-        out = derived.thumbnail(library_root, _safe_path(relpath))
-        return FileResponse(out, media_type="image/jpeg")
+        out = derived.thumbnail(cache_dir, relpath, _safe_path(relpath))
+        return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
 
     @app.get("/api/preview/{relpath:path}")
     def preview(relpath: str) -> FileResponse:
-        out = derived.preview(library_root, _safe_path(relpath))
-        return FileResponse(out, media_type="image/jpeg")
+        out = derived.preview(cache_dir, relpath, _safe_path(relpath))
+        return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
 
     @app.get("/api/poster/{relpath:path}")
     def poster(relpath: str) -> FileResponse:
-        out = derived.poster(library_root, _safe_path(relpath))
-        return FileResponse(out, media_type="image/jpeg")
+        out = derived.poster(cache_dir, relpath, _safe_path(relpath))
+        return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
 
     @app.get("/api/video/{relpath:path}")
     def video(relpath: str) -> FileResponse:
         source = _safe_path(relpath)
-        out = derived.proxy(library_root, source, _lookup_codec(relpath))
-        return FileResponse(out)  # range-capable
+        out = derived.proxy(proxy_cache_dir, relpath, source, _lookup_codec(relpath))
+        # An h264 source is returned unchanged (under library_root); a proxy lives
+        # under proxy_cache_dir — allow either.
+        return FileResponse(_safe_cache_path(out, proxy_cache_dir, library_root))
 
     def _lookup_codec(relpath: str) -> str | None:
         conn = _index()

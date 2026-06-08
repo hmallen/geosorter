@@ -1,6 +1,7 @@
 """Tests for config loading and the starter writer."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -132,3 +133,81 @@ def test_resilience_knobs_invalid_raises(tmp_path, line):
     cfg_path.write_text(line, encoding="utf-8")
     with pytest.raises(ValueError):
         config.load(cfg_path)
+
+
+# --- Cache tiering (m-cache-tiering-safety) --------------------------------- #
+def test_cache_tiering_defaults(tmp_path):
+    # No config file → the derived cache defaults to the local platformdirs cache
+    # dir, proxy_cache_dir is unset (resolves to library_root at use), 10 GB cap.
+    cfg = config.load(tmp_path / "nope.toml")
+    assert cfg.cache_dir == config.default_cache_dir()
+    assert cfg.proxy_cache_dir is None
+    assert cfg.cache_max_gb == 10.0
+
+
+def test_cache_tiering_override(tmp_path):
+    cache = tmp_path / "cache"
+    proxy = tmp_path / "proxies"
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(
+        f"cache_dir = '{cache.as_posix()}'\n"
+        f"proxy_cache_dir = '{proxy.as_posix()}'\n"
+        "cache_max_gb = 25\n",
+        encoding="utf-8",
+    )
+    cfg = config.load(cfg_path)
+    assert cfg.cache_dir == cache
+    assert cfg.proxy_cache_dir == proxy
+    assert cfg.cache_max_gb == 25.0
+
+
+def test_cache_dir_must_be_absolute(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("cache_dir = 'relative/cache'\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load(cfg_path)
+
+
+def test_cache_dir_must_not_be_inside_library_root(tmp_path):
+    lib = tmp_path / "lib"
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(
+        f"library_root = '{lib.as_posix()}'\n"
+        f"cache_dir = '{(lib / 'cache').as_posix()}'\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        config.load(cfg_path)
+
+
+def test_cache_max_gb_must_be_positive(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("cache_max_gb = 0\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load(cfg_path)
+
+
+def test_resolve_proxy_cache_dir_defaults_to_raw_library_root(tmp_path):
+    # Unset proxy_cache_dir -> the RAW library_root, NOT library_root.resolve(): the
+    # stitch generator + serve route both call this helper, and on a mapped SMB drive
+    # .resolve() rewrites Z:\ -> a UNC form that would make them disagree. A directory
+    # symlink makes raw != resolved so this is a true red-green of "raw, not resolved".
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(real, target_is_directory=True)
+        symlinked = Path(link).resolve() != link
+    except (OSError, NotImplementedError):
+        link, symlinked = real, False
+    cfg = SimpleNamespace(proxy_cache_dir=None, library_root=link)
+    assert config.resolve_proxy_cache_dir(cfg) == Path(link)  # raw form
+    if symlinked:
+        assert config.resolve_proxy_cache_dir(cfg) != Path(link).resolve()  # not resolved
+
+
+def test_resolve_proxy_cache_dir_uses_explicit_when_set(tmp_path):
+    cfg = SimpleNamespace(
+        proxy_cache_dir=tmp_path / "proxies", library_root=tmp_path / "lib"
+    )
+    assert config.resolve_proxy_cache_dir(cfg) == tmp_path / "proxies"

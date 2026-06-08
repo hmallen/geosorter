@@ -19,7 +19,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
-from . import db
+from . import config, db, pathing
 from .derived import HuginNotFound, StitchFailed, panorama_stitch
 from .organize import run_organize
 from .rescan import run_rescan
@@ -492,6 +492,10 @@ class JobManager:
                 state.error = "not a panorama capture"
                 return
             primary = _strip(row[0])
+            # The stitched hero is cached under proxy_cache_dir keyed on the primary's
+            # library-relative path — the SAME (cache_root, rel_key) the /api/stitch
+            # serve route computes, so the generator and reader resolve one file.
+            rel_key = pathing.library_rel_key(self._cfg.library_root, row[0])
             frames = [
                 _strip(r[0])
                 for r in conn.execute(
@@ -504,6 +508,8 @@ class JobManager:
         finally:
             conn.close()
 
+        proxy_cache_dir = config.resolve_proxy_cache_dir(self._cfg)
+
         def _on_step(index: int, total: int, name: str) -> None:
             state.step = index
             state.step_total = total
@@ -511,7 +517,7 @@ class JobManager:
 
         try:
             self._stitch_fn(
-                self._cfg.library_root, primary, frames,
+                proxy_cache_dir, rel_key, primary, frames,
                 hugin_bin_dir=self._cfg.hugin_bin_dir, on_step=_on_step,
             )
         except HuginNotFound:
