@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -33,6 +34,33 @@ def _strip(dest_path: str) -> str:
     return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
 
 
+def _compute_eta(total_bytes: int, done_bytes: int, elapsed_s: float) -> float | None:
+    """Seconds remaining at the observed byte rate, or ``None`` when not estimable.
+
+    Returns ``None`` until there is something to do AND some progress AND elapsed time
+    to derive a rate from (so a just-started job reports no ETA rather than a wild
+    guess). Bytes-based, since file sizes vary by orders of magnitude (a 72 MP JPEG
+    vs a multi-GB HEVC clip), so a per-file count would be a poor predictor.
+    """
+    if total_bytes <= 0 or done_bytes <= 0 or elapsed_s <= 0:
+        return None
+    rate = done_bytes / elapsed_s
+    return max(0.0, total_bytes - done_bytes) / rate
+
+
+class WorkerBusy(Exception):
+    """A destructive job was submitted while another already holds the single worker.
+
+    Raised by ``submit_undo``/``submit_retag``/``submit_rescan`` so the HTTP layer can
+    answer ``409`` with the blocking job id instead of silently queueing the request
+    behind a multi-hour ``organize`` run. ``blocking_job_id`` is that in-flight job.
+    """
+
+    def __init__(self, blocking_job_id: str):
+        super().__init__(f"a destructive job ({blocking_job_id}) is already running")
+        self.blocking_job_id = blocking_job_id
+
+
 @dataclass
 class JobState:
     """Serializable snapshot of one organize job's progress."""
@@ -43,11 +71,15 @@ class JobState:
     quarantined: int = 0
     duplicates_skipped: int = 0
     companions: int = 0
-    processed: int = 0  # files seen so far (progress callback ticks)
+    processed: int = 0  # files seen so far (progress callback ticks) == captures done
     current: str | None = None  # most recent file being processed
     current_phase: str | None = None  # 'hashing' | 'copying' | 'verifying' (byte progress)
     bytes_done: int = 0  # bytes processed in the current file's current phase
     bytes_total: int = 0  # current file's size (0 until a byte-progress tick arrives)
+    total_groups: int = 0  # M: capture groups this run will move (from on_plan)
+    total_bytes: int = 0  # total source bytes this run will move (from on_plan)
+    bytes_done_total: int = 0  # bytes of fully-completed files so far (for the ETA)
+    eta_seconds: float | None = None  # bytes-based estimate, recomputed per status()
     error: str | None = None
     failures: list[str] = field(default_factory=list)
 
@@ -146,6 +178,9 @@ class JobManager:
         self._rescan_jobs: dict[str, RescanJobState] = {}
         self._stitch_jobs: dict[str, StitchJobState] = {}
         self._cancels: dict[str, threading.Event] = {}
+        # Monotonic start time per organize job, for the bytes-based ETA. Kept off
+        # JobState so it never leaks into the serialized status response.
+        self._job_started: dict[str, float] = {}
         self._lock = threading.Lock()
 
     def submit(self, selected_primaries: set[str] | None = None) -> str:
@@ -171,7 +206,25 @@ class JobManager:
         """
         with self._lock:
             state = self._jobs.get(job_id)
-            return replace(state) if state is not None else None
+            if state is None:
+                return None
+            snap = replace(state)
+            started = self._job_started.get(job_id)
+        # ETA is only meaningful while running. A finished job has zero remaining; a
+        # pending/error/cancelled job has no honest estimate. (Mid-run the estimate is
+        # a lower bound: dedup-skipped sources are counted in total_bytes but never
+        # flow through byte_progress, so done lags total — acceptable for a hint.)
+        if snap.state == "done":
+            snap.eta_seconds = 0.0
+        elif snap.state == "running" and started is not None:
+            snap.eta_seconds = _compute_eta(
+                snap.total_bytes,
+                snap.bytes_done_total + snap.bytes_done,
+                time.monotonic() - started,
+            )
+        else:
+            snap.eta_seconds = None
+        return snap
 
     def cancel(self, job_id: str) -> bool:
         """Request cancellation; returns ``False`` for an unknown job id."""
@@ -181,16 +234,44 @@ class JobManager:
         event.set()
         return True
 
+    def _active_destructive_job(self) -> str | None:
+        """Id of an in-flight (pending/running) organize/undo/retag/rescan job, else None.
+
+        The four kinds share the single destructive worker, so at most one runs at a
+        time and the rest would queue. Caller must hold ``self._lock``. The stitch pool
+        is independent and deliberately excluded. ``_jobs`` (organize) is scanned first
+        so a long bulk import is reported as the blocker.
+        """
+        for table in (self._jobs, self._undo_jobs, self._retag_jobs, self._rescan_jobs):
+            for jid, st in table.items():
+                if st.state in ("pending", "running"):
+                    return jid
+        return None
+
     def _run(self, job_id: str, selected_primaries: set[str] | None = None) -> None:
         state = self._jobs[job_id]
         event = self._cancels[job_id]
         state.state = "running"
+        with self._lock:
+            self._job_started[job_id] = time.monotonic()
+        seen = {"file": None, "total": 0}  # tracks the in-flight file for byte totals
 
         def progress(msg: str) -> None:
             state.processed += 1
             state.current = msg.strip()
 
+        def on_plan(total_groups: int, total_bytes: int) -> None:
+            state.total_groups = total_groups
+            state.total_bytes = total_bytes
+
         def byte_progress(name: str, phase: str, done: int, total: int) -> None:
+            # When a new file starts, the previous file's bytes are now complete —
+            # fold them into the cumulative total that drives the ETA.
+            if name != seen["file"]:
+                if seen["file"] is not None:
+                    state.bytes_done_total += seen["total"]
+                seen["file"] = name
+            seen["total"] = total
             state.current = name
             state.current_phase = phase
             state.bytes_done = done
@@ -200,7 +281,7 @@ class JobManager:
             report = self._organize_fn(
                 self._cfg, assume_yes=True, cancel=event.is_set,
                 progress=progress, byte_progress=byte_progress,
-                selected_primaries=selected_primaries,
+                selected_primaries=selected_primaries, on_plan=on_plan,
             )
         except Exception as exc:  # surface any pipeline failure as a job error
             state.state = "error"
@@ -223,9 +304,15 @@ class JobManager:
     # ----- undo jobs (share the executor + cancel table with organize) ------- #
 
     def submit_undo(self, batch_id: str | None = None) -> str:
-        """Queue a new undo job (most recent batch by default) and return its id."""
+        """Queue a new undo job (most recent batch by default) and return its id.
+
+        Raises :class:`WorkerBusy` if another destructive job already holds the worker.
+        """
         job_id = uuid.uuid4().hex
         with self._lock:
+            busy = self._active_destructive_job()
+            if busy is not None:
+                raise WorkerBusy(busy)
             self._undo_jobs[job_id] = UndoJobState(job_id=job_id)
             self._cancels[job_id] = threading.Event()
         self._executor.submit(self._run_undo, job_id, batch_id)
@@ -266,9 +353,15 @@ class JobManager:
     # ----- re-tag jobs (share the executor with organize/undo) --------------- #
 
     def submit_retag(self, file_id: int, lat: float, lon: float) -> str:
-        """Queue a manual re-tag of ``file_id`` to ``(lat, lon)`` and return its id."""
+        """Queue a manual re-tag of ``file_id`` to ``(lat, lon)`` and return its id.
+
+        Raises :class:`WorkerBusy` if another destructive job already holds the worker.
+        """
         job_id = uuid.uuid4().hex
         with self._lock:
+            busy = self._active_destructive_job()
+            if busy is not None:
+                raise WorkerBusy(busy)
             self._retag_jobs[job_id] = RetagJobState(job_id=job_id)
         self._executor.submit(self._run_retag, job_id, file_id, lat, lon)
         return job_id
@@ -306,9 +399,15 @@ class JobManager:
     # ----- rescan jobs (share the executor with organize/undo/retag) --------- #
 
     def submit_rescan(self) -> str:
-        """Queue an index/disk reconciliation job and return its id (no cancel)."""
+        """Queue an index/disk reconciliation job and return its id (no cancel).
+
+        Raises :class:`WorkerBusy` if another destructive job already holds the worker.
+        """
         job_id = uuid.uuid4().hex
         with self._lock:
+            busy = self._active_destructive_job()
+            if busy is not None:
+                raise WorkerBusy(busy)
             self._rescan_jobs[job_id] = RescanJobState(job_id=job_id)
         self._executor.submit(self._run_rescan, job_id)
         return job_id

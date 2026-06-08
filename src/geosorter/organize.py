@@ -29,10 +29,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import db, geocoder, grouping, inference, misc_parser, move_engine, pathing, tz_resolver
-from .metadata import MetadataExtractor
+from .metadata import MediaMetadata, MetadataExtractor
 
-# Disk-space safety margin over the raw source bytes (mirrors geonames_loader).
-_DISK_MARGIN_MB = 200
+# Files whose extension implies a video when ExifTool cannot read the metadata.
+_VIDEO_EXTS = {".mp4", ".mov"}
+
+# Bytes moved between two mid-run free-space rechecks. A recheck is one
+# ``shutil.disk_usage`` call (a network round trip over SMB), so it is throttled to
+# roughly once per gigabyte rather than once per group at scale.
+_FREESPACE_RECHECK_BYTES = 1 << 30  # 1 GiB
 
 
 @dataclass
@@ -178,16 +183,121 @@ def _resolve_collision(conn, primary: Path, dest_path: str) -> str:
         n += 1
 
 
-def _disk_preflight(paths: list[Path], library: Path) -> None:
-    """Raise ``OSError`` if the library volume lacks room for the source bytes."""
-    need = sum(p.stat().st_size for p in paths)
+def _disk_preflight(total_bytes: int, library: Path, margin_bytes: int) -> None:
+    """Raise ``OSError`` if the library volume lacks room for the source bytes.
+
+    ``total_bytes`` is the size of the files actually being moved this run (the
+    selection-filtered capture groups, primary + companions), and ``margin_bytes``
+    is the configurable headroom kept free on top of them.
+    """
     library.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(library).free
-    if free < need + _DISK_MARGIN_MB * 1024 * 1024:
+    if free < total_bytes + margin_bytes:
+        mib = 1024 * 1024
         raise OSError(
-            f"insufficient disk space at {library}: {free // (1024 * 1024)} MiB free, "
-            f"need {need // (1024 * 1024)} MiB + {_DISK_MARGIN_MB} MiB margin"
+            f"insufficient disk space at {library}: {free // mib} MiB free, "
+            f"need {total_bytes // mib} MiB + {margin_bytes // mib} MiB margin"
         )
+
+
+def _sweep_stale_partials(index) -> None:
+    """Delete ``.partial`` files left by a crashed prior run (reclaim the share).
+
+    Every ``.partial`` corresponds to a committed ``moves`` row in ``status='pending'``
+    (the row is inserted and committed before the copy begins), so the orphans can be
+    found from the index DB — no full-library walk, which would be brutal over SMB at
+    20k files. The pending rows are left intact: a re-processed group resumes through
+    the move engine, which overwrites its partial anyway.
+    """
+    for (dest_path,) in index.execute(
+        "SELECT dest_path FROM moves WHERE status='pending'"
+    ).fetchall():
+        move_engine._cleanup(_strip(dest_path) + ".partial")
+
+
+def _unextractable_md(path: Path) -> MediaMetadata:
+    """Synthetic, no-metadata :class:`MediaMetadata` for an unreadable file.
+
+    Used when ExifTool cannot read a file after every retry: ``media_type`` is
+    guessed from the extension and everything else is ``None``/``'none'``, so the
+    file routes through the existing no-GPS/no-date quarantine path (filed under
+    ``_no-gps/<mtime-date>/``) rather than blocking the pass or being lost.
+    """
+    media_type = "video" if path.suffix.lower() in _VIDEO_EXTS else "photo"
+    return MediaMetadata(
+        media_type=media_type, lat=None, lon=None, gps_source="none",
+        capture_ts_raw=None, capture_ts_source_tag=None, width=None, height=None,
+        duration_s=None, codec=None, codec_raw=None, exif_gps=None, srt_gps=None,
+    )
+
+
+def _close_extractor(extractor) -> None:
+    """Terminate an extractor, swallowing errors (it may be a crashed daemon)."""
+    try:
+        extractor.__exit__(None, None, None)
+    except Exception:  # never let cleanup of a dead daemon mask the real outcome
+        pass
+
+
+def _extract_one(group, extractor, extractor_factory, max_failures, report):
+    """Extract one group's metadata, restarting a crashed daemon and retrying.
+
+    Returns ``(md, extractor)`` — ``extractor`` may be a fresh instance after a
+    restart, so the caller must keep using the returned one. On a per-file error the
+    daemon is terminated and a fresh one started (a daemon crash is the failure mode
+    this guards against); after ``max_failures`` attempts the file is given a
+    synthetic no-metadata md (it will quarantine) and recorded in ``report.failures``.
+    """
+    attempt = 0
+    while True:
+        try:
+            md = extractor.extract(group.primary)
+            # A hyperlapse render carries no GPS of its own; borrow it from the first
+            # GPS-bearing frame so the render lands on the map (B10).
+            if group.capture_kind == "hyperlapse" and md.lat is None and md.lon is None:
+                md = _borrow_frame_gps(group, md, extractor)
+            return md, extractor
+        except Exception as exc:  # daemon crash, broken pipe, or unreadable file
+            attempt += 1
+            if attempt >= max_failures:
+                report.failures.append(
+                    f"{group.primary}: extraction failed after {attempt} attempt(s) "
+                    f"({exc}) — quarantined"
+                )
+                return _unextractable_md(group.primary), extractor
+            _close_extractor(extractor)  # restart the (possibly dead) daemon
+            # A failure to RE-START the daemon (binary gone, version gate, OS out of
+            # handles) is deliberately allowed to propagate and abort the pass rather
+            # than being caught: a permanently-broken ExifTool would otherwise silently
+            # quarantine every remaining file into _no-gps. Aborting is safer — the
+            # sources stay in the inbox and the (idempotent) run resumes once fixed.
+            extractor = extractor_factory()
+            extractor.__enter__()
+
+
+def _extract_pass(pending, extractor_factory, chunk_size, max_failures, report):
+    """Pass-1 metadata extraction, chunked across fresh ExifTool daemons.
+
+    ``pending`` is ``[(idx, group), ...]`` (the original group index preserved so
+    pass-2 inference still keys on it). Each chunk of ``chunk_size`` groups runs under
+    its own daemon — bounding daemon memory growth over a 20k-file run and giving a
+    natural restart cadence — and any daemon crash inside a chunk restarts and retries
+    the offending file (see :func:`_extract_one`), so a crash loses ≤1 file, not the
+    whole pass. Returns ``[(idx, group, md), ...]``.
+    """
+    extracted: list[tuple[int, grouping.CaptureGroup, object]] = []
+    for start in range(0, len(pending), chunk_size):
+        extractor = extractor_factory()
+        extractor.__enter__()
+        try:
+            for idx, group in pending[start:start + chunk_size]:
+                md, extractor = _extract_one(
+                    group, extractor, extractor_factory, max_failures, report
+                )
+                extracted.append((idx, group, md))
+        finally:
+            _close_extractor(extractor)
+    return extracted
 
 
 def _preview(groups, inbox: Path, library: Path) -> str:
@@ -211,6 +321,7 @@ def run_organize(
     cancel=None,
     selected_primaries: set[str] | None = None,
     extractor_factory=MetadataExtractor,
+    on_plan=None,
 ) -> BatchReport:
     """Scan ``cfg.inbox_path`` and organize every capture into ``cfg.library_root``.
 
@@ -228,7 +339,9 @@ def run_organize(
     UI); ``None`` imports every group (the CLI/headless default). A partial import
     also skips the destructive MISC-catalog archive (ratings are still applied to the
     selected files) so a catalog is never archived while unselected media remains.
-    ``extractor_factory`` is injectable for tests.
+    ``extractor_factory`` is injectable for tests. ``on_plan``, if given, is called
+    once as ``on_plan(total_groups, total_bytes)`` after the selection filter so a
+    caller (the HTTP job manager) can show "N of M captures" and a bytes-based ETA.
     """
     if cfg.inbox_path is None or cfg.library_root is None:
         raise ValueError("organize requires both inbox_path and library_root in geosorter.toml")
@@ -254,31 +367,42 @@ def run_organize(
         report.warnings.extend(pre.warnings)
         report.unclaimed = len(pre.unclaimed)
 
+        # Bytes actually being moved this run = the (selection-filtered) groups'
+        # primaries + companions. This sizes the disk preflight (no longer the
+        # whole-inbox over-count) and feeds the byte-based progress/ETA.
+        move_files = [g.primary for g in groups] + [
+            cpath for g in groups for cpath, _ctype in g.companions
+        ]
+        total_bytes = sum(p.stat().st_size for p in move_files if p.exists())
+        margin_bytes = int(cfg.disk_margin_gb * (1 << 30))
+        if on_plan is not None:  # report the plan totals (M groups, total bytes) once
+            on_plan(len(groups), total_bytes)
+
         if not dry_run and not assume_yes and is_first_run(index):
             if confirm is not None and not confirm(_preview(groups, inbox, library)):
                 report.confirmed = False
                 return report
 
         if not dry_run:
-            _disk_preflight(paths, library)
+            _sweep_stale_partials(index)  # reclaim a crashed prior run's .partial files
+            _disk_preflight(total_bytes, library, margin_bytes)
             report.batch_id = make_batch_id(datetime.now(), secrets.token_hex(3))
 
         # Pass 1 — extract every group's metadata up front (skipping groups a prior
         # run already moved), so a within-run GPS pool exists before any group is
-        # geocoded or moved. The ExifTool daemon is released before the move phase.
+        # geocoded or moved. Chunked across fresh ExifTool daemons with restart-on-
+        # failure (a daemon crash at file 15k loses ≤1 file, not the whole pass).
         # Cancel is honoured in pass 2 (the move phase), not here: extraction is
-        # read-only and quick for the small drone inboxes this targets.
-        extracted: list[tuple[int, grouping.CaptureGroup, object]] = []
-        with extractor_factory() as extractor:
-            for idx, group in enumerate(groups):
-                if not dry_run and move_engine.is_already_moved(index, group.primary):
-                    continue
-                md = extractor.extract(group.primary)
-                # A hyperlapse render carries no GPS of its own; borrow it from the
-                # first GPS-bearing frame so the render lands on the map (B10).
-                if group.capture_kind == "hyperlapse" and md.lat is None and md.lon is None:
-                    md = _borrow_frame_gps(group, md, extractor)
-                extracted.append((idx, group, md))
+        # read-only and the chunked daemons make it crash-resilient.
+        pending = [
+            (idx, group)
+            for idx, group in enumerate(groups)
+            if dry_run or not move_engine.is_already_moved(index, group.primary)
+        ]
+        extracted = _extract_pass(
+            pending, extractor_factory, cfg.extract_chunk_size,
+            cfg.extract_max_failures, report,
+        )
 
         # Infer locations for no-GPS-but-timestamped captures from time-adjacent
         # GPS-bearing captures in this same batch (conservative: no neighbor in
@@ -286,15 +410,39 @@ def run_organize(
         inferred_map = _infer_batch(extracted, cfg.inference_max_gap_minutes)
 
         # Pass 2 — geocode + group-atomic move each capture (no extractor needed).
+        bytes_since_check = 0
         for idx, group, md in extracted:
             if report.aborted:
                 break
             if cancel is not None and cancel():
                 report.cancelled = True
                 break
+            # Size the group's sources BEFORE the move (they are deleted by it).
+            grp_bytes = sum(
+                p.stat().st_size
+                for p in [group.primary, *(c for c, _t in group.companions)]
+                if p.exists()
+            )
+            # Mid-run free-space recheck, BEFORE committing to this group and throttled
+            # to ~once per GB moved (an SMB round trip per check). It requires room for
+            # THIS group's bytes AND the margin, so a large clip cannot eat into the
+            # configured headroom between rechecks. Checking before (not after) the move
+            # means a run that just fits is never falsely aborted on its last group, and
+            # an abort leaves this group + the rest in the inbox.
+            if not dry_run and bytes_since_check >= _FREESPACE_RECHECK_BYTES:
+                bytes_since_check = 0
+                if shutil.disk_usage(library).free < grp_bytes + margin_bytes:
+                    report.aborted = True
+                    report.failures.append(
+                        f"aborted mid-run: free space at {library} fell below the "
+                        f"{cfg.disk_margin_gb} GB margin"
+                    )
+                    break
             _process_group(group, md, inferred_map.get(idx), index, geonames,
                            library, report, dry_run, progress, cfg.feature_proximity_km,
-                           byte_progress, cfg.retain_hyperlapse_frames)
+                           byte_progress, cfg.retain_hyperlapse_frames,
+                           cfg.copy_retry_attempts, cfg.copy_retry_backoff_s)
+            bytes_since_check += grp_bytes
 
         if not dry_run:
             _apply_catalog_ratings(
@@ -417,7 +565,8 @@ def _apply_catalog_ratings(index, report, unclaimed, cfg, *, archive=True) -> No
 
 def _process_group(group, md, inferred, index, geonames, library, report, dry_run,
                    progress, feature_proximity_km=5.0, byte_progress=None,
-                   retain_hyperlapse_frames=True) -> None:
+                   retain_hyperlapse_frames=True, copy_retry_attempts=1,
+                   copy_retry_backoff_s=0.0) -> None:
     primary = group.primary
 
     # Effective companion set: a hyperlapse group with retention off files the render
@@ -500,10 +649,13 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         )
         # Reuse the primary's dedup hash (computed above) so copy_and_verify does
         # not re-read the primary just to re-hash it (companions have no pre-hash).
+        # Per-file retry+backoff rides a transient SMB blip without aborting the batch.
         outcome = move_engine.copy_and_verify(
             index, report.batch_id, sp, dp,
             source_sha256=src_sha if sp == primary else None,
             progress=bp,
+            retry_attempts=copy_retry_attempts,
+            retry_backoff_s=copy_retry_backoff_s,
         )
         if outcome.status == "failed":
             report.aborted = True

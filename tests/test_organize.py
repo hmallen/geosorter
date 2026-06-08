@@ -301,10 +301,10 @@ def test_group_atomic_companion_failure_keeps_primary(tmp_path, monkeypatch):
 
     real = move_engine.copy_and_verify
 
-    def _fail_srt(conn, batch, sp, dp, *, source_sha256=None, progress=None):
+    def _fail_srt(conn, batch, sp, dp, **kw):
         if str(sp).endswith(".SRT"):
             return move_engine.MoveOutcome("failed", "x", None, dp, "injected")
-        return real(conn, batch, sp, dp, source_sha256=source_sha256, progress=progress)
+        return real(conn, batch, sp, dp, **kw)
 
     monkeypatch.setattr(organize.move_engine, "copy_and_verify", _fail_srt)
     report = organize.run_organize(
@@ -327,6 +327,136 @@ def test_disk_preflight_raises(tmp_path, monkeypatch):
         organize.run_organize(
             cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
         )
+
+
+def test_freespace_abort_before_share_fills(tmp_path, monkeypatch):
+    # Mid-run the share drops below the margin: organize aborts cleanly BETWEEN
+    # groups (the in-flight group already filed atomically), leaving the rest in the
+    # inbox rather than half-writing files until the disk is full.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"first-capture")
+    second = _add(inbox, "DJI_0002.JPG", b"second-capture")  # distinct bytes (no dedup)
+    # Tiny files never reach the 1 GiB recheck cadence — recheck after every group.
+    monkeypatch.setattr(organize, "_FREESPACE_RECHECK_BYTES", 1)
+    calls = {"n": 0}
+
+    def fake_disk_usage(_p):
+        calls["n"] += 1
+        # Call 1 is the preflight (plenty of room); every later call is a mid-run
+        # recheck that now sees the share full.
+        free = (1 << 50) if calls["n"] == 1 else 0
+        return shutil._ntuple_diskusage(1 << 50, 1 << 50, free)
+
+    monkeypatch.setattr(organize.shutil, "disk_usage", fake_disk_usage)
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0001.JPG": _md(), "DJI_0002.JPG": _md()}),
+    )
+    assert report.aborted is True
+    assert report.organized == 1  # the first group was filed before the abort
+    assert second.exists()  # the second group stayed in the inbox
+    assert any("margin" in f for f in report.failures)
+
+
+def test_sweeps_stale_partials_on_resume(tmp_path):
+    # A crashed prior run can leave a `<dest>.partial` whose moves row is still
+    # 'pending'. A fresh run sweeps those orphaned partials at start (reclaiming the
+    # share) without walking the whole library.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"capture")
+    stale_dir = library / "Place" / "2024-07-04"
+    stale_dir.mkdir(parents=True)
+    partial = stale_dir / "old.JPG.partial"
+    partial.write_bytes(b"stale-garbage")
+    conn = db.connect(cfg.index_db_path)
+    db.init_index_schema(conn)
+    conn.execute(
+        "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status) "
+        "VALUES ('oldbatch', '/gone/old.JPG', ?, 'deadbeef', 'pending')",
+        (str(stale_dir / "old.JPG"),),
+    )
+    conn.commit()
+    conn.close()
+    assert partial.exists()
+
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert not partial.exists()  # swept on resume
+
+
+def test_extract_chunk_restart_resumes(tmp_path):
+    # A daemon crash mid-extraction (extract raises) restarts a fresh extractor and
+    # retries the file — the capture is extracted and filed, not lost.
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"capture")
+    state = {"factory_calls": 0, "extract_calls": 0}
+
+    class _FlakyExtractor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract(self, path):
+            state["extract_calls"] += 1
+            if state["extract_calls"] == 1:  # the daemon "crashes" once
+                raise RuntimeError("exiftool daemon died")
+            return _md()
+
+    def factory():
+        state["factory_calls"] += 1
+        return _FlakyExtractor()
+
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=factory)
+    assert report.organized == 1  # extracted on the retry and filed
+    assert state["factory_calls"] >= 2  # the extractor was restarted at least once
+    assert not (inbox / "DJI_0001.JPG").exists()
+
+
+def test_unextractable_file_quarantined_after_max_failures(tmp_path):
+    # A file ExifTool can never read (always raises) is given up on after
+    # extract_max_failures, filed to the _no-gps quarantine, and reported — so one
+    # corrupt file cannot abort the whole multi-hour pass.
+    cfg, inbox, library = _setup(tmp_path)
+    cfg = replace(cfg, extract_max_failures=2)
+    good = _add(inbox, "DJI_0001.JPG", b"good-capture")
+    bad = _add(inbox, "DJI_0002.JPG", b"corrupt-capture")
+    attempts = {"bad": 0}
+
+    class _PartlyBad:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract(self, path):
+            if Path(path).name == "DJI_0002.JPG":
+                attempts["bad"] += 1
+                raise RuntimeError("unreadable / corrupt media")
+            return _md()
+
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=lambda: _PartlyBad()
+    )
+    assert report.organized == 1  # the good capture still filed
+    assert report.quarantined == 1  # the unreadable one quarantined, not lost
+    assert attempts["bad"] == 2  # tried exactly extract_max_failures times
+    assert any("DJI_0002.JPG" in f and "extraction failed" in f for f in report.failures)
+    assert not good.exists() and not bad.exists()  # both left the inbox
+
+    conn = _index(cfg)
+    try:
+        bad_row = conn.execute(
+            "SELECT dest_path, status FROM files WHERE filename LIKE '%DJI_0002%'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert bad_row[1] == "quarantined"
+    assert os.path.join("_no-gps", "") in organize._strip(bad_row[0])  # under _no-gps/
 
 
 def test_verify_library_detects_bitrot(tmp_path):

@@ -24,9 +24,11 @@ the verify that is the whole safety story).
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import sqlite3
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -106,6 +108,8 @@ def copy_and_verify(
     *,
     source_sha256: str | None = None,
     progress: Callable[[str, int, int], None] | None = None,
+    retry_attempts: int = 1,
+    retry_backoff_s: float = 0.0,
 ) -> MoveOutcome:
     """Copy ``source_path`` → ``dest_path`` and verify by SHA-256.
 
@@ -130,6 +134,13 @@ def copy_and_verify(
     byte-heavy steps (``phase`` ∈ ``'hashing'``/``'copying'``/``'verifying'``,
     ``total`` = the source size) so a caller can show live progress on a slow drive.
     The ``'hashing'`` phase is skipped when ``source_sha256`` is supplied.
+
+    ``retry_attempts``/``retry_backoff_s`` harden the copy against a transient
+    ``OSError`` (e.g. an SMB disconnect mid-upload): the copy+verify-hash step is
+    retried up to ``retry_attempts`` times with exponential backoff before the move
+    is marked ``failed``. ``ENOSPC`` is never retried (disk-full is not transient —
+    the caller's free-space recheck owns that). The default ``retry_attempts=1`` is a
+    single try, i.e. exactly today's behaviour for every other caller.
     """
     source_path = Path(source_path)
     total = source_path.stat().st_size
@@ -165,19 +176,27 @@ def copy_and_verify(
 
     final = _strip_prefix(dest_path)
     partial = final + ".partial"
-    try:
-        os.makedirs(os.path.dirname(final), exist_ok=True)
-        _copy_file(str(source_path), partial, on_bytes=_emit("copying"))
-        dest_sha = sha256_file(partial, on_bytes=_emit("verifying"))
-    except OSError as err:
-        _cleanup(partial)
-        conn.execute(
-            "UPDATE moves SET status='failed', completed_at=datetime('now') "
-            "WHERE source_path=? AND source_sha256=?",
-            (str(source_path), src_sha),
-        )
-        conn.commit()
-        return MoveOutcome("failed", src_sha, None, dest_path, str(err))
+    attempt = 0
+    while True:
+        try:
+            os.makedirs(os.path.dirname(final), exist_ok=True)
+            _copy_file(str(source_path), partial, on_bytes=_emit("copying"))
+            dest_sha = sha256_file(partial, on_bytes=_emit("verifying"))
+            break
+        except OSError as err:
+            _cleanup(partial)  # never leave an untrusted partial behind
+            attempt += 1
+            # ENOSPC cannot be retried away; any other OSError (an SMB blip, a
+            # transient read/write error) is retried with exponential backoff.
+            if err.errno == errno.ENOSPC or attempt >= retry_attempts:
+                conn.execute(
+                    "UPDATE moves SET status='failed', completed_at=datetime('now') "
+                    "WHERE source_path=? AND source_sha256=?",
+                    (str(source_path), src_sha),
+                )
+                conn.commit()
+                return MoveOutcome("failed", src_sha, None, dest_path, str(err))
+            time.sleep(retry_backoff_s * 2 ** (attempt - 1))
 
     if dest_sha != src_sha:
         _cleanup(partial)

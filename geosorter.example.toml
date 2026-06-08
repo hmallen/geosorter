@@ -40,3 +40,19 @@ spatial_index = 'rtree'
 # Directory holding the Hugin CLI tools for 360 panorama stitching. Leave unset to
 # detect them on PATH; absent Hugin just disables stitching (the tile gallery remains).
 # hugin_bin_dir = 'C:\Program Files\Hugin\bin'
+
+# --- Upload-resilience knobs (sized for a multi-hour, 5-20k-file bulk import) ---
+
+# Free-space headroom (GB) required over the source bytes; a mid-run recheck aborts
+# the batch cleanly before the share fills.
+# disk_margin_gb = 5.0
+
+# Per-file copy attempts on a transient OSError (e.g. an SMB disconnect), with an
+# exponential backoff whose base (seconds) is copy_retry_backoff_s.
+# copy_retry_attempts = 3
+# copy_retry_backoff_s = 0.5
+
+# ExifTool pass-1 chunking: groups per daemon before a fresh restart, and per-file
+# extract attempts before a file is quarantined as unreadable.
+# extract_chunk_size = 500
+# extract_max_failures = 3

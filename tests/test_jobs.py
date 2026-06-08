@@ -7,9 +7,11 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from geosorter import db
 from geosorter.derived import HuginNotFound, StitchFailed
-from geosorter.jobs import JobManager
+from geosorter.jobs import JobManager, WorkerBusy, _compute_eta
 from geosorter.organize import BatchReport
 from geosorter.rescan import RescanReport
 from geosorter.retag import RetagReport
@@ -38,7 +40,7 @@ def _wait_undo(mgr, job_id, timeout=5.0):
 
 def test_submit_runs_and_completes():
     def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
-                      selected_primaries=None):
+                      selected_primaries=None, on_plan=None):
         progress("  DJI_0001.JPG")
         return BatchReport(batch_id="x", organized=3, quarantined=1, companions=2)
 
@@ -53,7 +55,7 @@ def test_submit_runs_and_completes():
 
 def test_status_exposes_byte_progress_fields():
     def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
-                      selected_primaries=None):
+                      selected_primaries=None, on_plan=None):
         byte_progress("DJI_0003.MP4", "copying", 5, 10)
         return BatchReport(batch_id="x", organized=1)
 
@@ -65,6 +67,32 @@ def test_status_exposes_byte_progress_fields():
     assert (st.bytes_done, st.bytes_total) == (5, 10)
 
 
+def test_compute_eta():
+    # Pure ETA helper: seconds remaining at the observed byte rate.
+    assert _compute_eta(1000, 0, 5.0) is None  # nothing done yet → not estimable
+    assert _compute_eta(0, 0, 5.0) is None  # nothing to do
+    assert _compute_eta(1000, 500, 5.0) == pytest.approx(5.0)  # half in 5s → ~5s left
+    assert _compute_eta(1000, 1000, 5.0) == 0.0  # done → 0 remaining
+
+
+def test_status_exposes_plan_and_eta():
+    # run_organize reports the plan totals via on_plan; the job exposes total_groups,
+    # total_bytes, a running bytes_done_total, and a bytes-based eta_seconds.
+    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
+        if on_plan is not None:
+            on_plan(10, 1000)
+        byte_progress("DJI_0001.MP4", "copying", 500, 1000)
+        return BatchReport(batch_id="x", organized=1)
+
+    mgr = JobManager(None, organize_fn=fake_organize)
+    st = _wait(mgr, mgr.submit())
+    assert st.state == "done"
+    assert st.total_groups == 10
+    assert st.total_bytes == 1000
+    assert st.eta_seconds == 0.0  # a finished job reports zero remaining, not a stale guess
+
+
 def test_status_unknown_returns_none():
     mgr = JobManager(None, organize_fn=lambda *a, **k: BatchReport(batch_id="x"))
     assert mgr.status("does-not-exist") is None
@@ -74,7 +102,7 @@ def test_cancel_sets_event_and_stops_between_groups():
     started = threading.Event()
 
     def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
-                      selected_primaries=None):
+                      selected_primaries=None, on_plan=None):
         started.set()
         organized = 0
         for _ in range(1000):  # stand-in for the per-group loop
@@ -100,7 +128,7 @@ def test_cancel_unknown_job_returns_false():
 
 def test_pipeline_exception_becomes_error_state():
     def boom(cfg, *, assume_yes, cancel, progress, byte_progress,
-             selected_primaries=None):
+             selected_primaries=None, on_plan=None):
         raise RuntimeError("kaboom")
 
     mgr = JobManager(None, organize_fn=boom)
@@ -129,6 +157,52 @@ def test_submit_undo_runs_and_completes():
 def test_undo_status_unknown_returns_none():
     mgr = JobManager(None, undo_fn=lambda *a, **k: UndoReport())
     assert mgr.undo_status("does-not-exist") is None
+
+
+def test_destructive_submits_raise_workerbusy_during_organize():
+    # undo/retag/rescan share the single destructive worker with organize; submitting
+    # one while organize is in flight must raise WorkerBusy (the route maps it to 409)
+    # carrying the blocking organize job id — never a silent queue behind a long run.
+    block = threading.Event()
+
+    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
+        block.wait(2.0)
+        return BatchReport(batch_id="x")
+
+    mgr = JobManager(None, organize_fn=slow_organize,
+                     undo_fn=lambda *a, **k: UndoReport(),
+                     retag_fn=lambda *a, **k: RetagReport(),
+                     rescan_fn=lambda *a, **k: RescanReport())
+    org_id = mgr.submit()
+    try:
+        for call in (mgr.submit_undo, lambda: mgr.submit_retag(1, 0.0, 0.0),
+                     mgr.submit_rescan):
+            with pytest.raises(WorkerBusy) as ei:
+                call()
+            assert ei.value.blocking_job_id == org_id
+    finally:
+        block.set()
+    _wait(mgr, org_id)  # drain so the worker is free for other tests
+
+
+def test_organize_submit_not_blocked_by_active_job():
+    # Organize-submit is deliberately NOT guarded (the map UI's Process-Inbox flow):
+    # a second organize queues behind the first rather than 409-ing.
+    block = threading.Event()
+
+    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
+        block.wait(2.0)
+        return BatchReport(batch_id="x")
+
+    mgr = JobManager(None, organize_fn=slow_organize)
+    first = mgr.submit()
+    second = mgr.submit()  # must NOT raise — queues behind the first
+    assert second != first
+    block.set()
+    _wait(mgr, first)
+    _wait(mgr, second)
 
 
 def test_undo_nothing_to_undo_maps_to_done():
@@ -426,7 +500,8 @@ def test_stitch_pool_independent_of_destructive_pool(tmp_path):
     cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
     org_block = threading.Event()
 
-    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress):
+    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
         org_block.wait(3.0)  # occupy the destructive single worker
         return BatchReport(batch_id="x")
 
