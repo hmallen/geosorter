@@ -498,7 +498,13 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
             if byte_progress is not None
             else None
         )
-        outcome = move_engine.copy_and_verify(index, report.batch_id, sp, dp, progress=bp)
+        # Reuse the primary's dedup hash (computed above) so copy_and_verify does
+        # not re-read the primary just to re-hash it (companions have no pre-hash).
+        outcome = move_engine.copy_and_verify(
+            index, report.batch_id, sp, dp,
+            source_sha256=src_sha if sp == primary else None,
+            progress=bp,
+        )
         if outcome.status == "failed":
             report.aborted = True
             report.failures.append(f"{sp}: {outcome.error}")

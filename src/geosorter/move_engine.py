@@ -104,6 +104,7 @@ def copy_and_verify(
     source_path: str | Path,
     dest_path: str,
     *,
+    source_sha256: str | None = None,
     progress: Callable[[str, int, int], None] | None = None,
 ) -> MoveOutcome:
     """Copy ``source_path`` → ``dest_path`` and verify by SHA-256.
@@ -113,9 +114,22 @@ def copy_and_verify(
     from an existing ``pending``/``copy_verified`` row without re-copying a
     byte-verified destination. Returns a :class:`MoveOutcome`.
 
+    ``source_sha256``, if given, is an already-computed digest of the source (e.g.
+    the caller's dedup hash) and is used verbatim as the source hash, **skipping the
+    redundant re-read** that hashing the source here would cost over a slow share.
+    The caller must pass a digest of the source's *current* bytes: on the copy path a
+    stale/wrong digest is caught by the destination read-back (the ``.partial`` is
+    re-hashed and compared before ``os.replace``, so a mismatch aborts the move), but
+    the idempotent-resume short-circuit trusts a digest that matches an existing
+    ``copy_verified``/``source_deleted`` ``moves`` row *without* re-reading the source.
+    ``organize`` threads its just-computed dedup hash, so this invariant holds. When
+    ``None`` the source is hashed here exactly as before; the dest read-back (the
+    integrity backstop) is unchanged either way.
+
     ``progress``, if given, is called as ``progress(phase, done, total)`` during the
-    three byte-heavy steps (``phase`` ∈ ``'hashing'``/``'copying'``/``'verifying'``,
+    byte-heavy steps (``phase`` ∈ ``'hashing'``/``'copying'``/``'verifying'``,
     ``total`` = the source size) so a caller can show live progress on a slow drive.
+    The ``'hashing'`` phase is skipped when ``source_sha256`` is supplied.
     """
     source_path = Path(source_path)
     total = source_path.stat().st_size
@@ -123,7 +137,11 @@ def copy_and_verify(
     def _emit(phase: str) -> Callable[[int], None] | None:
         return (lambda done: progress(phase, done, total)) if progress is not None else None
 
-    src_sha = sha256_file(source_path, on_bytes=_emit("hashing"))
+    src_sha = (
+        source_sha256
+        if source_sha256 is not None
+        else sha256_file(source_path, on_bytes=_emit("hashing"))
+    )
 
     existing = conn.execute(
         "SELECT status, dest_sha256 FROM moves WHERE source_path=? AND source_sha256=?",
