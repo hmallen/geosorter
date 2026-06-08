@@ -107,3 +107,41 @@ def test_compute_dest_path_requires_local_date():
     empty = LocalTime(None, None, None, None, None, False)
     with pytest.raises(ValueError):
         pathing.compute_dest_path(Path("Z:/Lib"), geo, empty, "DJI_0001", ".JPG")
+
+
+# --------------------------------------------------------------------------- #
+# library_rel_key — collision-proof, resolve-free cache/URL key
+# --------------------------------------------------------------------------- #
+def test_library_rel_key_strips_prefix_to_posix():
+    key = pathing.library_rel_key(r"Z:\Lib", r"Z:\Lib\Boulder\2024-07-04\DJI_0001.JPG")
+    assert key == "Boulder/2024-07-04/DJI_0001.JPG"
+
+
+def test_library_rel_key_handles_long_path_prefix():
+    # Stored dest_paths carry the Windows \\?\ long-path prefix; it is dropped.
+    dest = "\\\\?\\" + r"Z:\Lib\A\DJI_0001.JPG"  # real 4-char \\?\ prefix
+    assert pathing.library_rel_key(r"Z:\Lib", dest) == "A/DJI_0001.JPG"
+
+
+def test_library_rel_key_is_case_insensitive_on_windows():
+    # A drive-letter / case mismatch between the configured root and the stored path
+    # must still strip cleanly (NTFS is case-insensitive).
+    key = pathing.library_rel_key(r"Z:\Lib", r"z:\lib\A\DJI_0001.JPG")
+    assert key == "A/DJI_0001.JPG"
+
+
+def test_library_rel_key_distinguishes_same_basename_across_folders():
+    # The whole point: two DJI_0001.JPG in different folders get DISTINCT keys
+    # (the old bare-filename fallback collided them -> wrong thumbnail).
+    a = pathing.library_rel_key(r"Z:\Lib", r"Z:\Lib\A\DJI_0001.JPG")
+    b = pathing.library_rel_key(r"Z:\Lib", r"Z:\Lib\B\DJI_0001.JPG")
+    assert a != b
+
+
+def test_library_rel_key_outside_root_uses_full_path_not_bare_name():
+    # A path on a different drive (or otherwise not under library_root) falls back to
+    # a drive-sanitized FULL path, never a bare filename (collision-free).
+    key = pathing.library_rel_key(r"Z:\Lib", r"C:\other\DJI_0001.JPG")
+    assert key.endswith("DJI_0001.JPG")
+    assert "/" in key  # not a bare filename
+    assert key != "DJI_0001.JPG"

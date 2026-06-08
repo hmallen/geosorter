@@ -56,3 +56,16 @@ spatial_index = 'rtree'
 # extract attempts before a file is quarantined as unreadable.
 # extract_chunk_size = 500
 # extract_max_failures = 3
+
+# --- Derived-cache tiering (keep hot thumbnails off the SMB share) ---
+
+# Local-SSD cache for thumbnails/posters/previews. Defaults to the platformdirs user
+# cache dir; must be absolute and NOT inside library_root or inbox_path.
+# cache_dir = 'C:\Users\you\AppData\Local\geosorter\Cache'
+
+# Tier for HEVC proxies + panorama stitches (large, written-once). Defaults to
+# library_root; point it at an SSD-backed share to relocate. Absolute when set.
+# proxy_cache_dir = 'Z:\DroneLibrary'
+
+# Local-tier eviction cap (GB); the sweep that honours it lands in a later task.
+# cache_max_gb = 10.0

@@ -9,10 +9,11 @@ import time
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from geosorter import api, db, derived
+from geosorter import api, db, derived, pathing
 from geosorter.config import Config
 from geosorter.jobs import JobManager
 from geosorter.organize import BatchReport
@@ -57,6 +58,7 @@ def client_and_lib(tmp_path):
         index_db_path=index_db,
         geonames_db_path=tmp_path / "geonames.db",
         spatial_index="rtree",
+        cache_dir=tmp_path / "cache",  # local tier off library_root (no real-cache pollution)
     )
     conn = db.connect(index_db, integrity_check=False)
     db.init_index_schema(conn)
@@ -359,8 +361,11 @@ def test_library_exposes_stitch_status(tmp_path):
 
 def test_stitch_image_served_when_cached(tmp_path):
     cfg, fid, library = _panorama_stitch_cfg(tmp_path)
-    # Pre-place a cached hero exactly where the route looks for it.
-    out = derived.stitch_cache_path(library.resolve(), library / "P" / "PANO_0001.JPG")
+    # Pre-place a cached hero exactly where the route looks for it: proxy_cache_dir
+    # (None -> the RAW library_root, as the stitch generator uses) keyed on the
+    # primary's library-relative path.
+    rel_key = pathing.library_rel_key(library, str(library / "P" / "PANO_0001.JPG"))
+    out = derived.stitch_cache_path(library, rel_key)
     out.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (60, 30), "skyblue").save(out, "JPEG")
     client = TestClient(api.create_app(cfg))
@@ -477,6 +482,30 @@ def test_preview_endpoint_returns_jpeg(client_and_lib):
     resp = client.get("/api/preview/photo.jpg")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("image/jpeg")
+
+
+def test_thumb_served_from_local_cache_dir(client_and_lib):
+    # Thumbnails live on the LOCAL cache_dir tier, never under the SMB library share.
+    client, library = client_and_lib
+    shutil.copy(MEDIA / "dji_photo.jpg", library / "photo.jpg")
+    assert client.get("/api/thumb/photo.jpg").status_code == 200
+    cache_dir = library.parent / "cache"  # client_and_lib's cfg cache_dir
+    assert (cache_dir / ".geosorter-cache" / "thumbs").is_dir()
+    assert not (library / ".geosorter-cache").exists()  # nothing written to the share
+
+
+def test_safe_cache_path_rejects_path_outside_roots(tmp_path):
+    # The defense-in-depth guard: a served derived path must live under a cache root.
+    inside = tmp_path / "cache" / "f.jpg"
+    inside.parent.mkdir(parents=True)
+    inside.write_bytes(b"x")
+    assert api._safe_cache_path(inside, tmp_path / "cache") == inside  # under root -> ok
+    outside = tmp_path / "elsewhere" / "f.jpg"
+    outside.parent.mkdir(parents=True)
+    outside.write_bytes(b"x")
+    with pytest.raises(HTTPException) as ei:
+        api._safe_cache_path(outside, tmp_path / "cache")
+    assert ei.value.status_code == 403
 
 
 def test_spa_mounted_when_dir_exists(tmp_path):

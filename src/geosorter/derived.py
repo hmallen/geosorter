@@ -1,13 +1,17 @@
 """Lazy, cached derived-asset generation for the map viewer (B6).
 
 Thumbnails, video poster frames, and HEVC->H.264 playback proxies are generated
-**on first request** and cached under ``library_root/.geosorter-cache/`` so the
+**on first request** and cached under ``<cache_root>/.geosorter-cache/`` so the
 crash-safe Phase 0 ``organize`` pipeline never has to depend on Pillow/ffmpeg.
 
-Each asset mirrors its source's library-relative path under a per-kind cache
-subdirectory (``thumbs``/``posters``/``proxies``). Freshness is mtime-based: a
-cached file is reused only while it is at least as new as its source, so a
-re-organized file regenerates without any hashing.
+The cache is **tiered** (m-cache-tiering-safety): the caller passes the per-kind
+``cache_root`` — thumbs/posters/previews on a local SSD ``cache_dir`` (off the LAN);
+proxies/stitch on ``proxy_cache_dir`` (default ``library_root``) — plus a ``rel_key``
+(the source's library-relative path, ``pathing.library_rel_key``) so two same-basename
+files in different folders get distinct cache files. Freshness is mtime-based: after
+generation the cache mtime is ``os.utime``'d to the source's, so a cached file is
+reused only while it is at least as new as its source (immune to SMB's coarse mtime
+granularity), with no hashing.
 
 ffmpeg/ffprobe are invoked as list-form subprocesses (mirroring
 :mod:`geosorter.metadata`); only Pillow is a Python dependency.
@@ -31,6 +35,9 @@ logger = logging.getLogger("geosorter.derived")
 THUMB_MAX = 512
 PREVIEW_MAX = 1920
 CACHE_DIRNAME = ".geosorter-cache"
+# Hard ceiling on a single proxy transcode (a full HEVC->H.264 of a multi-minute 4K
+# clip over SMB is slow, but 30 min only fires on a genuinely stuck process).
+FFMPEG_TIMEOUT_S = 1800
 
 # --- Panorama stitch (B13) -------------------------------------------------
 # The 360 equirectangular canvas. pano_modify sizes the full sphere to this; a
@@ -66,19 +73,16 @@ class StitchFailed(RuntimeError):
     """A stitch step failed, timed out, or produced a degenerate result."""
 
 
-def _cache_path(library_root: Path | str, source: Path, kind: str, ext: str) -> Path:
-    """Cache file for ``source`` under ``library_root/.geosorter-cache/<kind>/``.
+def _cache_path(cache_root: Path | str, rel_key: str, kind: str, ext: str) -> Path:
+    """Cache file under ``cache_root/.geosorter-cache/<kind>/<rel_key>``.
 
-    The source's library-relative path is mirrored under the kind directory; a
-    source outside ``library_root`` falls back to its bare filename.
+    ``rel_key`` is the source's library-relative POSIX path
+    (:func:`geosorter.pathing.library_rel_key`), the same collision-free key media
+    URLs use — so two same-basename files in different folders never share a cache
+    file, and no ``.resolve()`` (unreliable on a mapped SMB drive, the cause of the
+    old wrong-thumbnail collision) is involved. ``cache_root`` is the per-kind tier.
     """
-    library_root = Path(library_root)
-    source = Path(source)
-    try:
-        rel = source.resolve().relative_to(library_root.resolve())
-    except ValueError:
-        rel = Path(source.name)
-    return (library_root / CACHE_DIRNAME / kind / rel).with_suffix(ext)
+    return (Path(cache_root) / CACHE_DIRNAME / kind / rel_key).with_suffix(ext)
 
 
 def _is_fresh(cache_file: Path, source: Path) -> bool:
@@ -86,8 +90,37 @@ def _is_fresh(cache_file: Path, source: Path) -> bool:
     return cache_file.exists() and cache_file.stat().st_mtime >= source.stat().st_mtime
 
 
-def _run_ffmpeg(cmd: list[str]) -> None:
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+def _touch_to_mtime(cache_file: Path, mtime: float) -> None:
+    """Pin a cache file's mtime to ``mtime`` (preserving atime for the future LRU
+    sweep) so :func:`_is_fresh` tracks the source exactly — immune to SMB's coarse
+    (~2 s) mtime granularity and write-time skew. ``OSError``-tolerant: a disconnected
+    share just means a later request may regenerate, never a crash.
+    """
+    try:
+        atime = cache_file.stat().st_atime
+        os.utime(cache_file, (atime, mtime))
+    except OSError:
+        pass
+
+
+def _touch_to_source(cache_file: Path, source: Path) -> None:
+    """Pin the cache mtime to the source's mtime (see :func:`_touch_to_mtime`)."""
+    try:
+        _touch_to_mtime(cache_file, source.stat().st_mtime)
+    except OSError:
+        pass
+
+
+def _run_ffmpeg(cmd: list[str], *, timeout: int = FFMPEG_TIMEOUT_S) -> None:
+    """Run an ffmpeg subprocess (list-form) with a hard timeout.
+
+    Maps both a non-zero exit and a timeout to ``RuntimeError``; the partial output is
+    cleaned by :func:`_atomic_write` (the caller), which removes its temp on any error.
+    """
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"ffmpeg timed out after {timeout}s") from exc
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {proc.stderr.strip()}")
 
@@ -113,9 +146,10 @@ def _atomic_write(out: Path, produce: Callable[[Path], None]) -> None:
         raise
 
 
-def _resize_jpeg(library_root: Path | str, source: Path, kind: str, max_px: int, quality: int) -> Path:
+def _resize_jpeg(cache_root: Path | str, rel_key: str, source: Path, kind: str,
+                 max_px: int, quality: int) -> Path:
     """Return a cached downscaled JPEG of an image (long edge <= ``max_px``)."""
-    out = _cache_path(library_root, source, kind, ".jpg")
+    out = _cache_path(cache_root, rel_key, kind, ".jpg")
     if _is_fresh(out, source):
         return out
 
@@ -126,23 +160,24 @@ def _resize_jpeg(library_root: Path | str, source: Path, kind: str, max_px: int,
             img.convert("RGB").save(dest, "JPEG", quality=quality)
 
     _atomic_write(out, _produce)
+    _touch_to_source(out, source)
     return out
 
 
-def thumbnail(library_root: Path | str, source: Path | str) -> Path:
+def thumbnail(cache_root: Path | str, rel_key: str, source: Path | str) -> Path:
     """Return a cached 512px JPEG thumbnail of an image, generating it if stale."""
-    return _resize_jpeg(library_root, Path(source), "thumbs", THUMB_MAX, quality=85)
+    return _resize_jpeg(cache_root, rel_key, Path(source), "thumbs", THUMB_MAX, quality=85)
 
 
-def preview(library_root: Path | str, source: Path | str) -> Path:
+def preview(cache_root: Path | str, rel_key: str, source: Path | str) -> Path:
     """Return a cached 1080p (1920px long-edge) JPEG preview for the lightbox."""
-    return _resize_jpeg(library_root, Path(source), "previews", PREVIEW_MAX, quality=88)
+    return _resize_jpeg(cache_root, rel_key, Path(source), "previews", PREVIEW_MAX, quality=88)
 
 
-def poster(library_root: Path | str, source: Path | str) -> Path:
+def poster(cache_root: Path | str, rel_key: str, source: Path | str) -> Path:
     """Return a cached JPEG poster frame for a video, generating it if stale."""
     source = Path(source)
-    out = _cache_path(library_root, source, "posters", ".jpg")
+    out = _cache_path(cache_root, rel_key, "posters", ".jpg")
     if _is_fresh(out, source):
         return out
     _atomic_write(
@@ -152,10 +187,11 @@ def poster(library_root: Path | str, source: Path | str) -> Path:
              "-frames:v", "1", str(dest)]
         ),
     )
+    _touch_to_source(out, source)
     return out
 
 
-def proxy(library_root: Path | str, source: Path | str, codec: str | None) -> Path:
+def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str | None) -> Path:
     """Return a browser-playable video path for ``source``.
 
     H.264 (or unknown) sources are already streamable and are returned unchanged.
@@ -164,7 +200,7 @@ def proxy(library_root: Path | str, source: Path | str, codec: str | None) -> Pa
     source = Path(source)
     if codec != "h265":
         return source
-    out = _cache_path(library_root, source, "proxies", ".mp4")
+    out = _cache_path(cache_root, rel_key, "proxies", ".mp4")
     if _is_fresh(out, source):
         return out
     _atomic_write(
@@ -174,6 +210,7 @@ def proxy(library_root: Path | str, source: Path | str, codec: str | None) -> Pa
              "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(dest)]
         ),
     )
+    _touch_to_source(out, source)
     return out
 
 
@@ -198,14 +235,16 @@ def find_hugin(hugin_bin_dir: Path | str | None = None) -> dict[str, str] | None
     return tools
 
 
-def stitch_cache_path(library_root: Path | str, primary_source: Path | str) -> Path:
+def stitch_cache_path(cache_root: Path | str, rel_key: str) -> Path:
     """The cache location of a panorama's stitched hero (whether or not it exists).
 
-    Shared by :func:`panorama_stitch` (the writer) and the ``/api/stitch`` serve
-    route (the reader) so both agree on the path without the route reaching into
-    the private cache helper. Keyed on the primary tile, like every derived asset.
+    Shared by :func:`panorama_stitch` (the writer, via the stitch background job) and
+    the ``/api/stitch`` serve route (the reader) so both agree on the path without the
+    route reaching into the private cache helper. Both pass the panorama primary's
+    ``rel_key`` (``pathing.library_rel_key``) and the ``proxy_cache_dir`` tier, so the
+    generator and the reader resolve to the same file.
     """
-    return _cache_path(library_root, Path(primary_source), "stitch", ".jpg")
+    return _cache_path(cache_root, rel_key, "stitch", ".jpg")
 
 
 def _run_hugin(cmd: list[str], *, timeout: int = STITCH_STEP_TIMEOUT_S) -> None:
@@ -252,7 +291,8 @@ def _stitch_gate(path: Path) -> None:
 
 
 def panorama_stitch(
-    library_root: Path | str,
+    cache_root: Path | str,
+    rel_key: str,
     primary_source: Path | str,
     frame_sources: Sequence[Path | str],
     *,
@@ -278,7 +318,7 @@ def panorama_stitch(
     """
     primary_source = Path(primary_source)
     tiles = [primary_source, *(Path(f) for f in frame_sources)]
-    out = stitch_cache_path(library_root, primary_source)
+    out = stitch_cache_path(cache_root, rel_key)
     newest = max(t.stat().st_mtime for t in tiles)
     if out.exists() and out.stat().st_mtime >= newest:
         return out
@@ -334,4 +374,5 @@ def panorama_stitch(
                 img.save(dest, "JPEG", quality=90)
 
         _atomic_write(out, _produce)
+        _touch_to_mtime(out, newest)  # pin freshness to the newest tile (SMB-safe)
     return out

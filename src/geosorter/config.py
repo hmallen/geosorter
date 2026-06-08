@@ -72,6 +72,16 @@ spatial_index = 'rtree'
 # per-file extract attempts before a file is quarantined as unreadable.
 # extract_chunk_size = 500
 # extract_max_failures = 3
+
+# --- Derived-cache tiering (keep hot thumbnails off the SMB share) ---
+# Local-SSD cache for thumbnails/posters/previews. Defaults to the platformdirs
+# user cache dir; must be absolute and NOT inside library_root or inbox_path.
+# cache_dir = 'C:\\Users\\you\\AppData\\Local\\geosorter\\Cache'
+# Tier for HEVC proxies + panorama stitches (large, written-once). Defaults to
+# library_root; point it at an SSD-backed share to relocate. Absolute when set.
+# proxy_cache_dir = 'Z:\\DroneLibrary'
+# Local-tier eviction cap (GB); the sweep that honours it lands in a later task.
+# cache_max_gb = 10.0
 """
 
 
@@ -95,11 +105,36 @@ class Config:
     copy_retry_backoff_s: float = 0.5  # base of the exponential copy-retry backoff
     extract_chunk_size: int = 500  # groups per ExifTool daemon before a fresh restart
     extract_max_failures: int = 3  # per-file extract attempts before quarantine
+    # Derived-cache tiering (m-cache-tiering-safety). thumbs/posters/previews live on
+    # the local SSD `cache_dir`; proxies/stitch on `proxy_cache_dir` (defaults to
+    # `library_root` at use). `cache_dir` is None only on a directly-constructed
+    # Config; `load()` fills it with `default_cache_dir()`.
+    cache_dir: Path | None = None  # local-SSD cache for thumbs/posters/previews
+    proxy_cache_dir: Path | None = None  # None → library_root (proxies/stitch tier)
+    cache_max_gb: float = 10.0  # local-tier eviction cap (consumed by m-derived-at-scale)
 
 
 def default_data_dir() -> Path:
     # appauthor=False avoids the Windows "geosorter\geosorter" double nesting.
     return Path(platformdirs.user_data_dir(APP_NAME, appauthor=False))
+
+
+def default_cache_dir() -> Path:
+    """Local-SSD default for the derived cache (off the SMB library share)."""
+    return Path(platformdirs.user_cache_dir(APP_NAME, appauthor=False))
+
+
+def resolve_proxy_cache_dir(cfg) -> Path:
+    r"""The proxy/stitch cache tier for ``cfg``: the explicit ``proxy_cache_dir`` or,
+    when unset, the **raw** ``library_root``.
+
+    Never ``.resolve()``d: the panorama-stitch generator (``jobs._run_stitch``) and the
+    ``/api/stitch`` serve route both call this, and on a mapped SMB drive ``.resolve()``
+    rewrites ``Z:\`` to a UNC path — so a resolved default would make the two disagree
+    on the cached-hero path. Centralizing the default here makes that invariant
+    structural rather than a convention duplicated across two modules.
+    """
+    return Path(cfg.proxy_cache_dir) if cfg.proxy_cache_dir else Path(cfg.library_root)
 
 
 def default_config_path() -> Path:
@@ -160,9 +195,27 @@ def load(path: str | Path | None = None) -> Config:
     if extract_max_failures < 1:
         raise ValueError(f"extract_max_failures must be >= 1: {extract_max_failures!r}")
 
+    inbox_path = _opt_path(data.get("inbox_path"))
+    library_root = _opt_path(data.get("library_root"))
+
+    cache_dir = _opt_path(data.get("cache_dir")) or default_cache_dir()
+    proxy_cache_dir = _opt_path(data.get("proxy_cache_dir"))
+    cache_max_gb = float(data.get("cache_max_gb", 10.0))
+    if not cache_dir.is_absolute():
+        raise ValueError(f"cache_dir must be an absolute path: {cache_dir!r}")
+    # The local cache must not live under the SMB library or the inbox (the whole
+    # point is to keep hot reads off the LAN; nesting it back in would defeat that).
+    for guard, name in ((library_root, "library_root"), (inbox_path, "inbox_path")):
+        if guard is not None and cache_dir.is_relative_to(guard):
+            raise ValueError(f"cache_dir must not be inside {name}: {cache_dir!r}")
+    if proxy_cache_dir is not None and not proxy_cache_dir.is_absolute():
+        raise ValueError(f"proxy_cache_dir must be an absolute path: {proxy_cache_dir!r}")
+    if cache_max_gb <= 0:
+        raise ValueError(f"cache_max_gb must be > 0: {cache_max_gb!r}")
+
     return Config(
-        inbox_path=_opt_path(data.get("inbox_path")),
-        library_root=_opt_path(data.get("library_root")),
+        inbox_path=inbox_path,
+        library_root=library_root,
         index_db_path=Path(str(index_db)).expanduser(),
         geonames_db_path=Path(str(geonames_db)).expanduser(),
         spatial_index=spatial_index,
@@ -175,6 +228,9 @@ def load(path: str | Path | None = None) -> Config:
         copy_retry_backoff_s=copy_retry_backoff_s,
         extract_chunk_size=extract_chunk_size,
         extract_max_failures=extract_max_failures,
+        cache_dir=cache_dir,
+        proxy_cache_dir=proxy_cache_dir,
+        cache_max_gb=cache_max_gb,
     )
 
 
