@@ -155,6 +155,12 @@ def _resize_jpeg(cache_root: Path | str, rel_key: str, source: Path, kind: str,
 
     def _produce(dest: Path) -> None:
         with Image.open(source) as img:
+            if source.suffix.lower() in (".jpg", ".jpeg"):
+                # DCT-downscale the JPEG decode toward the target (4-8x faster on
+                # large DJI JPEGs, fewer SMB bytes read). Must precede any pixel
+                # access — exif_transpose/thumbnail below load the image. No-op for
+                # non-JPEG, but guard by suffix so the intent is explicit.
+                img.draft("RGB", (max_px, max_px))
             img = ImageOps.exif_transpose(img)  # honour camera orientation
             img.thumbnail((max_px, max_px))  # downscale only; never upscales
             img.convert("RGB").save(dest, "JPEG", quality=quality)

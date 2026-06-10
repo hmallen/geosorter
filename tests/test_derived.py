@@ -54,6 +54,48 @@ def test_thumbnail_applies_exif_transpose(tmp_path):
         assert thumb.size[1] > thumb.size[0]
 
 
+def test_thumbnail_uses_jpeg_draft_for_fast_decode(tmp_path, monkeypatch):
+    # draft('RGB', size) DCT-downscales the JPEG decode toward the target; it must
+    # be invoked for a .jpg source (the fast-thumbnail win) and the output stays a
+    # valid 512px JPEG. The decode object is a JpegImageFile, which overrides
+    # draft(), so the spy goes on that subclass (the base Image.draft is unused here).
+    from PIL import JpegImagePlugin
+
+    calls = []
+    orig = JpegImagePlugin.JpegImageFile.draft
+
+    def spy(self, mode, size):
+        calls.append((mode, size))
+        return orig(self, mode, size)
+
+    monkeypatch.setattr(JpegImagePlugin.JpegImageFile, "draft", spy)
+    src = tmp_path / "big.jpg"
+    Image.new("RGB", (2000, 1500), "red").save(src, "JPEG")
+    out = derived.thumbnail(tmp_path / "cache", "big.jpg", src)
+    # Our explicit draft uses mode 'RGB' (Pillow's own thumbnail() also calls
+    # draft(None, ...), so filter by mode to isolate the one we added).
+    assert any(mode == "RGB" for mode, _ in calls)
+    with Image.open(out) as img:
+        assert img.format == "JPEG"
+        assert max(img.size) == 512
+
+
+def test_thumbnail_skips_draft_for_non_jpeg(tmp_path, monkeypatch):
+    # draft is JPEG-only; a PNG source must not route through our guarded draft('RGB').
+    calls = []
+    orig = Image.Image.draft
+    monkeypatch.setattr(
+        Image.Image, "draft",
+        lambda self, m, s: calls.append((m, s)) or orig(self, m, s),
+    )
+    src = tmp_path / "shot.png"
+    Image.new("RGB", (1200, 900), "blue").save(src, "PNG")
+    out = derived.thumbnail(tmp_path / "cache", "shot.png", src)
+    assert not any(mode == "RGB" for mode, _ in calls)  # no explicit 'RGB' draft
+    with Image.open(out) as img:
+        assert max(img.size) == 512
+
+
 def test_thumbnail_cache_hit_does_not_regenerate(tmp_path):
     cache = tmp_path / "cache"
     out = derived.thumbnail(cache, "dji_photo.jpg", FIXTURES / "dji_photo.jpg")

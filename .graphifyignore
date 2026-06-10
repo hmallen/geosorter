@@ -1,0 +1,15 @@
+# team-management files
+/.claude/
+.venv-team-management/
+.mcp.json
+team-management/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/

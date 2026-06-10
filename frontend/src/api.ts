@@ -18,10 +18,26 @@ export const videoUrl = (path: string): string => `/api/video/${enc(path)}`
 export const listThumb = (mediaType: 'photo' | 'video', path: string): string =>
   mediaType === 'video' ? posterUrl(path) : thumbUrl(path)
 
-export async function fetchLibrary(fetchFn: typeof fetch = fetch): Promise<LibraryFC> {
-  const resp = await fetchFn('/api/library')
+// Result of a (conditional) library fetch. On a 304 the server confirmed the
+// prior ETag is still current: `fc` is null and the caller keeps its stale
+// features visible (no blank map on reload).
+export interface LibraryResult {
+  fc: LibraryFC | null
+  etag: string | null
+  notModified: boolean
+}
+
+export async function fetchLibrary(
+  fetchFn: typeof fetch = fetch,
+  etag?: string | null,
+): Promise<LibraryResult> {
+  const headers: Record<string, string> = {}
+  if (etag) headers['If-None-Match'] = etag
+  const resp = await fetchFn('/api/library', { headers })
+  if (resp.status === 304) return { fc: null, etag: etag ?? null, notModified: true }
   if (!resp.ok) throw new Error(`library fetch failed: ${resp.status}`)
-  return (await resp.json()) as LibraryFC
+  const fc = (await resp.json()) as LibraryFC
+  return { fc, etag: resp.headers.get('ETag'), notModified: false }
 }
 
 // Hyperlapse source-frame gallery (B10): list a render's frame relpaths, then
