@@ -383,6 +383,126 @@ def test_panorama_stitch_real_hugin_e2e(tmp_path):
     derived._stitch_gate(out)  # the real output passes the equirectangular gate
 
 
+# --- Generation concurrency cap (m-derived-at-scale) ----------------------- #
+
+
+def test_generation_concurrency_capped(tmp_path, monkeypatch):
+    # A cold-browse storm must not run unbounded Pillow/ffmpeg generations at once:
+    # the module-level semaphore caps concurrent generation. A slow _atomic_write
+    # records the peak in-flight count across many parallel thumbnail() calls.
+    import threading
+    import time as _time
+
+    lock = threading.Lock()
+    state = {"cur": 0, "peak": 0}
+
+    def slow_atomic(out, produce):
+        with lock:
+            state["cur"] += 1
+            state["peak"] = max(state["peak"], state["cur"])
+        _time.sleep(0.05)
+        with lock:
+            state["cur"] -= 1
+
+    monkeypatch.setattr(derived, "_atomic_write", slow_atomic)
+    src = tmp_path / "s.jpg"
+    Image.new("RGB", (64, 64), "red").save(src, "JPEG")
+    cache = tmp_path / "cache"
+    n = derived.DERIVED_MAX_CONCURRENCY + 4
+    # Distinct rel_keys -> distinct cache files (no freshness-skip collisions).
+    threads = [
+        threading.Thread(target=derived.thumbnail, args=(cache, f"k{i}.jpg", src))
+        for i in range(n)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state["peak"] <= derived.DERIVED_MAX_CONCURRENCY
+    assert state["peak"] >= 2  # sanity: genuinely ran in parallel up to the cap
+
+
+# --- Local-tier cache eviction (m-derived-at-scale) ------------------------ #
+
+
+def _make_cache_file(base: Path, name: str, size: int, atime: float) -> Path:
+    f = base / name
+    f.write_bytes(b"\0" * size)
+    os.utime(f, (atime, atime))  # pin atime (the eviction key) AND mtime
+    return f
+
+
+def test_evict_local_cache_drops_oldest_over_cap(tmp_path):
+    cache_root = tmp_path / "cache"
+    thumbs = cache_root / CACHE / "thumbs"
+    thumbs.mkdir(parents=True)
+    mib = 1 << 20
+    files = [_make_cache_file(thumbs, f"f{i}.jpg", mib, atime=1000 + i) for i in range(5)]
+
+    res = derived.evict_local_cache(cache_root, max_gb=3 / 1024)  # 3 MiB cap
+
+    assert not files[0].exists() and not files[1].exists()  # 2 oldest atimes dropped
+    assert all(f.exists() for f in files[2:])  # newest 3 kept
+    assert res.deleted == 2
+    assert res.skipped == 0
+    assert res.bytes_after <= 3 * mib
+
+
+def test_evict_local_cache_defers_on_permissionerror(tmp_path, monkeypatch):
+    cache_root = tmp_path / "cache"
+    thumbs = cache_root / CACHE / "thumbs"
+    thumbs.mkdir(parents=True)
+    mib = 1 << 20
+    files = [_make_cache_file(thumbs, f"f{i}.jpg", mib, atime=1000 + i) for i in range(3)]
+
+    real_unlink = Path.unlink
+
+    def guarded_unlink(self, *a, **k):
+        if self.name == "f0.jpg":  # the oldest (would be evicted first) is "open"
+            raise PermissionError("file in use")
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", guarded_unlink)
+    res = derived.evict_local_cache(cache_root, max_gb=1.5 / 1024)  # 1.5 MiB cap
+
+    assert files[0].exists()  # locked oldest skipped, not crashed
+    assert res.skipped == 1
+    assert not files[1].exists()  # eviction continued past the locked file
+    assert res.deleted == 2
+
+
+def test_evict_local_cache_tolerates_vanished_file(tmp_path, monkeypatch):
+    # A concurrent _atomic_write temp can be renamed away between rglob listing and
+    # stat(); the sweep must skip it, not abort with FileNotFoundError.
+    cache_root = tmp_path / "cache"
+    thumbs = cache_root / CACHE / "thumbs"
+    thumbs.mkdir(parents=True)
+    mib = 1 << 20
+    files = [_make_cache_file(thumbs, f"f{i}.jpg", mib, atime=1000 + i) for i in range(3)]
+
+    real_stat = Path.stat
+
+    def flaky_stat(self, *a, **k):
+        if self.name == "f0.jpg":  # vanished mid-walk
+            raise FileNotFoundError("raced away")
+        return real_stat(self, *a, **k)
+
+    monkeypatch.setattr(Path, "stat", flaky_stat)
+    res = derived.evict_local_cache(cache_root, max_gb=1.5 / 1024)  # no crash
+    # f0 was never collected (stat raised); f1/f2 (2 MiB) evict down toward 1.5 MiB.
+    assert files[0].exists()  # the "vanished"-at-stat file was simply skipped
+    assert res.deleted >= 1
+
+
+def test_evict_local_cache_under_cap_is_noop(tmp_path):
+    cache_root = tmp_path / "cache"
+    thumbs = cache_root / CACHE / "thumbs"
+    thumbs.mkdir(parents=True)
+    f = _make_cache_file(thumbs, "f.jpg", 1 << 20, atime=1000)
+    res = derived.evict_local_cache(cache_root, max_gb=10.0)
+    assert f.exists() and res.deleted == 0 and res.bytes_after == res.bytes_before
+
+
 def test_atomic_write_failure_publishes_nothing(tmp_path):
     # A failed generation must never leave a half-written cache file at `out`,
     # nor a leftover temp in the cache dir (concurrent-request corruption guard).

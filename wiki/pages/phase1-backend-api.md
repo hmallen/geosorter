@@ -3,7 +3,7 @@ title: Phase 1 Backend — HTTP API Contract & Derived Assets
 tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
 created: 2026-06-01
 updated: 2026-06-10
-sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location, task:m-basemap-heatmap-toggles, task:m-library-feed-scale]
+sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location, task:m-basemap-heatmap-toggles, task:m-library-feed-scale, task:m-derived-at-scale]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -103,6 +103,37 @@ Phase 0 `organize` pipeline free of any Pillow/ffmpeg dependency.
   first-request never observes a half-written file. This mirrors the
   partial→replace discipline of the [crash-safe move engine](crash-safe-move-engine.md).
 - ffmpeg/ffprobe are invoked list-form (never `shell=True`), matching `metadata.py`.
+
+### At scale — generation cap, warm pass, eviction (m-derived-at-scale)
+
+Three additions keep on-demand generation from falling over on a 5–20k-file library
+(the cache is tiered by `m-cache-tiering-safety`: thumbs/posters/previews on a local
+SSD `cache_dir`, proxies/stitch on `proxy_cache_dir`):
+
+- **Concurrency cap.** A process-wide `threading.BoundedSemaphore`
+  (`DERIVED_MAX_CONCURRENCY = 4`) gates a new `derived._generate(out, source, produce)`
+  through which `_resize_jpeg`/`poster`/`proxy` route their *regeneration* — so a
+  cold-browse request storm can launch at most 4 concurrent Pillow/ffmpeg jobs. A
+  fresh **cache hit returns before acquiring**, so hits stay lock-free; `_generate`
+  re-checks `_is_fresh` *under* the permit to drop a lost race. The cap is
+  process-wide because `serve` is single-process uvicorn (a brainstorm decision — no
+  multi-worker, which would fragment the in-memory `JobManager`).
+- **Post-organize warm pass** (`geosorter.warm.warm_library`). After an organize with
+  `organized > 0`, `JobManager._run` auto-enqueues a warm job on a **dedicated
+  `_warm_pool`** (independent of the destructive and stitch pools) that pre-generates
+  thumbnails (photos) + posters (videos) for that batch on the local tier, skipping
+  fresh/missing sources (resumable). Generation goes through the shared cap, so the
+  warm pass **yields to foreground** requests. It is silent (no API route/UI) and
+  kept in its own module so `derived.py` stays DB-free. (Known trade-off: the warm
+  pool reads library originals concurrently with a possible undo/retag — recoverable
+  on Windows since those ops are crash-safe/idempotent/retryable; same pattern as the
+  stitch pool. Adding warm-vs-destructive cancellation is a recorded follow-up.)
+- **Local-tier eviction** (`derived.evict_local_cache`). The warm job ends by
+  atime-sweeping the **local** tier (`thumbs`/`previews`/`posters`) down to
+  `cache_max_gb`, deleting least-recently-accessed first; a locked file
+  (`PermissionError`) or one that raced away (`FileNotFoundError`) is tolerated, never
+  fatal. The proxy/stitch tier is **never** auto-evicted (large, written-once; manual
+  purge only).
 
 ## Background jobs (`geosorter.jobs`)
 

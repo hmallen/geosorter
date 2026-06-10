@@ -67,6 +67,79 @@ def test_status_exposes_byte_progress_fields():
     assert (st.bytes_done, st.bytes_total) == (5, 10)
 
 
+def _wait_warm(mgr, job_id, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = mgr.warm_status(job_id)
+        if st is not None and st.state in ("done", "error"):
+            return st
+        time.sleep(0.01)
+    raise AssertionError(f"warm job {job_id} did not finish: {mgr.warm_status(job_id)}")
+
+
+def test_warm_job_lifecycle():
+    from geosorter.derived import EvictionResult
+    from geosorter.warm import WarmResult
+
+    calls = []
+
+    def fake_warm(cfg, batch_id, *, progress=None, cancel=None):
+        calls.append(batch_id)
+        progress("p.jpg")
+        return WarmResult(batch_id=batch_id, warmed=3,
+                          eviction=EvictionResult(0, 0, deleted=2, skipped=1))
+
+    mgr = JobManager(None, warm_fn=fake_warm)
+    job_id = mgr.submit_warm("b9")
+    st = _wait_warm(mgr, job_id)
+    assert st.state == "done"
+    assert st.batch_id == "b9"
+    assert (st.warmed, st.deleted, st.skipped) == (3, 2, 1)
+    assert st.processed == 1
+    assert calls == ["b9"]
+
+
+def test_organize_completion_triggers_warm():
+    # A successful organize (organized>0) auto-enqueues a warm pass for its batch.
+    from geosorter.derived import EvictionResult
+    from geosorter.warm import WarmResult
+
+    fired = threading.Event()
+    seen = {}
+
+    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
+        return BatchReport(batch_id="bX", organized=1)
+
+    def fake_warm(cfg, batch_id, *, progress=None, cancel=None):
+        seen["batch_id"] = batch_id
+        fired.set()
+        return WarmResult(batch_id=batch_id, warmed=0, eviction=EvictionResult(0, 0, 0, 0))
+
+    mgr = JobManager(None, organize_fn=fake_organize, warm_fn=fake_warm)
+    _wait(mgr, mgr.submit())
+    assert fired.wait(2.0)
+    assert seen["batch_id"] == "bX"
+
+
+def test_organize_with_nothing_organized_skips_warm():
+    fired = threading.Event()
+
+    def fake_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None):
+        return BatchReport(batch_id="bY", organized=0)
+
+    def fake_warm(cfg, batch_id, *, progress=None, cancel=None):
+        fired.set()
+        from geosorter.derived import EvictionResult
+        from geosorter.warm import WarmResult
+        return WarmResult(batch_id=batch_id, warmed=0, eviction=EvictionResult(0, 0, 0, 0))
+
+    mgr = JobManager(None, organize_fn=fake_organize, warm_fn=fake_warm)
+    _wait(mgr, mgr.submit())
+    assert not fired.wait(0.5)  # organized==0 -> no warm pass
+
+
 def test_compute_eta():
     # Pure ETA helper: seconds remaining at the observed byte rate.
     assert _compute_eta(1000, 0, 5.0) is None  # nothing done yet → not estimable
