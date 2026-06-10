@@ -383,6 +383,100 @@ def test_panorama_stitch_real_hugin_e2e(tmp_path):
     derived._stitch_gate(out)  # the real output passes the equirectangular gate
 
 
+# --- Stitch step opt-out + canvas config (m-frontend-pano-ux) -------------- #
+
+
+def test_panorama_stitch_drops_celeste_and_lens_when_disabled(tmp_path, monkeypatch):
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, calls = _fake_run_factory()
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    derived.panorama_stitch(
+        tmp_path / "c", "pano/PANO_0001.JPG", primary, frames,
+        canvas="4000x2000", celeste=False, optimise_lens=False,
+    )
+    cpfind = next(c for c in calls if Path(c[0]).name == "cpfind")
+    assert "--celeste" not in cpfind
+    autoopt = next(c for c in calls if Path(c[0]).name == "autooptimiser")
+    assert "-l" not in autoopt
+    pano_modify = next(c for c in calls if Path(c[0]).name == "pano_modify")
+    assert "--canvas=4000x2000" in pano_modify
+
+
+def test_panorama_stitch_keeps_celeste_and_lens_by_default(tmp_path, monkeypatch):
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, calls = _fake_run_factory()
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    derived.panorama_stitch(tmp_path / "c", "pano/PANO_0001.JPG", primary, frames)
+    cpfind = next(c for c in calls if Path(c[0]).name == "cpfind")
+    assert "--celeste" in cpfind
+    autoopt = next(c for c in calls if Path(c[0]).name == "autooptimiser")
+    assert "-l" in autoopt
+    # The default canvas shrank to 4000x2000 (m-frontend-pano-ux).
+    pano_modify = next(c for c in calls if Path(c[0]).name == "pano_modify")
+    assert "--canvas=4000x2000" in pano_modify
+
+
+# --- Instant raw-tile collage (m-frontend-pano-ux) ------------------------- #
+
+
+def test_panorama_collage_composes_tiles_and_is_idempotent(tmp_path):
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root, n=4)
+    cache = tmp_path / "localtier"  # collage lives on the LOCAL cache tier
+
+    out = derived.panorama_collage(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert out.is_file()
+    assert out.suffix == ".jpg"
+    # Cached under the local tier's "collage" kind, keyed by rel_key.
+    assert out.is_relative_to(cache / derived.CACHE_DIRNAME / "collage")
+    with Image.open(out) as im:
+        w, h = im.size
+    assert w >= 400 and h >= 300  # a multi-tile grid, bigger than one 400x300 cell
+
+    # Idempotent: a re-call finds the fresh file (mtime pinned to the newest tile)
+    # and returns it without rewriting.
+    mtime1 = out.stat().st_mtime
+    out2 = derived.panorama_collage(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert out2 == out
+    assert out2.stat().st_mtime == mtime1
+
+
+def test_panorama_collage_tolerates_unreadable_tile(tmp_path):
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root, n=3)
+    frames[0].write_bytes(b"not a real image")  # corrupt one tile
+
+    cache = tmp_path / "localtier"
+    out = derived.panorama_collage(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert out.is_file()  # the bad tile leaves a black cell, never aborts
+
+
+def test_panorama_collage_tolerates_missing_tile(tmp_path):
+    # A panorama_frame companion can be gone on disk (rescan keeps that state). The
+    # freshness max() must not raise FileNotFoundError before the per-tile fallback —
+    # the collage still serves a degraded placeholder (regression for the 500 a bare
+    # max(t.stat()...) over a missing tile would have caused).
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root, n=3)
+    frames[0].unlink()  # delete one tile entirely
+
+    cache = tmp_path / "localtier"
+    out = derived.panorama_collage(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert out.is_file()
+
+
+def test_collage_is_a_local_evictable_kind():
+    # The collage is small/hot/regenerable, so it lives on the local tier and the
+    # atime-LRU sweep manages it (unlike the write-once stitch on the proxy tier).
+    assert "collage" in derived._LOCAL_CACHE_KINDS
+
+
 # --- Generation concurrency cap (m-derived-at-scale) ----------------------- #
 
 

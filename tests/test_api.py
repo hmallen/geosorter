@@ -561,6 +561,62 @@ def test_stitch_status_reports_step_progress(tmp_path):
     assert seen["state"] == "running"
 
 
+# --- Instant panorama collage (m-frontend-pano-ux) ------------------------- #
+
+
+def _panorama_collage_cfg(tmp_path):
+    """A panorama with a real primary tile + two frame tiles on disk + companion rows."""
+    library = tmp_path / "library"
+    (library / "P").mkdir(parents=True)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+        cache_dir=tmp_path / "cache",  # collage on the local tier, off the real cache
+    )
+    primary = library / "P" / "PANO_0001.JPG"
+    Image.new("RGB", (200, 150), "green").save(primary, "JPEG")
+    frame_dir = library / "P" / "PANO_0001_frames"
+    frame_dir.mkdir()
+    frames = []
+    for i in (2, 3):
+        f = frame_dir / f"PANO_{i:04d}.JPG"
+        Image.new("RGB", (200, 150), "blue").save(f, "JPEG")
+        frames.append(f)
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    fid = _seed(conn, dest_path=str(primary), filename="PANO_0001.JPG",
+                media_type="photo", status="organized", lat=4.81, lon=-75.68,
+                gps_source="exif", capture_kind="panorama", frame_count=2)
+    for f in frames:
+        conn.execute(
+            "INSERT INTO file_companions(primary_file_id, dest_path, companion_type) "
+            "VALUES (?,?,?)", (fid, str(f), "panorama_frame"),
+        )
+    conn.commit()
+    conn.close()
+    return cfg, fid
+
+
+def test_collage_served_for_panorama(tmp_path):
+    cfg, fid = _panorama_collage_cfg(tmp_path)
+    client = TestClient(api.create_app(cfg))
+    resp = client.get(f"/api/collage/{fid}")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/jpeg")
+
+
+def test_collage_404_for_non_panorama_and_unknown(client_and_lib):
+    client, _ = client_and_lib  # a.JPG (id 1) is a normal photo, not a panorama
+    assert client.get("/api/collage/1").status_code == 404
+    assert client.get("/api/collage/999999").status_code == 404
+
+
 def test_media_db_extension_blocked(client_and_lib):
     # Catalog DBs live outside library_root, but belt-and-suspenders: never serve a
     # .db even if one is somehow under the library.

@@ -12,13 +12,15 @@ Later tasks add ``organize`` / ``verify-library`` etc.
 from __future__ import annotations
 
 import json
+import tempfile
+import time
 from dataclasses import asdict
 from pathlib import Path
 
 import click
 import uvicorn
 
-from . import __version__, api, config, db, geocoder, geonames_loader
+from . import __version__, api, config, db, derived, geocoder, geonames_loader, pathing
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
@@ -404,6 +406,66 @@ def serve(config_path: str | None, host: str | None, port: int) -> None:
         )
     click.echo(f"geosorter serving on http://{bind}:{port}")
     uvicorn.run(api.create_app(cfg), host=bind, port=port)
+
+
+def _strip(dest_path: str) -> str:
+    """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
+    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+
+
+@cli.command(name="stitch-bench")
+@_CONFIG_OPTION
+@click.argument("file_id", type=int)
+def stitch_bench(config_path: str | None, file_id: int) -> None:
+    """Time a panorama stitch at the old 6000x3000 vs new 4000x2000 canvas.
+
+    Runs the REAL Hugin pipeline twice on one organized panorama (cold, into
+    throwaway cache dirs so neither hits a stale cache) and prints both wall-times,
+    so the canvas-size speedup can be measured on real tiles. Requires Hugin
+    installed and the FILE_ID of an organized panorama (see the map UI / index DB).
+    """
+    cfg = config.load(config_path)
+    if derived.find_hugin(cfg.hugin_bin_dir) is None:
+        raise click.ClickException("Hugin CLI tools not found on PATH / hugin_bin_dir.")
+
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    try:
+        row = conn.execute(
+            "SELECT dest_path, capture_kind FROM files WHERE id=?", (file_id,)
+        ).fetchone()
+        if row is None or row[1] != "panorama":
+            raise click.ClickException(f"file_id {file_id} is not an organized panorama.")
+        primary = _strip(row[0])
+        rel_key = pathing.library_rel_key(cfg.library_root, row[0])
+        frames = [
+            _strip(r[0])
+            for r in conn.execute(
+                "SELECT dest_path FROM file_companions "
+                "WHERE primary_file_id=? AND companion_type='panorama_frame' "
+                "ORDER BY dest_path",
+                (file_id,),
+            )
+        ]
+    finally:
+        conn.close()
+
+    click.echo(f"Benchmarking stitch of {Path(primary).name} ({len(frames) + 1} tiles)…")
+    results: dict[str, float] = {}
+    for label, canvas in (("old 6000x3000", "6000x3000"), ("new 4000x2000", "4000x2000")):
+        with tempfile.TemporaryDirectory(prefix="geosorter-bench-") as tmp:
+            started = time.perf_counter()
+            derived.panorama_stitch(
+                tmp, rel_key, primary, frames,
+                hugin_bin_dir=cfg.hugin_bin_dir, canvas=canvas,
+                celeste=cfg.stitch_celeste, optimise_lens=cfg.stitch_optimise_lens,
+            )
+            elapsed = time.perf_counter() - started
+        results[label] = elapsed
+        click.echo(f"  {label}: {elapsed:.1f}s")
+
+    old, new = results["old 6000x3000"], results["new 4000x2000"]
+    if new > 0:
+        click.echo(f"speedup: {old / new:.2f}x faster ({old - new:.1f}s saved)")
 
 
 @cli.command()

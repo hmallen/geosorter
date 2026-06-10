@@ -232,13 +232,29 @@
   background: none;
 }
 
+/* Scroll container for the virtualized thumbnail grid (react-virtual). The grid
+   layout moved to .grid-row so only viewport-visible rows mount/request. */
 .grid {
   overflow-y: auto;
   overflow-x: hidden; /* never a horizontal scrollbar; filenames ellipsis-clamp */
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
   padding: 8px;
+}
+
+/* Spacer sized to the full virtualized height; rows are absolutely positioned
+   within it and translated to their offset. */
+.grid-sizer {
+  position: relative;
+  width: 100%;
+}
+
+/* One virtualized row of `columns` thumbnails (column count set inline). */
+.grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: grid;
+  gap: 6px;
 }
 
 .thumb {

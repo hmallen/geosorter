@@ -13,6 +13,7 @@ The two SQLite databases default to ``platformdirs.user_data_dir("geosorter")``
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,16 @@ spatial_index = 'rtree'
 # unavailable and the map UI keeps the tile gallery (no hard dependency).
 # hugin_bin_dir = 'C:\\Program Files\\Hugin\\bin'
 
+# --- Panorama-stitch tuning (smaller/faster 360 stitch) ---
+# The equirectangular output canvas (WIDTHxHEIGHT). Smaller = fewer output pixels
+# = a faster stitch; the default shrank to 4000x2000 from 6000x3000.
+# stitch_canvas = '4000x2000'
+# cpfind --celeste removes cloud control points (good for skies, but slower). Set
+# false to skip it. autooptimiser -l optimises lens geometry; set the other false
+# to skip it. Both default on (best quality); disable for a faster stitch.
+# stitch_celeste = true
+# stitch_optimise_lens = true
+
 # --- Upload-resilience knobs (sized for a multi-hour, 5-20k-file bulk import) ---
 # Free-space headroom (GB) required over the source bytes before/during a move;
 # a mid-run recheck aborts cleanly before the share fills.
@@ -98,6 +109,12 @@ class Config:
     inference_max_gap_minutes: float = 30.0
     retain_hyperlapse_frames: bool = True
     hugin_bin_dir: Path | None = None
+    # Panorama-stitch tuning (m-frontend-pano-ux): the equirectangular canvas
+    # (smaller = faster) and two opt-out quality steps — cpfind --celeste and
+    # autooptimiser -l. Defaults match derived.STITCH_CANVAS / both steps on.
+    stitch_canvas: str = "4000x2000"
+    stitch_celeste: bool = True
+    stitch_optimise_lens: bool = True
     # Organize-resilience knobs (m-organize-resilience) — sized for a multi-hour,
     # 5–20k-file bulk upload over SMB.
     disk_margin_gb: float = 5.0  # free-space headroom over the source bytes
@@ -195,6 +212,12 @@ def load(path: str | Path | None = None) -> Config:
     if extract_max_failures < 1:
         raise ValueError(f"extract_max_failures must be >= 1: {extract_max_failures!r}")
 
+    stitch_canvas = str(data.get("stitch_canvas", "4000x2000"))
+    if not re.fullmatch(r"\d+x\d+", stitch_canvas):
+        raise ValueError(f"stitch_canvas must be 'WIDTHxHEIGHT' (e.g. '4000x2000'): {stitch_canvas!r}")
+    stitch_celeste = bool(data.get("stitch_celeste", True))
+    stitch_optimise_lens = bool(data.get("stitch_optimise_lens", True))
+
     inbox_path = _opt_path(data.get("inbox_path"))
     library_root = _opt_path(data.get("library_root"))
 
@@ -223,6 +246,9 @@ def load(path: str | Path | None = None) -> Config:
         inference_max_gap_minutes=float(data.get("inference_max_gap_minutes", 30.0)),
         retain_hyperlapse_frames=bool(data.get("retain_hyperlapse_frames", True)),
         hugin_bin_dir=_opt_path(data.get("hugin_bin_dir")),
+        stitch_canvas=stitch_canvas,
+        stitch_celeste=stitch_celeste,
+        stitch_optimise_lens=stitch_optimise_lens,
         disk_margin_gb=disk_margin_gb,
         copy_retry_attempts=copy_retry_attempts,
         copy_retry_backoff_s=copy_retry_backoff_s,

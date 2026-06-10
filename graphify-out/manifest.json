@@ -5,14 +5,14 @@
     "semantic_hash": "75a0286de267d5393020e4439ed72f6a"
   },
   "frontend/package.json": {
-    "mtime": 1780694545.6946256,
-    "ast_hash": "e7345389d3954f90515fa2529eb909ec",
-    "semantic_hash": "e7345389d3954f90515fa2529eb909ec"
+    "mtime": 1781088885.0201716,
+    "ast_hash": "28ed371830b732b62f85da687a04dc73",
+    "semantic_hash": ""
   },
   "frontend/src/App.tsx": {
-    "mtime": 1780694545.695632,
-    "ast_hash": "86d401859ca075cc1705664c430fc3fa",
-    "semantic_hash": "86d401859ca075cc1705664c430fc3fa"
+    "mtime": 1781089942.9550128,
+    "ast_hash": "89e62c2cedd43698b3e8fc6ded15108c",
+    "semantic_hash": ""
   },
   "frontend/src/api.test.ts": {
     "mtime": 1781073318.7364664,
@@ -20,8 +20,8 @@
     "semantic_hash": ""
   },
   "frontend/src/api.ts": {
-    "mtime": 1781073318.7370749,
-    "ast_hash": "1724d437295c0141475e267612cf65ee",
+    "mtime": 1781089788.712891,
+    "ast_hash": "1339fc8caed5bf67ff15de01b70b36b2",
     "semantic_hash": ""
   },
   "frontend/src/basemaps.test.ts": {
@@ -45,9 +45,9 @@
     "semantic_hash": "af3fc8a35e603abfaacf6b1361a40bb2"
   },
   "frontend/src/components/FileListPanel.tsx": {
-    "mtime": 1780694545.696139,
-    "ast_hash": "33b72117490079013e880d4a4e1a3639",
-    "semantic_hash": "33b72117490079013e880d4a4e1a3639"
+    "mtime": 1781090758.1722484,
+    "ast_hash": "3308439eeefa493e9c1c1bb9474c4670",
+    "semantic_hash": ""
   },
   "frontend/src/components/InboxPanel.tsx": {
     "mtime": 1780855259.9302077,
@@ -55,9 +55,9 @@
     "semantic_hash": "2068cc6f7dce6b9d0e633395d1b1d27e"
   },
   "frontend/src/components/Lightbox.tsx": {
-    "mtime": 1780694545.696139,
-    "ast_hash": "ae362ddd79277723225da9d4361d8bda",
-    "semantic_hash": "ae362ddd79277723225da9d4361d8bda"
+    "mtime": 1781089807.3799565,
+    "ast_hash": "8a58aa3b25a500c3bfcd6cbf6d178738",
+    "semantic_hash": ""
   },
   "frontend/src/components/LoadingImage.tsx": {
     "mtime": 1780694545.6971438,
@@ -75,9 +75,9 @@
     "semantic_hash": "8885e7cc4abacdce8ee158c0996c9ec2"
   },
   "frontend/src/components/Toolbar.tsx": {
-    "mtime": 1780855259.930713,
-    "ast_hash": "5edf1592ee51c3db1adb48868dcb3d62",
-    "semantic_hash": "5edf1592ee51c3db1adb48868dcb3d62"
+    "mtime": 1781089936.0081148,
+    "ast_hash": "ee69d05e77295d938b396fc3dc1eceb1",
+    "semantic_hash": ""
   },
   "frontend/src/inboxTree.test.ts": {
     "mtime": 1780674410.6602466,
@@ -240,19 +240,19 @@
     "semantic_hash": "6521a422ed5702c91bdc77fa8adf1b7c"
   },
   "src/geosorter/api.py": {
-    "mtime": 1781073318.811917,
-    "ast_hash": "ae2dc0145e26b6bc0d679e525cac2de8",
+    "mtime": 1781089451.5775378,
+    "ast_hash": "871d912e994565aa280ecc01875fd100",
     "semantic_hash": ""
   },
   "src/geosorter/cli.py": {
-    "mtime": 1780808584.130141,
-    "ast_hash": "910dc240c921d6cf6757b927d91deb14",
-    "semantic_hash": "910dc240c921d6cf6757b927d91deb14"
+    "mtime": 1781089557.8179047,
+    "ast_hash": "58e964283eda1f44afa901de794abacc",
+    "semantic_hash": ""
   },
   "src/geosorter/config.py": {
-    "mtime": 1780920377.1782038,
-    "ast_hash": "08c33e62078218788b0f6f042f3784e8",
-    "semantic_hash": "08c33e62078218788b0f6f042f3784e8"
+    "mtime": 1781089268.733426,
+    "ast_hash": "53c45a77d58988d5c27b01d895d66915",
+    "semantic_hash": ""
   },
   "src/geosorter/db.py": {
     "mtime": 1781073318.8129222,
@@ -260,8 +260,8 @@
     "semantic_hash": ""
   },
   "src/geosorter/derived.py": {
-    "mtime": 1781074903.6934588,
-    "ast_hash": "90e242fae259e797705e87100d5bb023",
+    "mtime": 1781090748.142384,
+    "ast_hash": "32d2a503af8101eae1c5f97006169ebf",
     "semantic_hash": ""
   },
   "src/geosorter/geocoder.py": {
@@ -290,8 +290,8 @@
     "semantic_hash": "0ec78edf0528763b33d8c132088f05a0"
   },
   "src/geosorter/jobs.py": {
-    "mtime": 1781074245.2627478,
-    "ast_hash": "736747aa60fe15fe10f6bccb8b070ae9",
+    "mtime": 1781089302.6432433,
+    "ast_hash": "d2cd8a9e774ce0a584b68e4b9c6766ed",
     "semantic_hash": ""
   },
   "src/geosorter/metadata.py": {
@@ -350,19 +350,19 @@
     "semantic_hash": "0c760b137fd97b1dff8abd5d92a751fc"
   },
   "tests/test_api.py": {
-    "mtime": 1781073318.813955,
-    "ast_hash": "a5897404903c466cb23ca20ee8cc76da",
+    "mtime": 1781089504.4194162,
+    "ast_hash": "a99a0ec19710bbc77f99be30f8d2b34d",
     "semantic_hash": ""
   },
   "tests/test_cli.py": {
-    "mtime": 1780808584.1316528,
-    "ast_hash": "45cb0e2c0152415a15b32e8d8d332143",
-    "semantic_hash": "45cb0e2c0152415a15b32e8d8d332143"
+    "mtime": 1781089606.4918253,
+    "ast_hash": "7bf9393fc0c192aa243dc008f6af4644",
+    "semantic_hash": ""
   },
   "tests/test_config.py": {
-    "mtime": 1780920377.1797428,
-    "ast_hash": "901c6ee1612cedad86f082dfc1410ed9",
-    "semantic_hash": "901c6ee1612cedad86f082dfc1410ed9"
+    "mtime": 1781089208.5757878,
+    "ast_hash": "33b93ab8a05cf53339bf91d3e637d81b",
+    "semantic_hash": ""
   },
   "tests/test_db.py": {
     "mtime": 1780674410.6654303,
@@ -370,8 +370,8 @@
     "semantic_hash": "991334a0b61d970bf765137d672c0e91"
   },
   "tests/test_derived.py": {
-    "mtime": 1781074913.543447,
-    "ast_hash": "41b3687a8fd69f6cf3e9b2263b17876a",
+    "mtime": 1781090768.5678742,
+    "ast_hash": "280650bd33a5f9474dc0820504c567e6",
     "semantic_hash": ""
   },
   "tests/test_geocoder.py": {
@@ -405,8 +405,8 @@
     "semantic_hash": "5c8863bd5da53a2c370b318917ade0ac"
   },
   "tests/test_jobs.py": {
-    "mtime": 1781074080.5946455,
-    "ast_hash": "2a0f4a35e60955f6914d97c6449ce7fe",
+    "mtime": 1781089402.9547849,
+    "ast_hash": "5e8504fae8376f162187d7d3a8274d6b",
     "semantic_hash": ""
   },
   "tests/test_metadata.py": {
@@ -550,7 +550,7 @@
     "semantic_hash": "99b77c1bf5f1155e95e8ba84617ab61a"
   },
   "wiki/pages/phase1-backend-api.md": {
-    "mtime": 1781075853.915127,
+    "mtime": 1781088160.7573187,
     "ast_hash": "9a449936a7bc2c837b3716b7b4745856",
     "semantic_hash": ""
   },
@@ -604,24 +604,9 @@
     "ast_hash": "47344e2be0d7cf3a6c14441158d51e4f",
     "semantic_hash": "47344e2be0d7cf3a6c14441158d51e4f"
   },
-  "src/geosorter/webui/assets/PanoSphere-DTSw3eKh.js": {
-    "mtime": 1781070037.7391498,
-    "ast_hash": "50eea6930dd47592246532be84cb7c59",
-    "semantic_hash": ""
-  },
-  "src/geosorter/webui/assets/index-TYp-9_Qe.js": {
-    "mtime": 1781070037.7391498,
-    "ast_hash": "d7b37a97f2dbf75ddbe0bf7beee08455",
-    "semantic_hash": ""
-  },
-  "src/geosorter/webui/assets/maplibre-gl-DunJu7yp.js": {
-    "mtime": 1781070037.7402072,
-    "ast_hash": "fe636a673cff5f35e35f9e7179008dc1",
-    "semantic_hash": ""
-  },
   "CLAUDE.md": {
-    "mtime": 1781075791.3801012,
-    "ast_hash": "0115b7b129bbafc0c544e6bcd567dcb1",
+    "mtime": 1781091776.3669915,
+    "ast_hash": "68c42ab33c9576e55bcff06bf6c8643e",
     "semantic_hash": ""
   },
   "CLAUDE.sessions.md": {
@@ -635,13 +620,13 @@
     "semantic_hash": ""
   },
   "src/geosorter/CLAUDE.md": {
-    "mtime": 1781075776.7707324,
-    "ast_hash": "45fa5ffe796b5d80c56beed08590b448",
+    "mtime": 1781091727.9012039,
+    "ast_hash": "ebb95f62ca8ce556ccf4a49b4849cbcb",
     "semantic_hash": ""
   },
   "src/geosorter/webui/index.html": {
-    "mtime": 1781070037.7402072,
-    "ast_hash": "2857de002684f933462d33e56c24cbe2",
+    "mtime": 1781090779.5247383,
+    "ast_hash": "ff1bdb725350aec7b23a9fe64bb1afdb",
     "semantic_hash": ""
   },
   "src/geosorter/webui/favicon.svg": {
@@ -665,13 +650,53 @@
     "semantic_hash": ""
   },
   "src/geosorter/warm.py": {
-    "mtime": 1781074192.3509452,
-    "ast_hash": "480f3ef8e8532be782c2f10dd3887301",
+    "mtime": 1781088160.7552843,
+    "ast_hash": "42799c799fc38a6e63a1d356a61e30a8",
     "semantic_hash": ""
   },
   "tests/test_warm.py": {
-    "mtime": 1781074066.7567487,
-    "ast_hash": "39d16a11936abddf7f122ea168d2949b",
+    "mtime": 1781088160.7573187,
+    "ast_hash": "a772998143b001ca92950deef2c28ec9",
+    "semantic_hash": ""
+  },
+  "frontend/src/gridWindow.test.ts": {
+    "mtime": 1781088858.1342432,
+    "ast_hash": "68fa4d81e76e4679f41528d421da143f",
+    "semantic_hash": ""
+  },
+  "frontend/src/gridWindow.ts": {
+    "mtime": 1781088873.6258118,
+    "ast_hash": "4e6bd955becd50df354096c2780b91dc",
+    "semantic_hash": ""
+  },
+  "frontend/src/stitchAllJob.test.ts": {
+    "mtime": 1781089841.5065827,
+    "ast_hash": "0182574e0dfe7825161a2bdebab81650",
+    "semantic_hash": ""
+  },
+  "frontend/src/stitchAllJob.ts": {
+    "mtime": 1781089859.6732528,
+    "ast_hash": "a8bc1ee40301dd48ad326f1767d4e43d",
+    "semantic_hash": ""
+  },
+  "frontend/src/useStitchAll.ts": {
+    "mtime": 1781089902.3619232,
+    "ast_hash": "85ea1935084448bf17edb1bf24c2eb72",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/PanoSphere-ycWHgt4x.js": {
+    "mtime": 1781090779.5236495,
+    "ast_hash": "1abced4864d318538d03853ff13d2094",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/index-D_c0171W.js": {
+    "mtime": 1781090779.52312,
+    "ast_hash": "dbdd26b07bcf052298c196bd554935e7",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/maplibre-gl-ZBJRfSh5.js": {
+    "mtime": 1781090779.5241995,
+    "ast_hash": "74da3f687d502297f92de4605be8d92d",
     "semantic_hash": ""
   }
 }

@@ -2,12 +2,23 @@ import { useEffect, useState } from 'react'
 import { useOrganizeJob } from '../useOrganizeJob'
 import { useUndoJob } from '../useUndoJob'
 import { useRescanJob } from '../useRescanJob'
+import { useStitchAll } from '../useStitchAll'
 import { useInboxCount } from '../useInboxCount'
 import { useInboxList } from '../useInboxList'
 import { progressLabel, loadProgressLabel, resultLabel } from '../organizeJob'
 import InboxPanel from './InboxPanel'
 
-export default function Toolbar({ onDone }: { onDone: () => void }) {
+interface ToolbarProps {
+  onDone: () => void
+  // file_ids of panoramas that still want a stitch (capture_kind panorama, has
+  // tiles, stitch_status !== 'ok'); the "Stitch all" button targets exactly these.
+  stitchTargets: number[]
+  // Reload just the library feed after a stitch-all completes (so finished
+  // panoramas drop out of stitchTargets) without clearing the open selection.
+  onReload: () => void
+}
+
+export default function Toolbar({ onDone, stitchTargets, onReload }: ToolbarProps) {
   const { count, refresh } = useInboxCount()
   // The inbox listing is owned here (Toolbar is alive from app startup) so the scan
   // runs once on mount and the Process Inbox panel opens pre-populated instead of
@@ -30,6 +41,9 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
   const { job, running, total, start } = useOrganizeJob(afterRun)
   const { undo, undoing, startUndo } = useUndoJob(afterRun)
   const { rescan, rescanning, startRescan } = useRescanJob(afterRun)
+  // Stitch-all runs on the independent stitch pool, so it is NOT gated by `busy`
+  // (organize/undo/rescan) — only by its own running flag.
+  const stitchAll = useStitchAll(onReload)
   const busy = running || undoing || rescanning
 
   return (
@@ -59,6 +73,20 @@ export default function Toolbar({ onDone }: { onDone: () => void }) {
       <button onClick={startRescan} disabled={busy}>
         {rescanning ? 'Rescanning…' : 'Rescan Library'}
       </button>
+      {stitchAll.running ? (
+        <span className="job job--progress">
+          <button onClick={stitchAll.cancel}>Cancel stitch-all</button>
+          {stitchAll.progress
+            ? ` stitching ${stitchAll.progress.done}/${stitchAll.progress.total}`
+            : ' stitching…'}
+        </span>
+      ) : (
+        stitchTargets.length > 0 && (
+          <button onClick={() => stitchAll.start(stitchTargets)}>
+            Stitch all panoramas ({stitchTargets.length})
+          </button>
+        )
+      )}
       {job && job.state === 'running' && total !== null && (
         <span className="job job--progress" title={progressLabel(job)}>
           <progress value={Math.min(job.processed, total)} max={total} />
