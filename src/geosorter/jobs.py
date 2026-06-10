@@ -25,6 +25,7 @@ from .organize import run_organize
 from .rescan import run_rescan
 from .retag import retag_file
 from .undo import run_undo
+from .warm import warm_library
 
 logger = logging.getLogger("geosorter.jobs")
 
@@ -132,6 +133,21 @@ class RescanJobState:
 
 
 @dataclass
+class WarmJobState:
+    """Serializable snapshot of one post-organize warm-pass job (m-derived-at-scale)."""
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    batch_id: str | None = None
+    warmed: int = 0  # thumbs/posters generated (or already fresh) for the batch
+    deleted: int = 0  # local-tier cache files evicted at the end
+    skipped: int = 0  # eviction skips (open file on Windows)
+    processed: int = 0  # files seen so far (progress callback ticks)
+    current: str | None = None  # most recent file warmed
+    error: str | None = None
+
+
+@dataclass
 class StitchJobState:
     """Serializable snapshot of one panorama-stitch job's progress (B13)."""
 
@@ -160,23 +176,30 @@ class JobManager:
     """
 
     def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
-                 retag_fn=retag_file, rescan_fn=run_rescan, stitch_fn=panorama_stitch):
+                 retag_fn=retag_file, rescan_fn=run_rescan, stitch_fn=panorama_stitch,
+                 warm_fn=warm_library):
         self._cfg = cfg
         self._organize_fn = organize_fn
         self._undo_fn = undo_fn
         self._retag_fn = retag_fn
         self._rescan_fn = rescan_fn
         self._stitch_fn = stitch_fn
+        self._warm_fn = warm_fn
         self._executor = ThreadPoolExecutor(max_workers=1)
         # A panorama stitch is read-only (~7 min) and strictly off the crash-safe
         # move path, so it gets its OWN single worker: stitches serialize among
         # themselves but never block (or wait behind) organize/undo/retag.
         self._stitch_pool = ThreadPoolExecutor(max_workers=1)
+        # The post-organize warm pass is likewise read-only (regenerates cache only)
+        # and gets its OWN single worker — it runs ALONGSIDE the destructive pool
+        # (auto-triggered right as an organize finishes) without blocking it.
+        self._warm_pool = ThreadPoolExecutor(max_workers=1)
         self._jobs: dict[str, JobState] = {}
         self._undo_jobs: dict[str, UndoJobState] = {}
         self._retag_jobs: dict[str, RetagJobState] = {}
         self._rescan_jobs: dict[str, RescanJobState] = {}
         self._stitch_jobs: dict[str, StitchJobState] = {}
+        self._warm_jobs: dict[str, WarmJobState] = {}
         self._cancels: dict[str, threading.Event] = {}
         # Monotonic start time per organize job, for the bytes-based ETA. Kept off
         # JobState so it never leaks into the serialized status response.
@@ -300,6 +323,19 @@ class JobManager:
             state.error = "; ".join(report.failures) or "aborted"
         else:
             state.state = "done"
+
+        # Warm the just-filed batch's thumbnails/posters on the dedicated warm pool
+        # (off the destructive worker), so the first browse is hot. Best-effort: a
+        # warm-enqueue failure never affects the organize result. Any captures that
+        # landed (even on a cancelled/aborted partial run) are worth warming.
+        if report.batch_id and report.organized > 0:
+            try:
+                self.submit_warm(report.batch_id)
+            except Exception:  # pragma: no cover - defensive; enqueue is local + cheap
+                logger.warning(
+                    "failed to enqueue warm pass for batch %s", report.batch_id,
+                    exc_info=True,
+                )
 
     # ----- undo jobs (share the executor + cancel table with organize) ------- #
 
@@ -544,4 +580,45 @@ class JobManager:
 
         self._mark_stitch_status(file_id, "ok")
         state.status = "ok"
+        state.state = "done"
+
+    # ----- warm-pass jobs (dedicated pool — independent of the destructive one) - #
+
+    def submit_warm(self, batch_id: str) -> str:
+        """Queue a post-organize warm pass for ``batch_id`` and return its id.
+
+        Runs on the dedicated ``_warm_pool`` (independent of the destructive and
+        stitch pools), so it never blocks organize/undo/retag/rescan. Unguarded by
+        :class:`WorkerBusy` — it is read-only cache regeneration.
+        """
+        job_id = uuid.uuid4().hex
+        with self._lock:
+            self._warm_jobs[job_id] = WarmJobState(job_id=job_id, batch_id=batch_id)
+        self._warm_pool.submit(self._run_warm, job_id, batch_id)
+        return job_id
+
+    def warm_status(self, job_id: str) -> WarmJobState | None:
+        """Consistent point-in-time snapshot of a warm job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._warm_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def _run_warm(self, job_id: str, batch_id: str) -> None:
+        state = self._warm_jobs[job_id]
+        state.state = "running"
+
+        def progress(name: str) -> None:
+            state.processed += 1
+            state.current = name
+
+        try:
+            result = self._warm_fn(self._cfg, batch_id, progress=progress)
+        except Exception as exc:  # surface any failure as a job error
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        state.warmed = result.warmed
+        state.deleted = result.eviction.deleted
+        state.skipped = result.eviction.skipped
         state.state = "done"

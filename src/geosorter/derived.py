@@ -24,9 +24,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from stat import S_ISREG
 
 from PIL import Image, ImageOps
 
@@ -35,6 +38,15 @@ logger = logging.getLogger("geosorter.derived")
 THUMB_MAX = 512
 PREVIEW_MAX = 1920
 CACHE_DIRNAME = ".geosorter-cache"
+# Cap on concurrent Pillow/ffmpeg generation (m-derived-at-scale): a cold-browse
+# storm over a 5-20k-file library would otherwise launch one generation per request
+# and saturate CPU/SSD. The semaphore is process-wide (single-process uvicorn, per
+# the brainstorm) and gates ONLY regeneration — a fresh cache hit never acquires it.
+DERIVED_MAX_CONCURRENCY = 4
+_GEN_SEMAPHORE = threading.BoundedSemaphore(DERIVED_MAX_CONCURRENCY)
+# Local-tier kinds the eviction sweep manages (thumbs/previews/posters live on the
+# local SSD cache_dir); proxies/stitch (proxy_cache_dir) are NEVER auto-evicted.
+_LOCAL_CACHE_KINDS = ("thumbs", "previews", "posters")
 # Hard ceiling on a single proxy transcode (a full HEVC->H.264 of a multi-minute 4K
 # clip over SMB is slow, but 30 min only fires on a genuinely stuck process).
 FFMPEG_TIMEOUT_S = 1800
@@ -146,6 +158,21 @@ def _atomic_write(out: Path, produce: Callable[[Path], None]) -> None:
         raise
 
 
+def _generate(out: Path, source: Path, produce: Callable[[Path], None]) -> None:
+    """Produce ``out`` under the shared generation cap, then pin its mtime to source.
+
+    Acquires :data:`_GEN_SEMAPHORE` (capping concurrent Pillow/ffmpeg work) and
+    re-checks freshness *under* the permit, so a request that lost the race to a
+    just-finished generator returns the fresh file instead of redoing the work. The
+    cache-hit fast path in the callers never reaches here, so a hit stays lock-free.
+    """
+    with _GEN_SEMAPHORE:
+        if _is_fresh(out, source):
+            return
+        _atomic_write(out, produce)
+        _touch_to_source(out, source)
+
+
 def _resize_jpeg(cache_root: Path | str, rel_key: str, source: Path, kind: str,
                  max_px: int, quality: int) -> Path:
     """Return a cached downscaled JPEG of an image (long edge <= ``max_px``)."""
@@ -165,8 +192,7 @@ def _resize_jpeg(cache_root: Path | str, rel_key: str, source: Path, kind: str,
             img.thumbnail((max_px, max_px))  # downscale only; never upscales
             img.convert("RGB").save(dest, "JPEG", quality=quality)
 
-    _atomic_write(out, _produce)
-    _touch_to_source(out, source)
+    _generate(out, source, _produce)
     return out
 
 
@@ -186,14 +212,13 @@ def poster(cache_root: Path | str, rel_key: str, source: Path | str) -> Path:
     out = _cache_path(cache_root, rel_key, "posters", ".jpg")
     if _is_fresh(out, source):
         return out
-    _atomic_write(
-        out,
+    _generate(
+        out, source,
         lambda dest: _run_ffmpeg(
             ["ffmpeg", "-v", "error", "-y", "-ss", "0", "-i", str(source),
              "-frames:v", "1", str(dest)]
         ),
     )
-    _touch_to_source(out, source)
     return out
 
 
@@ -209,15 +234,77 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
     out = _cache_path(cache_root, rel_key, "proxies", ".mp4")
     if _is_fresh(out, source):
         return out
-    _atomic_write(
-        out,
+    _generate(
+        out, source,
         lambda dest: _run_ffmpeg(
             ["ffmpeg", "-v", "error", "-y", "-i", str(source),
              "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(dest)]
         ),
     )
-    _touch_to_source(out, source)
     return out
+
+
+@dataclass
+class EvictionResult:
+    """Outcome of one :func:`evict_local_cache` sweep."""
+
+    bytes_before: int
+    bytes_after: int
+    deleted: int
+    skipped: int  # files whose unlink raised (open on Windows) — left in place
+
+
+def evict_local_cache(cache_root: Path | str, max_gb: float) -> EvictionResult:
+    """Atime-sweep the LOCAL derived tier under ``cache_root`` down to ``max_gb``.
+
+    Walks ``thumbs``/``previews``/``posters`` (the local-SSD tier — proxies/stitch on
+    ``proxy_cache_dir`` are deliberately NOT swept) and, while the total exceeds the
+    cap, deletes files least-recently-accessed first (by ``st_atime``). A file whose
+    ``unlink`` raises ``PermissionError``/``OSError`` (open on Windows) is skipped and
+    the sweep continues — eviction is best-effort, never fatal. Returns the byte totals
+    before/after plus the deleted/skipped counts.
+
+    Note: on Windows with last-access updates disabled, ``st_atime`` tracks roughly
+    creation/write time, so the policy degrades to oldest-first — still sound.
+    """
+    base = Path(cache_root) / CACHE_DIRNAME
+    entries: list[tuple[float, int, Path]] = []
+    for kind in _LOCAL_CACHE_KINDS:
+        kind_dir = base / kind
+        if not kind_dir.is_dir():
+            continue
+        for f in kind_dir.rglob("*"):
+            # One guarded stat (not is_file()+stat): a concurrent _atomic_write temp
+            # in a swept dir can be renamed away between listing and stat, which would
+            # otherwise raise FileNotFoundError and abort the whole sweep.
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            if S_ISREG(st.st_mode):
+                entries.append((st.st_atime, st.st_size, f))
+
+    total = sum(size for _, size, _ in entries)
+    before = total
+    cap = int(max_gb * (1 << 30))
+    deleted = skipped = 0
+    if total > cap:
+        entries.sort(key=lambda e: e[0])  # least-recently-accessed first
+        for _atime, size, f in entries:
+            if total <= cap:
+                break
+            try:
+                f.unlink()
+            except FileNotFoundError:
+                total -= size  # already gone (raced) — that space is genuinely freed
+                continue
+            except OSError:  # PermissionError (open on Windows) — still occupies space
+                skipped += 1
+                continue
+            total -= size
+            deleted += 1
+    return EvictionResult(bytes_before=before, bytes_after=total,
+                          deleted=deleted, skipped=skipped)
 
 
 def find_hugin(hugin_bin_dir: Path | str | None = None) -> dict[str, str] | None:
