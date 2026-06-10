@@ -1,17 +1,27 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchLibrary } from './api'
 import type { LibraryFeature } from './types'
 
-// Loads the full /api/library feed once (B6 serves it whole; clustering is client-side).
+// Loads the /api/library feed with ETag/conditional-GET revalidation: the stored
+// ETag is sent as If-None-Match on every reload (after organize/undo/retag/rescan),
+// so an unchanged library returns 304 and the prior features stay visible — no
+// re-parse of the 8-12 MB payload, no blank map while revalidating.
 export function useLibrary() {
   const [features, setFeatures] = useState<LibraryFeature[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const etagRef = useRef<string | null>(null)
 
   const reload = useCallback(() => {
     setLoading(true)
-    fetchLibrary()
-      .then((fc) => { setFeatures(fc.features); setError(null) })
+    fetchLibrary(fetch, etagRef.current)
+      .then((res) => {
+        // 304: keep the existing features (stale-while-revalidate); only replace
+        // them when the server sent a fresh FeatureCollection.
+        if (!res.notModified && res.fc) setFeatures(res.fc.features)
+        etagRef.current = res.etag
+        setError(null)
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
   }, [])

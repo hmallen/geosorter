@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -37,6 +37,61 @@ describe('fetchInbox', () => {
   it('throws on a non-OK response', async () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(fetchInbox(fetchFn)).rejects.toThrow(/inbox fetch failed: 500/)
+  })
+})
+
+describe('fetchLibrary (ETag conditional GET)', () => {
+  it('sends If-None-Match with the prior ETag and returns the new ETag on 200', async () => {
+    let sentHeaders: Record<string, string> | undefined
+    const fetchFn = (async (_url: string, init?: RequestInit) => {
+      sentHeaders = init?.headers as Record<string, string>
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (k: string) => (k.toLowerCase() === 'etag' ? 'W/"lib-3-2"' : null) },
+        json: async () => ({ type: 'FeatureCollection', features: [] }),
+      }
+    }) as unknown as typeof fetch
+    const res = await fetchLibrary(fetchFn, 'W/"lib-1-1"')
+    expect(sentHeaders?.['If-None-Match']).toBe('W/"lib-1-1"')
+    expect(res.notModified).toBe(false)
+    expect(res.etag).toBe('W/"lib-3-2"')
+    expect(res.fc?.features).toEqual([])
+  })
+
+  it('returns notModified on 304 without parsing a body, preserving the prior ETag', async () => {
+    const fetchFn = (async () => ({
+      ok: false,
+      status: 304,
+      headers: { get: () => null },
+      json: async () => { throw new Error('must not parse a 304 body') },
+    })) as unknown as typeof fetch
+    const res = await fetchLibrary(fetchFn, 'W/"lib-1-1"')
+    expect(res.notModified).toBe(true)
+    expect(res.fc).toBeNull()
+    expect(res.etag).toBe('W/"lib-1-1"')
+  })
+
+  it('omits If-None-Match when there is no prior ETag', async () => {
+    let sentHeaders: Record<string, string> | undefined
+    const fetchFn = (async (_url: string, init?: RequestInit) => {
+      sentHeaders = init?.headers as Record<string, string>
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'W/"lib-1-1"' },
+        json: async () => ({ type: 'FeatureCollection', features: [] }),
+      }
+    }) as unknown as typeof fetch
+    await fetchLibrary(fetchFn)
+    expect(sentHeaders?.['If-None-Match']).toBeUndefined()
+  })
+
+  it('throws on a non-OK, non-304 response', async () => {
+    const fetchFn = (async () => ({
+      ok: false, status: 500, headers: { get: () => null },
+    })) as unknown as typeof fetch
+    await expect(fetchLibrary(fetchFn)).rejects.toThrow(/library fetch failed: 500/)
   })
 })
 

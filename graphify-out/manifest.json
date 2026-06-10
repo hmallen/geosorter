@@ -1,0 +1,667 @@
+{
+  "frontend/eslint.config.js": {
+    "mtime": 1780441642.2741299,
+    "ast_hash": "75a0286de267d5393020e4439ed72f6a",
+    "semantic_hash": "75a0286de267d5393020e4439ed72f6a"
+  },
+  "frontend/package.json": {
+    "mtime": 1780694545.6946256,
+    "ast_hash": "e7345389d3954f90515fa2529eb909ec",
+    "semantic_hash": "e7345389d3954f90515fa2529eb909ec"
+  },
+  "frontend/src/App.tsx": {
+    "mtime": 1780694545.695632,
+    "ast_hash": "86d401859ca075cc1705664c430fc3fa",
+    "semantic_hash": "86d401859ca075cc1705664c430fc3fa"
+  },
+  "frontend/src/api.test.ts": {
+    "mtime": 1781070002.0823288,
+    "ast_hash": "e48411296cb77f428bc0afdbe547669c",
+    "semantic_hash": ""
+  },
+  "frontend/src/api.ts": {
+    "mtime": 1781069975.4996161,
+    "ast_hash": "1724d437295c0141475e267612cf65ee",
+    "semantic_hash": ""
+  },
+  "frontend/src/basemaps.test.ts": {
+    "mtime": 1780674410.659239,
+    "ast_hash": "7bb13fc1ab41db5618277022bbf0ef7d",
+    "semantic_hash": "7bb13fc1ab41db5618277022bbf0ef7d"
+  },
+  "frontend/src/basemaps.ts": {
+    "mtime": 1780462298.3952234,
+    "ast_hash": "9d6a5b1d0e7e3350380b9c63e4a77dca",
+    "semantic_hash": "9d6a5b1d0e7e3350380b9c63e4a77dca"
+  },
+  "frontend/src/clusters.test.ts": {
+    "mtime": 1780674410.659239,
+    "ast_hash": "b85617256610d59cd25a033a1f5d23af",
+    "semantic_hash": "b85617256610d59cd25a033a1f5d23af"
+  },
+  "frontend/src/clusters.ts": {
+    "mtime": 1780441682.7341142,
+    "ast_hash": "af3fc8a35e603abfaacf6b1361a40bb2",
+    "semantic_hash": "af3fc8a35e603abfaacf6b1361a40bb2"
+  },
+  "frontend/src/components/FileListPanel.tsx": {
+    "mtime": 1780694545.696139,
+    "ast_hash": "33b72117490079013e880d4a4e1a3639",
+    "semantic_hash": "33b72117490079013e880d4a4e1a3639"
+  },
+  "frontend/src/components/InboxPanel.tsx": {
+    "mtime": 1780855259.9302077,
+    "ast_hash": "2068cc6f7dce6b9d0e633395d1b1d27e",
+    "semantic_hash": "2068cc6f7dce6b9d0e633395d1b1d27e"
+  },
+  "frontend/src/components/Lightbox.tsx": {
+    "mtime": 1780694545.696139,
+    "ast_hash": "ae362ddd79277723225da9d4361d8bda",
+    "semantic_hash": "ae362ddd79277723225da9d4361d8bda"
+  },
+  "frontend/src/components/LoadingImage.tsx": {
+    "mtime": 1780694545.6971438,
+    "ast_hash": "b047b963e0792883367bea91ff53712c",
+    "semantic_hash": "b047b963e0792883367bea91ff53712c"
+  },
+  "frontend/src/components/MapView.tsx": {
+    "mtime": 1780625668.7146366,
+    "ast_hash": "df04824622bd070522db44ba12c95eb5",
+    "semantic_hash": "df04824622bd070522db44ba12c95eb5"
+  },
+  "frontend/src/components/PanoSphere.tsx": {
+    "mtime": 1780694545.6971438,
+    "ast_hash": "8885e7cc4abacdce8ee158c0996c9ec2",
+    "semantic_hash": "8885e7cc4abacdce8ee158c0996c9ec2"
+  },
+  "frontend/src/components/Toolbar.tsx": {
+    "mtime": 1780855259.930713,
+    "ast_hash": "5edf1592ee51c3db1adb48868dcb3d62",
+    "semantic_hash": "5edf1592ee51c3db1adb48868dcb3d62"
+  },
+  "frontend/src/inboxTree.test.ts": {
+    "mtime": 1780674410.6602466,
+    "ast_hash": "a15b1ab3024cdf6dcc57f741c68933a3",
+    "semantic_hash": "a15b1ab3024cdf6dcc57f741c68933a3"
+  },
+  "frontend/src/inboxTree.ts": {
+    "mtime": 1780674410.660756,
+    "ast_hash": "e04f2f8cc240c936c9c16e2aaa7f0673",
+    "semantic_hash": "e04f2f8cc240c936c9c16e2aaa7f0673"
+  },
+  "frontend/src/loadingImage.test.ts": {
+    "mtime": 1780694545.6971438,
+    "ast_hash": "732f2422773e7d1c5f1169cae4fc5940",
+    "semantic_hash": "732f2422773e7d1c5f1169cae4fc5940"
+  },
+  "frontend/src/loadingImage.ts": {
+    "mtime": 1780694545.6976511,
+    "ast_hash": "28844969a476f68d8c1db137659a523e",
+    "semantic_hash": "28844969a476f68d8c1db137659a523e"
+  },
+  "frontend/src/main.tsx": {
+    "mtime": 1780441682.7411673,
+    "ast_hash": "df3369963799e47ef5a77cdca932abf0",
+    "semantic_hash": "df3369963799e47ef5a77cdca932abf0"
+  },
+  "frontend/src/organizeJob.test.ts": {
+    "mtime": 1780674410.660756,
+    "ast_hash": "0a2e770e571ae1b45692e8994b3a1ee6",
+    "semantic_hash": "0a2e770e571ae1b45692e8994b3a1ee6"
+  },
+  "frontend/src/organizeJob.ts": {
+    "mtime": 1780674410.6613698,
+    "ast_hash": "1be088f9a58da4f7489604bdfbc0db69",
+    "semantic_hash": "1be088f9a58da4f7489604bdfbc0db69"
+  },
+  "frontend/src/rescanJob.test.ts": {
+    "mtime": 1780808584.1296315,
+    "ast_hash": "166d17daef4d34448679bad387c1ff14",
+    "semantic_hash": "166d17daef4d34448679bad387c1ff14"
+  },
+  "frontend/src/rescanJob.ts": {
+    "mtime": 1780808584.1296315,
+    "ast_hash": "c5284d8d4ec4c9f7430263e667ae0a69",
+    "semantic_hash": "c5284d8d4ec4c9f7430263e667ae0a69"
+  },
+  "frontend/src/retagJob.test.ts": {
+    "mtime": 1780441682.7529125,
+    "ast_hash": "55390e6b2f41e34779d6655cd5f8f605",
+    "semantic_hash": "55390e6b2f41e34779d6655cd5f8f605"
+  },
+  "frontend/src/retagJob.ts": {
+    "mtime": 1780441682.7565157,
+    "ast_hash": "51a4e73fb466263dc94033f4ef459968",
+    "semantic_hash": "51a4e73fb466263dc94033f4ef459968"
+  },
+  "frontend/src/selection.test.ts": {
+    "mtime": 1780674410.6613698,
+    "ast_hash": "dbdc3bebd9ac46e95016cd9d387d4a98",
+    "semantic_hash": "dbdc3bebd9ac46e95016cd9d387d4a98"
+  },
+  "frontend/src/selection.ts": {
+    "mtime": 1780441682.76334,
+    "ast_hash": "8313b949a6dc8a5ff0e7f4941f6df091",
+    "semantic_hash": "8313b949a6dc8a5ff0e7f4941f6df091"
+  },
+  "frontend/src/stitchJob.test.ts": {
+    "mtime": 1780674410.6613698,
+    "ast_hash": "b54c909e13b72f03ced1d0d36170a331",
+    "semantic_hash": "b54c909e13b72f03ced1d0d36170a331"
+  },
+  "frontend/src/stitchJob.ts": {
+    "mtime": 1780694545.6976511,
+    "ast_hash": "328ca3fad9d2a093ef667ce71f6ca070",
+    "semantic_hash": "328ca3fad9d2a093ef667ce71f6ca070"
+  },
+  "frontend/src/types.ts": {
+    "mtime": 1780674410.6623755,
+    "ast_hash": "872ce5d6c316663cdb9121d6e5ac4012",
+    "semantic_hash": "872ce5d6c316663cdb9121d6e5ac4012"
+  },
+  "frontend/src/undoJob.test.ts": {
+    "mtime": 1780441682.7709265,
+    "ast_hash": "00761725b4bec093df359a5d32647df5",
+    "semantic_hash": "00761725b4bec093df359a5d32647df5"
+  },
+  "frontend/src/undoJob.ts": {
+    "mtime": 1780441682.7750263,
+    "ast_hash": "1d4392cef815f79ca798819666b13e8f",
+    "semantic_hash": "1d4392cef815f79ca798819666b13e8f"
+  },
+  "frontend/src/useInboxCount.ts": {
+    "mtime": 1780441682.7786245,
+    "ast_hash": "85c60e7f4eda3dd990a4a84836d63cc9",
+    "semantic_hash": "85c60e7f4eda3dd990a4a84836d63cc9"
+  },
+  "frontend/src/useInboxList.ts": {
+    "mtime": 1780674410.6623755,
+    "ast_hash": "9da6e0c467678e94bf2e92d4797b4309",
+    "semantic_hash": "9da6e0c467678e94bf2e92d4797b4309"
+  },
+  "frontend/src/useLibrary.ts": {
+    "mtime": 1781069986.3528345,
+    "ast_hash": "2f9f9deb073c36febd25e05a69184b18",
+    "semantic_hash": ""
+  },
+  "frontend/src/useOrganizeJob.ts": {
+    "mtime": 1780674410.6623755,
+    "ast_hash": "ad3db795f1edac41b07830790f2994f3",
+    "semantic_hash": "ad3db795f1edac41b07830790f2994f3"
+  },
+  "frontend/src/useRescanJob.ts": {
+    "mtime": 1780808584.1296315,
+    "ast_hash": "86f078d61722315b38d39e58cfd785ad",
+    "semantic_hash": "86f078d61722315b38d39e58cfd785ad"
+  },
+  "frontend/src/useRetagJob.ts": {
+    "mtime": 1780441682.7887354,
+    "ast_hash": "13347847717a361475aa2e73472f86df",
+    "semantic_hash": "13347847717a361475aa2e73472f86df"
+  },
+  "frontend/src/useStitch.ts": {
+    "mtime": 1780694545.6976511,
+    "ast_hash": "f8b804a8f7ce0e04beb1b58a68d55b7a",
+    "semantic_hash": "f8b804a8f7ce0e04beb1b58a68d55b7a"
+  },
+  "frontend/src/useUndoJob.ts": {
+    "mtime": 1780441682.7927952,
+    "ast_hash": "89f5e1538628abf77d621194b5fe0382",
+    "semantic_hash": "89f5e1538628abf77d621194b5fe0382"
+  },
+  "frontend/tsconfig.app.json": {
+    "mtime": 1780441642.296726,
+    "ast_hash": "4cd9dda3b62ff2a571c2419a75074a39",
+    "semantic_hash": "4cd9dda3b62ff2a571c2419a75074a39"
+  },
+  "frontend/tsconfig.json": {
+    "mtime": 1780441642.2992454,
+    "ast_hash": "852c3a5df14a4b43ac28e9554ebedf4a",
+    "semantic_hash": "852c3a5df14a4b43ac28e9554ebedf4a"
+  },
+  "frontend/tsconfig.node.json": {
+    "mtime": 1780441642.303323,
+    "ast_hash": "1cd4c6b260b0dccbad5bc0a25029f390",
+    "semantic_hash": "1cd4c6b260b0dccbad5bc0a25029f390"
+  },
+  "frontend/vite.config.ts": {
+    "mtime": 1780441642.307357,
+    "ast_hash": "8e06f6bc35427b36e26a09c0d417231d",
+    "semantic_hash": "8e06f6bc35427b36e26a09c0d417231d"
+  },
+  "frontend/vitest.config.ts": {
+    "mtime": 1780441642.31356,
+    "ast_hash": "0fb42f9158bba78f79066b65132b936d",
+    "semantic_hash": "0fb42f9158bba78f79066b65132b936d"
+  },
+  "src/geosorter/__init__.py": {
+    "mtime": 1780441682.9162717,
+    "ast_hash": "6521a422ed5702c91bdc77fa8adf1b7c",
+    "semantic_hash": "6521a422ed5702c91bdc77fa8adf1b7c"
+  },
+  "src/geosorter/api.py": {
+    "mtime": 1781070509.8059344,
+    "ast_hash": "ae2dc0145e26b6bc0d679e525cac2de8",
+    "semantic_hash": ""
+  },
+  "src/geosorter/cli.py": {
+    "mtime": 1780808584.130141,
+    "ast_hash": "910dc240c921d6cf6757b927d91deb14",
+    "semantic_hash": "910dc240c921d6cf6757b927d91deb14"
+  },
+  "src/geosorter/config.py": {
+    "mtime": 1780920377.1782038,
+    "ast_hash": "08c33e62078218788b0f6f042f3784e8",
+    "semantic_hash": "08c33e62078218788b0f6f042f3784e8"
+  },
+  "src/geosorter/db.py": {
+    "mtime": 1781069866.5386133,
+    "ast_hash": "a027ed705d7a301b52ce67b808a632b7",
+    "semantic_hash": ""
+  },
+  "src/geosorter/derived.py": {
+    "mtime": 1781069859.4999468,
+    "ast_hash": "74bda837f7755924f977ec4e458008a3",
+    "semantic_hash": ""
+  },
+  "src/geosorter/geocoder.py": {
+    "mtime": 1780441682.8597753,
+    "ast_hash": "5eb9a67c672828b8826918d5c45ec96e",
+    "semantic_hash": "5eb9a67c672828b8826918d5c45ec96e"
+  },
+  "src/geosorter/geonames_loader.py": {
+    "mtime": 1780441682.8628018,
+    "ast_hash": "fe3865ef7e5616c3e43411d9abaa5a1d",
+    "semantic_hash": "fe3865ef7e5616c3e43411d9abaa5a1d"
+  },
+  "src/geosorter/grouping.py": {
+    "mtime": 1780625668.7146366,
+    "ast_hash": "23c099d8f0d347760db4f1339d018aed",
+    "semantic_hash": "23c099d8f0d347760db4f1339d018aed"
+  },
+  "src/geosorter/inbox.py": {
+    "mtime": 1780674410.663916,
+    "ast_hash": "2175e2068ac03b44d4af2074e440e98b",
+    "semantic_hash": "2175e2068ac03b44d4af2074e440e98b"
+  },
+  "src/geosorter/inference.py": {
+    "mtime": 1780441682.8750863,
+    "ast_hash": "0ec78edf0528763b33d8c132088f05a0",
+    "semantic_hash": "0ec78edf0528763b33d8c132088f05a0"
+  },
+  "src/geosorter/jobs.py": {
+    "mtime": 1780920377.179237,
+    "ast_hash": "4aa3c2888bd9956ce0abde644dd5dffc",
+    "semantic_hash": "4aa3c2888bd9956ce0abde644dd5dffc"
+  },
+  "src/geosorter/metadata.py": {
+    "mtime": 1780441682.8832338,
+    "ast_hash": "37b435127505a8585096b850b14d71a6",
+    "semantic_hash": "37b435127505a8585096b850b14d71a6"
+  },
+  "src/geosorter/misc_parser.py": {
+    "mtime": 1780627290.4078972,
+    "ast_hash": "80c40d3fe18d66056c1f2385b27cf76e",
+    "semantic_hash": "80c40d3fe18d66056c1f2385b27cf76e"
+  },
+  "src/geosorter/move_engine.py": {
+    "mtime": 1780910007.4738429,
+    "ast_hash": "46acff99aa01fcbab0ce2383585ded08",
+    "semantic_hash": "46acff99aa01fcbab0ce2383585ded08"
+  },
+  "src/geosorter/organize.py": {
+    "mtime": 1780910007.4743538,
+    "ast_hash": "491f19bfdb40328905e5cad725622362",
+    "semantic_hash": "491f19bfdb40328905e5cad725622362"
+  },
+  "src/geosorter/pathing.py": {
+    "mtime": 1780920377.179237,
+    "ast_hash": "a4c6be719f196c0561207ca3060c9cd0",
+    "semantic_hash": "a4c6be719f196c0561207ca3060c9cd0"
+  },
+  "src/geosorter/rescan.py": {
+    "mtime": 1780808584.131146,
+    "ast_hash": "ef7434c5a7e0c78ed047f6708cfeb65d",
+    "semantic_hash": "ef7434c5a7e0c78ed047f6708cfeb65d"
+  },
+  "src/geosorter/retag.py": {
+    "mtime": 1780441682.899344,
+    "ast_hash": "3e149011485685be393b68d02b671a94",
+    "semantic_hash": "3e149011485685be393b68d02b671a94"
+  },
+  "src/geosorter/srt_parser.py": {
+    "mtime": 1780441682.903028,
+    "ast_hash": "0f7569de45087e70daaafdc9113c5cd3",
+    "semantic_hash": "0f7569de45087e70daaafdc9113c5cd3"
+  },
+  "src/geosorter/tz_resolver.py": {
+    "mtime": 1780441682.9086094,
+    "ast_hash": "f9236703b3f6f58346ab9c87263f9dc2",
+    "semantic_hash": "f9236703b3f6f58346ab9c87263f9dc2"
+  },
+  "src/geosorter/undo.py": {
+    "mtime": 1780441682.9132216,
+    "ast_hash": "7665e09c079e0d51154a01f0bb056673",
+    "semantic_hash": "7665e09c079e0d51154a01f0bb056673"
+  },
+  "tests/conftest.py": {
+    "mtime": 1780441683.5042026,
+    "ast_hash": "0c760b137fd97b1dff8abd5d92a751fc",
+    "semantic_hash": "0c760b137fd97b1dff8abd5d92a751fc"
+  },
+  "tests/test_api.py": {
+    "mtime": 1781070519.4132888,
+    "ast_hash": "a5897404903c466cb23ca20ee8cc76da",
+    "semantic_hash": ""
+  },
+  "tests/test_cli.py": {
+    "mtime": 1780808584.1316528,
+    "ast_hash": "45cb0e2c0152415a15b32e8d8d332143",
+    "semantic_hash": "45cb0e2c0152415a15b32e8d8d332143"
+  },
+  "tests/test_config.py": {
+    "mtime": 1780920377.1797428,
+    "ast_hash": "901c6ee1612cedad86f082dfc1410ed9",
+    "semantic_hash": "901c6ee1612cedad86f082dfc1410ed9"
+  },
+  "tests/test_db.py": {
+    "mtime": 1780674410.6654303,
+    "ast_hash": "991334a0b61d970bf765137d672c0e91",
+    "semantic_hash": "991334a0b61d970bf765137d672c0e91"
+  },
+  "tests/test_derived.py": {
+    "mtime": 1781069935.7162793,
+    "ast_hash": "0cd1f893f2a65612396707b026c8e0b5",
+    "semantic_hash": ""
+  },
+  "tests/test_geocoder.py": {
+    "mtime": 1780441683.5311413,
+    "ast_hash": "2c30211516b7e6730db19eb1bd8d3230",
+    "semantic_hash": "2c30211516b7e6730db19eb1bd8d3230"
+  },
+  "tests/test_geonames_loader.py": {
+    "mtime": 1780441683.5346727,
+    "ast_hash": "72f0a6cd99548b1370576f7bbb406bbf",
+    "semantic_hash": "72f0a6cd99548b1370576f7bbb406bbf"
+  },
+  "tests/test_grouping.py": {
+    "mtime": 1780462298.3962274,
+    "ast_hash": "52db75c151b267b65772bf12e8bd0e5f",
+    "semantic_hash": "52db75c151b267b65772bf12e8bd0e5f"
+  },
+  "tests/test_grouping_prescan.py": {
+    "mtime": 1780625668.7166543,
+    "ast_hash": "c19d6d4bdc60496534b076a7ed3fd705",
+    "semantic_hash": "c19d6d4bdc60496534b076a7ed3fd705"
+  },
+  "tests/test_inbox.py": {
+    "mtime": 1780674410.6664357,
+    "ast_hash": "5570aa52708d56c38b5c74322d093e48",
+    "semantic_hash": "5570aa52708d56c38b5c74322d093e48"
+  },
+  "tests/test_inference.py": {
+    "mtime": 1780441683.5478292,
+    "ast_hash": "5c8863bd5da53a2c370b318917ade0ac",
+    "semantic_hash": "5c8863bd5da53a2c370b318917ade0ac"
+  },
+  "tests/test_jobs.py": {
+    "mtime": 1780920377.1807487,
+    "ast_hash": "b13cc3fba3e5e3f485515da356fb6b96",
+    "semantic_hash": "b13cc3fba3e5e3f485515da356fb6b96"
+  },
+  "tests/test_metadata.py": {
+    "mtime": 1780441683.5559254,
+    "ast_hash": "2e5389079ed804173e9191f242d6fc95",
+    "semantic_hash": "2e5389079ed804173e9191f242d6fc95"
+  },
+  "tests/test_misc_parser.py": {
+    "mtime": 1780627290.4094083,
+    "ast_hash": "fe82a2678c8c31c6b0840e8514438464",
+    "semantic_hash": "fe82a2678c8c31c6b0840e8514438464"
+  },
+  "tests/test_move_engine.py": {
+    "mtime": 1780910007.4764178,
+    "ast_hash": "5a002dbcd109b0fcfd5e481ea8917486",
+    "semantic_hash": "5a002dbcd109b0fcfd5e481ea8917486"
+  },
+  "tests/test_organize.py": {
+    "mtime": 1780910007.4764698,
+    "ast_hash": "0dcc108e8353b331b9f715fc1ab3fb8b",
+    "semantic_hash": "0dcc108e8353b331b9f715fc1ab3fb8b"
+  },
+  "tests/test_pathing.py": {
+    "mtime": 1780920377.181256,
+    "ast_hash": "74e8abdc5dfd1d96e74cee74aceae952",
+    "semantic_hash": "74e8abdc5dfd1d96e74cee74aceae952"
+  },
+  "tests/test_rescan.py": {
+    "mtime": 1780808584.1326585,
+    "ast_hash": "566982e4b36dab601fc05888f3144788",
+    "semantic_hash": "566982e4b36dab601fc05888f3144788"
+  },
+  "tests/test_retag.py": {
+    "mtime": 1780441683.5711298,
+    "ast_hash": "9f6e34ed70e7a5b394e44e1704d1ef98",
+    "semantic_hash": "9f6e34ed70e7a5b394e44e1704d1ef98"
+  },
+  "tests/test_srt_parser.py": {
+    "mtime": 1780441683.5752277,
+    "ast_hash": "8062a3ea4398877b3de250be73194944",
+    "semantic_hash": "8062a3ea4398877b3de250be73194944"
+  },
+  "tests/test_tz_resolver.py": {
+    "mtime": 1780441683.579253,
+    "ast_hash": "891c44843f18f7018d10f92b4860c0b4",
+    "semantic_hash": "891c44843f18f7018d10f92b4860c0b4"
+  },
+  "tests/test_undo.py": {
+    "mtime": 1780627290.4094083,
+    "ast_hash": "e2cd4522b8cf657d12366e7fc6bddf70",
+    "semantic_hash": "e2cd4522b8cf657d12366e7fc6bddf70"
+  },
+  "README.md": {
+    "mtime": 1780441597.3138638,
+    "ast_hash": "9ccbf3d3a8f2b43ba30515362519f0c0",
+    "semantic_hash": "9ccbf3d3a8f2b43ba30515362519f0c0"
+  },
+  "docs/brainstorm-results/dji-media-organizer.md": {
+    "mtime": 1780441642.2604785,
+    "ast_hash": "9c0a2e000b7ef32458cebe184dafb9d9",
+    "semantic_hash": "9c0a2e000b7ef32458cebe184dafb9d9"
+  },
+  "docs/brainstorm-results/dji-special-captures.md": {
+    "mtime": 1780674410.6577244,
+    "ast_hash": "ccdd4d4b0af0bf5c456a111c2a2955e1",
+    "semantic_hash": "ccdd4d4b0af0bf5c456a111c2a2955e1"
+  },
+  "docs/brainstorm-results/media-loading-performance.md": {
+    "mtime": 1780902931.9842548,
+    "ast_hash": "07476152910d9dd48e55934cde07cccb",
+    "semantic_hash": "07476152910d9dd48e55934cde07cccb"
+  },
+  "frontend/README.md": {
+    "mtime": 1780441642.2921388,
+    "ast_hash": "c127cfef2f4b69229edd40d034b0045d",
+    "semantic_hash": "c127cfef2f4b69229edd40d034b0045d"
+  },
+  "frontend/index.html": {
+    "mtime": 1780441642.2793884,
+    "ast_hash": "898fe11f49d1569c5bf94a7ad55182a0",
+    "semantic_hash": "898fe11f49d1569c5bf94a7ad55182a0"
+  },
+  "tests/fixtures/geonames/admin1CodesASCII.txt": {
+    "mtime": 1780441683.593053,
+    "ast_hash": "cfd3261a88de43b5493df5af6dbc5145",
+    "semantic_hash": "cfd3261a88de43b5493df5af6dbc5145"
+  },
+  "tests/fixtures/geonames/admin2Codes.txt": {
+    "mtime": 1780441683.5965848,
+    "ast_hash": "72c0855d27aaf5dbae8b33c3750f5da2",
+    "semantic_hash": "72c0855d27aaf5dbae8b33c3750f5da2"
+  },
+  "tests/fixtures/geonames/allCountries_sample.txt": {
+    "mtime": 1780441683.601111,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": "eed4f090dcf41ac4e51700e487046846"
+  },
+  "tests/fixtures/geonames/cities500.txt": {
+    "mtime": 1780441683.6056585,
+    "ast_hash": "46aec7a2eee2a5a27fab2823e62e7311",
+    "semantic_hash": "46aec7a2eee2a5a27fab2823e62e7311"
+  },
+  "tests/fixtures/geonames/countryInfo.txt": {
+    "mtime": 1780441683.6092358,
+    "ast_hash": "14bbac73e709dcbb78e5ed8b015da0b5",
+    "semantic_hash": "14bbac73e709dcbb78e5ed8b015da0b5"
+  },
+  "wiki/index.md": {
+    "mtime": 1780674410.6669433,
+    "ast_hash": "0eabc074bb4d34390e661d67e8fb3d61",
+    "semantic_hash": "0eabc074bb4d34390e661d67e8fb3d61"
+  },
+  "wiki/log.md": {
+    "mtime": 1780674410.6680417,
+    "ast_hash": "3ee0af2fd0f1bb471940f40a0553a609",
+    "semantic_hash": "3ee0af2fd0f1bb471940f40a0553a609"
+  },
+  "wiki/pages/capture-time-and-geocoding.md": {
+    "mtime": 1780441686.1869123,
+    "ast_hash": "e61ff5da9efcacd73bdd57c4d50af99f",
+    "semantic_hash": "e61ff5da9efcacd73bdd57c4d50af99f"
+  },
+  "wiki/pages/crash-safe-move-engine.md": {
+    "mtime": 1780441686.190956,
+    "ast_hash": "50cc7d4e61f2315668e83c57bac3ce19",
+    "semantic_hash": "50cc7d4e61f2315668e83c57bac3ce19"
+  },
+  "wiki/pages/dji-misc-catalog.md": {
+    "mtime": 1780627290.4109192,
+    "ast_hash": "953f5d5c1038c5e7b53c928d9a5a83bd",
+    "semantic_hash": "953f5d5c1038c5e7b53c928d9a5a83bd"
+  },
+  "wiki/pages/dji-panorama-stitching.md": {
+    "mtime": 1780674410.6680417,
+    "ast_hash": "388d81c5324481c98f39e6e82c751092",
+    "semantic_hash": "388d81c5324481c98f39e6e82c751092"
+  },
+  "wiki/pages/dji-srt-telemetry-formats.md": {
+    "mtime": 1780441686.1946163,
+    "ast_hash": "99b77c1bf5f1155e95e8ba84617ab61a",
+    "semantic_hash": "99b77c1bf5f1155e95e8ba84617ab61a"
+  },
+  "wiki/pages/phase1-backend-api.md": {
+    "mtime": 1781071522.4402988,
+    "ast_hash": "4f5abab529c535a735d0942d81bdb376",
+    "semantic_hash": ""
+  },
+  "wiki/raw/README.md": {
+    "mtime": 1780441686.2058198,
+    "ast_hash": "9cb802d8930ee154821614abc0f1e265",
+    "semantic_hash": "9cb802d8930ee154821614abc0f1e265"
+  },
+  "wiki/schema.md": {
+    "mtime": 1780441686.1797333,
+    "ast_hash": "37d48913f3fe147c2fa1775d6b6b7653",
+    "semantic_hash": "37d48913f3fe147c2fa1775d6b6b7653"
+  },
+  "frontend/public/favicon.svg": {
+    "mtime": 1780441682.697482,
+    "ast_hash": "7e840862161341271697daa99a40d76b",
+    "semantic_hash": "7e840862161341271697daa99a40d76b"
+  },
+  "frontend/public/icons.svg": {
+    "mtime": 1780441682.70254,
+    "ast_hash": "21c7473c592c67dc87223d49892c8f0a",
+    "semantic_hash": "21c7473c592c67dc87223d49892c8f0a"
+  },
+  "frontend/src/assets/hero.png": {
+    "mtime": 1780441682.7990682,
+    "ast_hash": "aead493361b27e7510691c5d7072dfc1",
+    "semantic_hash": "aead493361b27e7510691c5d7072dfc1"
+  },
+  "frontend/src/assets/react.svg": {
+    "mtime": 1780441682.8036025,
+    "ast_hash": "f0402b67b6ce880f65666bb49e841696",
+    "semantic_hash": "f0402b67b6ce880f65666bb49e841696"
+  },
+  "frontend/src/assets/vite.svg": {
+    "mtime": 1780441682.806625,
+    "ast_hash": "6d5180a782d64c8cf51ba01c2a2184d8",
+    "semantic_hash": "6d5180a782d64c8cf51ba01c2a2184d8"
+  },
+  "tests/fixtures/media/dji_photo.jpg": {
+    "mtime": 1780441683.6178253,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": "d0f412096feded79db9b7ea33c5ab8a9"
+  },
+  "tests/fixtures/media/h264_tiny.mp4": {
+    "mtime": 1780441683.6213834,
+    "ast_hash": "c606f136fe553d9f618a6068c345f4a0",
+    "semantic_hash": "c606f136fe553d9f618a6068c345f4a0"
+  },
+  "tests/fixtures/media/h265_tiny.mp4": {
+    "mtime": 1780441683.6255238,
+    "ast_hash": "47344e2be0d7cf3a6c14441158d51e4f",
+    "semantic_hash": "47344e2be0d7cf3a6c14441158d51e4f"
+  },
+  "src/geosorter/webui/assets/PanoSphere-DTSw3eKh.js": {
+    "mtime": 1781070037.7391498,
+    "ast_hash": "50eea6930dd47592246532be84cb7c59",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/index-TYp-9_Qe.js": {
+    "mtime": 1781070037.7391498,
+    "ast_hash": "d7b37a97f2dbf75ddbe0bf7beee08455",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/maplibre-gl-DunJu7yp.js": {
+    "mtime": 1781070037.7402072,
+    "ast_hash": "fe636a673cff5f35e35f9e7179008dc1",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1781071372.4202979,
+    "ast_hash": "d3c0af8abcee2cb4de7eef69dcd1d8c5",
+    "semantic_hash": ""
+  },
+  "CLAUDE.sessions.md": {
+    "mtime": 1780441597.2935638,
+    "ast_hash": "e60a5211bda7dc50ddb8f893353a4ff4",
+    "semantic_hash": ""
+  },
+  "CLAUDE.wiki.md": {
+    "mtime": 1780441597.2970934,
+    "ast_hash": "2189288de1147decc379984c29c1e8db",
+    "semantic_hash": ""
+  },
+  "src/geosorter/CLAUDE.md": {
+    "mtime": 1781071352.216756,
+    "ast_hash": "1da9eae12c37c113d311ad8cfac0d4b3",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/index.html": {
+    "mtime": 1781070037.7402072,
+    "ast_hash": "2857de002684f933462d33e56c24cbe2",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/favicon.svg": {
+    "mtime": 1780441682.697482,
+    "ast_hash": "7e840862161341271697daa99a40d76b",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/icons.svg": {
+    "mtime": 1780441682.70254,
+    "ast_hash": "21c7473c592c67dc87223d49892c8f0a",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/media/local/dji_h264_gps.mp4": {
+    "mtime": 1780441685.906119,
+    "ast_hash": "ccbc9be4fcc3e558d6085c94df928772",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/media/local/dji_h265_nogps.mp4": {
+    "mtime": 1780441686.0414643,
+    "ast_hash": "111c8bc2e9031d7dfa896d670a999844",
+    "semantic_hash": ""
+  }
+}

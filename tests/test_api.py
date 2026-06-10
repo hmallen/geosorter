@@ -181,6 +181,125 @@ def test_library_exposes_gps_source(client_and_lib):
     assert by_name["b.JPG"]["gps_source"] == "inferred"
 
 
+def test_library_is_gzipped_for_accepting_client(client_and_lib):
+    # The /api/library JSON is gzip-compressed when the client accepts it (the
+    # video route stays untouched — gzip is scoped to this route, not a global
+    # middleware). httpx transparently decodes, so .json() still parses.
+    client, _ = client_and_lib
+    resp = client.get("/api/library", headers={"Accept-Encoding": "gzip"})
+    assert resp.status_code == 200
+    assert resp.headers.get("content-encoding") == "gzip"
+    assert resp.json()["type"] == "FeatureCollection"
+
+
+def _library_client(tmp_path):
+    """A client plus its index-DB path, so a test can mutate rows mid-session."""
+    library = tmp_path / "library"
+    library.mkdir()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+        cache_dir=tmp_path / "cache",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    _seed(conn, dest_path=str(library / "A" / "a.JPG"), filename="a.JPG",
+          media_type="photo", status="organized", lat=40.0, lon=-105.0)
+    conn.commit()
+    conn.close()
+    return TestClient(api.create_app(cfg)), index_db, library
+
+
+def test_library_conditional_get_304_then_200(tmp_path):
+    # An unchanged library answers If-None-Match with 304 (no body); inserting a
+    # new geolocated row changes the ETag (keyed on MAX(id)+COUNT(*)) -> 200.
+    client, index_db, library = _library_client(tmp_path)
+    first = client.get("/api/library")
+    etag = first.headers["etag"]
+    assert etag and first.headers.get("last-modified")
+
+    cached = client.get("/api/library", headers={"If-None-Match": etag})
+    assert cached.status_code == 304
+    assert cached.content == b""
+    assert cached.headers["etag"] == etag
+
+    conn = db.connect(index_db, integrity_check=False)
+    _seed(conn, dest_path=str(library / "C" / "c.JPG"), filename="c.JPG",
+          media_type="photo", status="organized", lat=42.0, lon=-107.0)
+    conn.commit()
+    conn.close()
+
+    changed = client.get("/api/library", headers={"If-None-Match": etag})
+    assert changed.status_code == 200
+    assert changed.headers["etag"] != etag
+    assert len(changed.json()["features"]) == 2
+
+
+def test_library_etag_changes_on_in_place_update(tmp_path):
+    # MAX(id)+COUNT(*) alone misses in-place row UPDATEs (retag moves lat/lon;
+    # stitch flips stitch_status) — both leave id/count unchanged. The ETag folds
+    # in lat/lon + stitch-status signals so a retag/stitch reload gets 200 (fresh
+    # marker), not a stale 304.
+    client, index_db, library = _library_client(tmp_path)
+    etag1 = client.get("/api/library").headers["etag"]
+
+    conn = db.connect(index_db, integrity_check=False)
+    conn.execute("UPDATE files SET lat=?, lon=? WHERE filename='a.JPG'", (50.0, 5.0))
+    conn.commit()
+    conn.close()
+    moved = client.get("/api/library", headers={"If-None-Match": etag1})
+    assert moved.status_code == 200  # retag-style move is NOT a 304
+    etag2 = moved.headers["etag"]
+    assert etag2 != etag1
+    assert moved.json()["features"][0]["geometry"]["coordinates"] == [5.0, 50.0]
+
+    conn = db.connect(index_db, integrity_check=False)
+    conn.execute("UPDATE files SET stitch_status='ok' WHERE filename='a.JPG'")
+    conn.commit()
+    conn.close()
+    stitched = client.get("/api/library", headers={"If-None-Match": etag2})
+    assert stitched.status_code == 200  # stitch_status flip is NOT a 304
+    assert stitched.headers["etag"] != etag2
+
+
+def test_video_codec_lookup_handles_long_path_prefix(tmp_path):
+    # _lookup_codec resolves the codec by an indexed dest_path equality, matching
+    # the stored Windows \\?\ long-path form (production) as well as the plain form.
+    library = tmp_path / "library"
+    (library / "clips").mkdir(parents=True)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+        cache_dir=tmp_path / "cache",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    _seed(conn, dest_path="\\\\?\\" + str(library / "clips" / "v.mp4"),
+          filename="v.mp4", media_type="video", status="organized",
+          lat=42.0, lon=-107.0, codec="h265")
+    conn.commit()
+    conn.close()
+    shutil.copy(MEDIA / "h265_tiny.mp4", library / "clips" / "v.mp4")
+    client = TestClient(api.create_app(cfg))
+    resp = client.get("/api/video/clips/v.mp4")
+    assert resp.status_code == 200
+    out = tmp_path / "served.mp4"
+    out.write_bytes(resp.content)
+    assert _probe_codec(out) == "h264"  # HEVC source -> proxy via indexed codec lookup
+
+
 def _hyperlapse_client(tmp_path):
     """A client whose library holds one hyperlapse render + 3 frame companions."""
     library = tmp_path / "library"

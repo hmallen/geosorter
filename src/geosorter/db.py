@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_files_geonameid ON files(geonameid);
 CREATE INDEX IF NOT EXISTS idx_files_local_date ON files(local_date);
 CREATE INDEX IF NOT EXISTS idx_files_latlon ON files(lat, lon);
 CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256);
+CREATE INDEX IF NOT EXISTS idx_files_status_latlon ON files(status, lat, lon);
 
 CREATE TABLE IF NOT EXISTS file_companions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -33,14 +33,18 @@ loopback interface unless the operator explicitly opts in via ``--host``.
 
 from __future__ import annotations
 
+import gzip
+import json
 import logging
 import sqlite3
 from dataclasses import asdict
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from . import config, db, derived, inbox, pathing
@@ -111,6 +115,25 @@ class RetagRequest(BaseModel):
 def _strip(dest_path: str) -> str:
     """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
     return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    """RFC 7232 ``If-None-Match`` membership test (handles a list and ``*``)."""
+    candidates = [tok.strip() for tok in if_none_match.split(",")]
+    return "*" in candidates or etag in candidates
+
+
+def _http_date(sqlite_ts: str | None) -> str | None:
+    """Format a SQLite ``datetime('now')`` (UTC, ``YYYY-MM-DD HH:MM:SS``) as an HTTP date.
+
+    Returns ``None`` if the value is missing/unparseable so ``Last-Modified`` is
+    simply omitted rather than wrong.
+    """
+    try:
+        dt = datetime.strptime(sqlite_ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+    return format_datetime(dt, usegmt=True)
 
 
 def _relpath(dest_path: str, *roots: Path) -> str:
@@ -196,9 +219,38 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         return conn
 
     @app.get("/api/library")
-    def library() -> dict:
+    def library(request: Request) -> Response:
+        # Cheap version probe first (rows found via idx_files_status_latlon): an
+        # unchanged library answers If-None-Match with 304 BEFORE building the
+        # 8-12 MB feature list. MAX(id)+COUNT(*) flips on any add/prune, but the
+        # in-place UPDATEs (retag.py moves lat/lon; jobs._mark_stitch_status flips
+        # stitch_status) leave both unchanged — so the key also folds in a
+        # microdegree sum of lat/lon (any retag moves the coordinate) and a
+        # stitch-status code sum, or a retag/stitch reload would wrongly 304 and
+        # the map would keep the stale marker.
         conn = _index()
         try:
+            ver = conn.execute(
+                "SELECT MAX(id), COUNT(*), MAX(created_at), "
+                "CAST(total(lat) * 1000000 AS INTEGER), "
+                "CAST(total(lon) * 1000000 AS INTEGER), "
+                "CAST(total(CASE stitch_status WHEN 'pending' THEN 1 "
+                "WHEN 'ok' THEN 2 WHEN 'failed' THEN 3 ELSE 0 END) AS INTEGER) "
+                "FROM files "
+                "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
+            ).fetchone()
+            max_id, count, max_created = (ver[0] or 0), ver[1], ver[2]
+            etag = f'W/"lib-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}"'
+            inm = request.headers.get("if-none-match")
+            if inm is not None and _etag_matches(inm, etag):
+                return Response(
+                    status_code=304,
+                    headers={
+                        "ETag": etag,
+                        "Cache-Control": "no-cache",
+                        "Vary": "Accept-Encoding",
+                    },
+                )
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, media_type, codec, "
                 "gps_source, capture_kind, frame_count, star_rating, stitch_status, "
@@ -228,7 +280,24 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             }
             for r in rows
         ]
-        return {"type": "FeatureCollection", "features": features}
+        body = json.dumps(
+            {"type": "FeatureCollection", "features": features}
+        ).encode("utf-8")
+        headers = {
+            "ETag": etag,
+            "Cache-Control": "no-cache",  # always revalidate (send If-None-Match)
+            "Vary": "Accept-Encoding",
+        }
+        last_modified = _http_date(max_created)
+        if last_modified is not None:
+            headers["Last-Modified"] = last_modified
+        # GZip scoped to THIS route only (8-12 MB -> ~1-2 MB at 20k); a global
+        # GZipMiddleware would also compress the video FileResponse and break HTTP
+        # Range seeking, so the JSON feed compresses itself here instead.
+        if "gzip" in request.headers.get("accept-encoding", "").lower():
+            body = gzip.compress(body)
+            headers["Content-Encoding"] = "gzip"
+        return Response(content=body, media_type="application/json", headers=headers)
 
     @app.get("/api/frames/{file_id}")
     def frames(file_id: int) -> dict:
@@ -388,16 +457,22 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         return FileResponse(_safe_cache_path(out, proxy_cache_dir, library_root))
 
     def _lookup_codec(relpath: str) -> str | None:
+        # Indexed equality on the UNIQUE dest_path instead of scanning every video
+        # row + recomputing _relpath. The URL relpath came FROM _relpath (strip
+        # \\?\ -> relative_to(url_root) -> POSIX), so str(url_root / relpath)
+        # reconstructs the stored form; query both the plain (tests) and \\?\-
+        # prefixed (production, compute_dest_path) variants.
+        candidate = str(Path(url_root) / relpath)
         conn = _index()
         try:
-            for row in conn.execute(
-                "SELECT dest_path, codec FROM files WHERE media_type='video'"
-            ):
-                if _relpath(row["dest_path"], url_root, library_root) == relpath:
-                    return row["codec"]
+            row = conn.execute(
+                "SELECT codec FROM files WHERE media_type='video' "
+                "AND dest_path IN (?, ?)",
+                (candidate, "\\\\?\\" + candidate),
+            ).fetchone()
         finally:
             conn.close()
-        return None
+        return row["codec"] if row else None
 
     # Same-origin SPA (B7 build output); mounted last so /api routes win. Only
     # mounted when the build directory exists, so B6 alone serves a bare API.

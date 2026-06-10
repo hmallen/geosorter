@@ -2,8 +2,8 @@
 title: Phase 1 Backend — HTTP API Contract & Derived Assets
 tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
 created: 2026-06-01
-updated: 2026-06-01
-sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location, task:m-basemap-heatmap-toggles]
+updated: 2026-06-10
+sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location, task:m-basemap-heatmap-toggles, task:m-library-feed-scale]
 ---
 
 # Phase 1 Backend — HTTP API Contract & Derived Assets
@@ -35,7 +35,9 @@ frontend (and any other client) builds against.
   `gps_source` (`exif`|`srt`|`srt_partial`|`inferred`|`manual`|`none`|null — B8; the
   map UI styles `inferred` (amber/dashed) and `manual` (green) markers distinctly),
   and `path` (library-relative POSIX path used to build media URLs). Coordinates are
-  `[lon, lat]` (GeoJSON order).
+  `[lon, lat]` (GeoJSON order). Supports **conditional GET**: emits a weak `ETag` +
+  `Last-Modified` and answers a matching `If-None-Match` with `304` (see *Scalable
+  library feed* below). The JSON body is **gzipped in-route** when the client accepts it.
 - `GET /api/inbox` → `{files, captures}` — how much is waiting for the next
   `organize` run (B8). `files` = recursive file count under `inbox_path` (what
   `organize` scans); `captures` = DJI capture-group count (`group_companions`, what
@@ -126,6 +128,40 @@ is the third kind on the same executor — so organize, undo, and re-tag are mut
 exclusive (no concurrent index-DB writers). It has **no cancel** (a single-capture
 atomic move; nothing to interrupt). `retag_fn=retag.retag_file` is injectable for
 tests. See the [re-tag section](crash-safe-move-engine.md) for the move model.
+
+## Scalable library feed (conditional GET + scoped gzip, m-library-feed-scale)
+
+The feed is **loaded whole** (no bbox/clustering on the server), so at 5–20k
+features it is an 8–12 MB JSON blob re-fetched on every reload (after
+organize/undo/retag/rescan). Two HTTP-level wins keep that cheap without
+server-side pagination:
+
+- **Conditional GET.** `GET /api/library` runs a cheap version probe first and
+  short-circuits a matching `If-None-Match` to **`304` before building the feature
+  list**. The weak `ETag` is `W/"lib-<MAX(id)>-<COUNT(*)>-<latsum>-<lonsum>-<stitchsum>"`
+  over the organized+geolocated rows. `MAX(id)`+`COUNT(*)` catch add/prune, but the
+  **in-place** UPDATEs (`retag.py` moves `lat`/`lon`; `jobs._mark_stitch_status`
+  flips `stitch_status`) leave both unchanged — so the key also folds in
+  microdegree lat/lon sums and a `stitch_status` code sum. **Lesson:** an ETag keyed
+  only on row identity/count silently 304s in-place edits, leaving the map showing a
+  stale marker after a retag; key it on the mutated content too. `idx_files_status_latlon
+  (status, lat, lon)` (in `_INDEX_SCHEMA`) serves the probe's row selection.
+- **Scoped gzip.** The JSON body compresses **in-route** (≈1–2 MB at 20k) only when
+  `Accept-Encoding: gzip`. This is deliberately **not** a global Starlette
+  `GZipMiddleware`: that wraps every response, and on the range-capable video
+  `FileResponse` (served via streamed `http.response.body` under uvicorn, which lacks
+  the `pathsend` extension) it strips `Content-Length` and adds `Content-Encoding`,
+  **breaking HTTP Range seeking** — plus it wastefully re-compresses already-compressed
+  JPEG/MP4. Keeping gzip on the one JSON route protects the media/video routes.
+
+Client (`useLibrary.ts`/`api.ts`): `fetchLibrary` threads the stored ETag as
+`If-None-Match` and returns `{fc, etag, notModified}`; on a `304` the hook keeps the
+prior `features` visible (stale-while-revalidate — no blank map on reload).
+
+A related cheap win: `_lookup_codec` (for `/api/video`) resolves the codec by an
+**indexed equality** on the UNIQUE `files.dest_path` (reconstructing the stored
+plain + `\\?\`-prefixed form from the URL relpath) instead of scanning every video
+row and recomputing `_relpath`.
 
 ## Source of the GeoJSON
 
