@@ -429,6 +429,35 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="stitch not generated")
         return FileResponse(_safe_cache_path(out, proxy_cache_dir), media_type="image/jpeg")
 
+    @app.get("/api/collage/{file_id}")
+    def collage_image(file_id: int) -> FileResponse:
+        """Serve the instant raw-tile collage for a panorama (Pillow, no Hugin).
+
+        Generated on first request (like ``/api/thumb``) from the primary tile + its
+        ``panorama_frame`` companions, cached on the LOCAL ``cache_dir`` tier. The
+        lightbox shows it immediately while the optional Hugin stitch is absent or
+        still running. Path is server-derived from the stored ``dest_path``s (never a
+        client relpath) and always a ``.jpg``.
+        """
+        row = _panorama_row(file_id)
+        primary = _strip(row["dest_path"])
+        conn = _index()
+        try:
+            frames = [
+                _strip(r["dest_path"])
+                for r in conn.execute(
+                    "SELECT dest_path FROM file_companions "
+                    "WHERE primary_file_id=? AND companion_type='panorama_frame' "
+                    "ORDER BY dest_path",
+                    (file_id,),
+                )
+            ]
+        finally:
+            conn.close()
+        rel_key = pathing.library_rel_key(url_root, row["dest_path"])
+        out = derived.panorama_collage(cache_dir, rel_key, primary, frames)
+        return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
+
     @app.get("/api/media/{relpath:path}")
     def media(relpath: str) -> FileResponse:
         return FileResponse(_safe_path(relpath))  # range-capable

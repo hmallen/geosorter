@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@photo-sphere-viewer/core": "^5.14.1",
+    "@tanstack/react-virtual": "^3.14.2",
     "maplibre-gl": "^5.24.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

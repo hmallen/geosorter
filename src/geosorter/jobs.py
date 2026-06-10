@@ -554,7 +554,11 @@ class JobManager:
         try:
             self._stitch_fn(
                 proxy_cache_dir, rel_key, primary, frames,
-                hugin_bin_dir=self._cfg.hugin_bin_dir, on_step=_on_step,
+                hugin_bin_dir=self._cfg.hugin_bin_dir,
+                canvas=self._cfg.stitch_canvas,
+                celeste=self._cfg.stitch_celeste,
+                optimise_lens=self._cfg.stitch_optimise_lens,
+                on_step=_on_step,
             )
         except HuginNotFound:
             # Hugin absent: not a failure — clear back to NULL, keep the gallery.

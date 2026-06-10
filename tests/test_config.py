@@ -89,6 +89,37 @@ def test_hugin_bin_dir_override(tmp_path):
     assert cfg.hugin_bin_dir == Path("C:\\Program Files\\Hugin\\bin")
 
 
+# --- Panorama-stitch tuning knobs (m-frontend-pano-ux) ---------------------- #
+def test_stitch_knobs_defaults(tmp_path):
+    # No config file → the smaller default canvas + both quality steps on.
+    cfg = config.load(tmp_path / "nope.toml")
+    assert cfg.stitch_canvas == "4000x2000"
+    assert cfg.stitch_celeste is True
+    assert cfg.stitch_optimise_lens is True
+
+
+def test_stitch_knobs_override(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(
+        "stitch_canvas = '6000x3000'\n"
+        "stitch_celeste = false\n"
+        "stitch_optimise_lens = false\n",
+        encoding="utf-8",
+    )
+    cfg = config.load(cfg_path)
+    assert cfg.stitch_canvas == "6000x3000"
+    assert cfg.stitch_celeste is False
+    assert cfg.stitch_optimise_lens is False
+
+
+@pytest.mark.parametrize("value", ["4000", "4000x", "x2000", "4000X2000", "wide", "4000 x 2000"])
+def test_stitch_canvas_invalid_raises(tmp_path, value):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(f"stitch_canvas = '{value}'\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load(cfg_path)
+
+
 # --- Organize-resilience knobs (m-organize-resilience) ---------------------- #
 def test_resilience_knobs_defaults(tmp_path):
     # No config file → the upload-resilience knobs fall back to their defaults.

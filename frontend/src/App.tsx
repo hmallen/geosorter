@@ -37,9 +37,20 @@ export default function App() {
 
   const { retagging, placing, beginRetag, cancelRetag, pickLocation } = useRetagJob(handleChanged)
 
+  // Panoramas that still want a 360 stitch: a panorama with tiles whose stitch
+  // hasn't succeeded yet. The toolbar's optional "Stitch all" button targets these.
+  const panoramaTargets = features
+    .filter(
+      (f) =>
+        f.properties.capture_kind === 'panorama' &&
+        (f.properties.frame_count ?? 0) > 0 &&
+        f.properties.stitch_status !== 'ok',
+    )
+    .map((f) => f.properties.id)
+
   return (
     <div className="app">
-      <Toolbar onDone={handleChanged} />
+      <Toolbar onDone={handleChanged} stitchTargets={panoramaTargets} onReload={reload} />
       <MapView
         features={features}
         onSelect={handleSelect}

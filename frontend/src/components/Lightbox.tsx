@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
+import { collageUrl, fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature } from '../types'
 import LoadingImage from './LoadingImage'
@@ -114,6 +114,14 @@ export default function Lightbox({
               poster={posterUrl(f.properties.path)}
               controls
               autoPlay
+            />
+          ) : isPanorama ? (
+            // Instant raw-tile collage placeholder: shown immediately while the
+            // optional 360 stitch is absent/running, instead of a single tile.
+            <LoadingImage
+              key={`collage-${f.properties.id}`}
+              src={collageUrl(f.properties.id)}
+              alt={`${f.properties.filename} (raw-tile collage)`}
             />
           ) : (
             <LoadingImage

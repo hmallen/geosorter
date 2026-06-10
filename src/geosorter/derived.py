@@ -20,6 +20,7 @@ ffmpeg/ffprobe are invoked as list-form subprocesses (mirroring
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -31,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from stat import S_ISREG
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 logger = logging.getLogger("geosorter.derived")
 
@@ -44,9 +45,16 @@ CACHE_DIRNAME = ".geosorter-cache"
 # the brainstorm) and gates ONLY regeneration — a fresh cache hit never acquires it.
 DERIVED_MAX_CONCURRENCY = 4
 _GEN_SEMAPHORE = threading.BoundedSemaphore(DERIVED_MAX_CONCURRENCY)
-# Local-tier kinds the eviction sweep manages (thumbs/previews/posters live on the
-# local SSD cache_dir); proxies/stitch (proxy_cache_dir) are NEVER auto-evicted.
-_LOCAL_CACHE_KINDS = ("thumbs", "previews", "posters")
+# Local-tier kinds the eviction sweep manages (thumbs/previews/posters/collage live
+# on the local SSD cache_dir); proxies/stitch (proxy_cache_dir) are NEVER auto-evicted.
+# The panorama collage joins the local tier: it is small, shown on every panorama
+# open (hot), and cheap to regenerate — exactly the evictable profile.
+_LOCAL_CACHE_KINDS = ("thumbs", "previews", "posters", "collage")
+# Instant panorama collage (m-frontend-pano-ux): each tile is downscaled to a
+# COLLAGE_CELL-square cell, composed into a near-square grid, then the whole
+# collage is capped at COLLAGE_MAX on its long edge.
+COLLAGE_CELL = 400
+COLLAGE_MAX = 1600
 # Hard ceiling on a single proxy transcode (a full HEVC->H.264 of a multi-minute 4K
 # clip over SMB is slow, but 30 min only fires on a genuinely stuck process).
 FFMPEG_TIMEOUT_S = 1800
@@ -54,8 +62,10 @@ FFMPEG_TIMEOUT_S = 1800
 # --- Panorama stitch (B13) -------------------------------------------------
 # The 360 equirectangular canvas. pano_modify sizes the full sphere to this; a
 # 2:1 canvas keeps a longitude:latitude ratio, and --crop=AUTO trims the empty
-# margins (so the final long edge is bounded by STITCH_LONG_EDGE_CAP).
-STITCH_CANVAS = "6000x3000"
+# margins (so the final long edge is bounded by STITCH_LONG_EDGE_CAP). The default
+# shrank from 6000x3000 to 4000x2000 (m-frontend-pano-ux) — ~0.44x the output
+# pixels, a meaningful stitch-time cut; overridable via cfg.stitch_canvas.
+STITCH_CANVAS = "4000x2000"
 STITCH_LONG_EDGE_CAP = 6000
 # Output-validity gate: a plausible equirectangular hero is wide, large, and
 # (unlike the cv2 failure mode) not a mostly-black void.
@@ -244,6 +254,81 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
     return out
 
 
+def panorama_collage(
+    cache_root: Path | str,
+    rel_key: str,
+    primary_source: Path | str,
+    tile_sources: Sequence[Path | str],
+) -> Path:
+    """Return a cached raw-tile collage JPEG for a panorama (Pillow only, no Hugin).
+
+    The instant placeholder shown the moment a panorama opens, while the optional
+    multi-minute Hugin stitch (:func:`panorama_stitch`) is absent or still running.
+    Each tile is downscaled to a :data:`COLLAGE_CELL`-square cell and composed into a
+    near-square grid (primary tile first) on a black canvas, then the whole image is
+    capped at :data:`COLLAGE_MAX` on its long edge. Cached under
+    ``<cache_root>/.geosorter-cache/collage/`` on the LOCAL tier (small, hot,
+    regenerable) and mtime-pinned to the newest tile (SMB-safe, like the stitch).
+
+    A single unreadable/corrupt tile leaves its cell black and never aborts the
+    collage. Regeneration is gated by the shared :data:`_GEN_SEMAPHORE` (so a
+    cold-browse storm cannot fan out unbounded Pillow work); a fresh cache hit
+    returns before acquiring it.
+    """
+    primary_source = Path(primary_source)
+    tiles = [primary_source, *(Path(t) for t in tile_sources)]
+    out = _cache_path(cache_root, rel_key, "collage", ".jpg")
+    # Freshness over the tiles that EXIST on disk: a panorama_frame companion can be
+    # gone (rescan keeps that present-primary/missing-companion state as a warning,
+    # row retained), and the collage must still serve a degraded (black-cell)
+    # placeholder rather than 500 — matching _produce's per-tile tolerance below. A
+    # bare max() over a missing tile would raise FileNotFoundError before _produce.
+    mtimes: list[float] = []
+    for tile in tiles:
+        try:
+            mtimes.append(tile.stat().st_mtime)
+        except OSError:
+            continue
+    newest = max(mtimes) if mtimes else 0.0
+    if out.exists() and out.stat().st_mtime >= newest:
+        return out
+
+    cols = math.ceil(math.sqrt(len(tiles)))
+    rows = math.ceil(len(tiles) / cols)
+
+    def _produce(dest: Path) -> None:
+        canvas = Image.new("RGB", (cols * COLLAGE_CELL, rows * COLLAGE_CELL), (0, 0, 0))
+        for idx, tile in enumerate(tiles):
+            try:
+                with Image.open(tile) as img:
+                    if tile.suffix.lower() in (".jpg", ".jpeg"):
+                        # DCT-downscale the JPEG decode toward the cell size (faster,
+                        # fewer bytes read) — must precede any pixel access. Mirrors
+                        # _resize_jpeg; a no-op for non-JPEG tiles.
+                        img.draft("RGB", (COLLAGE_CELL, COLLAGE_CELL))
+                    img = ImageOps.exif_transpose(img)  # honour camera orientation
+                    img.thumbnail((COLLAGE_CELL, COLLAGE_CELL))
+                    img = img.convert("RGB")
+            except (OSError, UnidentifiedImageError):
+                continue  # bad/missing tile → leave its cell black, never abort
+            r, c = divmod(idx, cols)
+            x = c * COLLAGE_CELL + (COLLAGE_CELL - img.width) // 2
+            y = r * COLLAGE_CELL + (COLLAGE_CELL - img.height) // 2
+            canvas.paste(img, (x, y))
+        if max(canvas.size) > COLLAGE_MAX:
+            canvas.thumbnail((COLLAGE_MAX, COLLAGE_MAX))
+        canvas.save(dest, "JPEG", quality=82)
+
+    with _GEN_SEMAPHORE:
+        # Re-check under the permit: a request that lost the race to a just-finished
+        # generator returns the fresh file instead of recomposing.
+        if out.exists() and out.stat().st_mtime >= newest:
+            return out
+        _atomic_write(out, _produce)
+        _touch_to_mtime(out, newest)  # pin freshness to the newest tile (SMB-safe)
+    return out
+
+
 @dataclass
 class EvictionResult:
     """Outcome of one :func:`evict_local_cache` sweep."""
@@ -390,6 +475,9 @@ def panorama_stitch(
     frame_sources: Sequence[Path | str],
     *,
     hugin_bin_dir: Path | str | None = None,
+    canvas: str = STITCH_CANVAS,
+    celeste: bool = True,
+    optimise_lens: bool = True,
     on_step: Callable[[int, int, str], None] | None = None,
 ) -> Path:
     """Return a cached 360 equirectangular JPEG stitched from a panorama's tiles.
@@ -430,12 +518,24 @@ def panorama_stitch(
         prefix = str(work / "out")
         # The six pipeline steps in order — looped so each one is logged + reported
         # through on_step before it runs (the names match the _HUGIN_TOOLS order).
+        # cpfind --celeste (cloud control-point removal) and autooptimiser -l (lens
+        # geometry optimisation) are opt-out via config (m-frontend-pano-ux): both add
+        # time and a user with clean skies / a fixed lens can drop them. The canvas is
+        # also configurable and defaults to the smaller 4000x2000.
+        cpfind_cmd = [tools["cpfind"], "--multirow"]
+        if celeste:
+            cpfind_cmd.append("--celeste")
+        cpfind_cmd += ["-o", pto, pto]
+        autoopt_cmd = [tools["autooptimiser"], "-a", "-m"]
+        if optimise_lens:
+            autoopt_cmd.append("-l")
+        autoopt_cmd += ["-s", "-o", pto, pto]
         steps: list[tuple[str, list[str]]] = [
             ("pto_gen", [tools["pto_gen"], "-o", pto, *[str(t) for t in tiles]]),
-            ("cpfind", [tools["cpfind"], "--multirow", "--celeste", "-o", pto, pto]),
+            ("cpfind", cpfind_cmd),
             ("cpclean", [tools["cpclean"], "-o", pto, pto]),
-            ("autooptimiser", [tools["autooptimiser"], "-a", "-m", "-l", "-s", "-o", pto, pto]),
-            ("pano_modify", [tools["pano_modify"], "--projection=2", f"--canvas={STITCH_CANVAS}",
+            ("autooptimiser", autoopt_cmd),
+            ("pano_modify", [tools["pano_modify"], "--projection=2", f"--canvas={canvas}",
                              "--crop=AUTO", "-o", pto, pto]),
             ("hugin_executor", [tools["hugin_executor"], "--stitching", f"--prefix={prefix}", pto]),
         ]

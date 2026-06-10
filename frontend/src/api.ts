@@ -58,6 +58,12 @@ export async function fetchFrames(
 // primary. 404 until generated (the lightbox falls back to the tile gallery).
 export const stitchUrl = (id: number): string => `/api/stitch/${id}`
 
+// Instant raw-tile collage placeholder for a panorama (m-frontend-pano-ux): a
+// cheap Pillow-composed grid of the raw tiles, generated on first request (no
+// Hugin) and shown the moment the lightbox opens, while the optional 360 stitch
+// is absent or still running.
+export const collageUrl = (id: number): string => `/api/collage/${id}`
+
 // Inbox counter (B8): how much is waiting for the next organize run.
 export interface InboxCount {
   files: number

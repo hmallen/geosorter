@@ -41,6 +41,14 @@ spatial_index = 'rtree'
 # detect them on PATH; absent Hugin just disables stitching (the tile gallery remains).
 # hugin_bin_dir = 'C:\Program Files\Hugin\bin'
 
+# --- Panorama-stitch tuning (smaller/faster 360 stitch) ---
+# Output canvas (WIDTHxHEIGHT); smaller = faster. Default shrank to 4000x2000.
+# stitch_canvas = '4000x2000'
+# Opt-out quality steps: cpfind --celeste (cloud control-point removal) and
+# autooptimiser -l (lens geometry). Both default on; set false for a faster stitch.
+# stitch_celeste = true
+# stitch_optimise_lens = true
+
 # --- Upload-resilience knobs (sized for a multi-hour, 5-20k-file bulk import) ---
 
 # Free-space headroom (GB) required over the source bytes; a mid-run recheck aborts

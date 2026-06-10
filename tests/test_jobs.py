@@ -462,7 +462,8 @@ def _build_index_with_panorama(tmp_path):
     conn.commit()
     conn.close()
     cfg = SimpleNamespace(
-        index_db_path=idx, library_root=lib, hugin_bin_dir=None, proxy_cache_dir=None
+        index_db_path=idx, library_root=lib, hugin_bin_dir=None, proxy_cache_dir=None,
+        stitch_canvas="4000x2000", stitch_celeste=True, stitch_optimise_lens=True,
     )
     return cfg, file_id, primary, frames
 
@@ -481,7 +482,7 @@ def test_submit_stitch_success_writes_ok(tmp_path):
     cfg, file_id, primary, frames = _build_index_with_panorama(tmp_path)
     seen = {}
 
-    def fake_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None):
+    def fake_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
         seen["cache_root"] = cache_root
         seen["rel_key"] = rel_key
         seen["primary"] = prim
@@ -507,7 +508,7 @@ def test_submit_stitch_reports_step_progress(tmp_path):
     # map UI can show "step 3/6: cpclean" during the multi-minute run.
     cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
 
-    def stepping_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step):
+    def stepping_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step, **_):
         on_step(3, 6, "cpclean")
         return Path("stitched.jpg")
 
@@ -522,7 +523,7 @@ def test_submit_stitch_reports_step_progress(tmp_path):
 def test_submit_stitch_failed_writes_failed(tmp_path):
     cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
 
-    def boom(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None):
+    def boom(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
         raise StitchFailed("cpfind lost the sky")
 
     mgr = JobManager(cfg, stitch_fn=boom)
@@ -535,7 +536,7 @@ def test_submit_stitch_failed_writes_failed(tmp_path):
 def test_submit_stitch_unavailable_when_hugin_missing(tmp_path):
     cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
 
-    def no_hugin(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None):
+    def no_hugin(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
         raise HuginNotFound("no hugin")
 
     mgr = JobManager(cfg, stitch_fn=no_hugin)
@@ -557,7 +558,7 @@ def test_submit_stitch_dedups_inflight_and_marks_pending(tmp_path):
     entered = threading.Event()
     release = threading.Event()
 
-    def blocking_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None):
+    def blocking_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
         entered.set()
         release.wait(2.0)
         return Path("stitched.jpg")

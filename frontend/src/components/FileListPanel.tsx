@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { listThumb } from '../api'
+import { columnsForWidth, rowCount, rowSlice } from '../gridWindow'
 import type { LibraryFeature } from '../types'
 import LoadingImage from './LoadingImage'
 
@@ -35,6 +37,31 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
     }
   }
 
+  // Virtualize the thumbnail grid: a cluster can hold hundreds of files, and
+  // mounting every thumb would fire one /api/thumb request per file at once. We
+  // window by ROW (each row is `columns` files) so only viewport-visible rows
+  // mount their LoadingImage. Columns track the (resizable) panel width; the
+  // ROW grid uses 1fr columns so cells always fit the width regardless of the
+  // computed count (no horizontal overflow). The row-height estimate is the
+  // cell width (square thumb, aspect-ratio:1) plus the filename + retag button;
+  // `measureElement` corrects it from the real DOM height after first paint.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // GAP_PX must match the .grid-row CSS gap so the column count and the cell-width
+  // estimate agree; PAD_PX is the .grid padding on both sides.
+  const GAP_PX = 6
+  const PAD_PX = 8
+  const columns = columnsForWidth(width, 120, GAP_PX)
+  const rows = rowCount(files.length, columns)
+  const cellWidth = (width - 2 * PAD_PX - (columns - 1) * GAP_PX) / columns
+  const estRow = Math.max(80, cellWidth + 46)
+
+  const virtualizer = useVirtualizer({
+    count: rows,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => estRow,
+    overscan: 2,
+  })
+
   return (
     <div className="panel" style={{ width }}>
       <div
@@ -53,49 +80,70 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
         </div>
         <button onClick={onClose} aria-label="Close">×</button>
       </div>
-      <div className="grid">
-        {files.map((f, i) => (
-          <div key={f.properties.id} className="thumb">
-            <button className="thumb-open" onClick={() => onOpen(i)}>
-              <span className="thumb-img">
-                <LoadingImage
-                  key={f.properties.path}
-                  src={listThumb(f.properties.media_type, f.properties.path)}
-                  alt={f.properties.filename}
-                />
-                {f.properties.capture_kind === 'hyperlapse' && (f.properties.frame_count ?? 0) > 0 && (
-                  <span className="badge badge--hyperlapse" title="Hyperlapse render">
-                    ⊞ ×{f.properties.frame_count}
-                  </span>
-                )}
-                {f.properties.capture_kind === 'panorama' && (f.properties.frame_count ?? 0) > 0 && (
-                  <span className="badge badge--panorama" title="Panorama">
-                    ▦ ×{f.properties.frame_count}
-                  </span>
-                )}
-                {f.properties.star_rating !== null && (
-                  <span
-                    className="badge badge--stars"
-                    title={`${f.properties.star_rating}★ rating`}
-                  >
-                    {'★'.repeat(f.properties.star_rating)}
-                    {'☆'.repeat(5 - f.properties.star_rating)}
-                  </span>
-                )}
-              </span>
-              <span className="thumb-name">
-                {f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}
-              </span>
-            </button>
-            <button
-              className="retag"
-              onClick={() => onRetag(i)}
-              title="Re-tag this file's location by clicking the map"
-            >
-              ⌖ Re-tag location
-            </button>
-          </div>
-        ))}
+      <div className="grid" ref={scrollRef}>
+        <div className="grid-sizer" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((vrow) => {
+            const { start, end } = rowSlice(vrow.index, columns, files.length)
+            return (
+              <div
+                key={vrow.key}
+                data-index={vrow.index}
+                ref={virtualizer.measureElement}
+                className="grid-row"
+                style={{
+                  transform: `translateY(${vrow.start}px)`,
+                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                }}
+              >
+                {files.slice(start, end).map((f, j) => {
+                  const i = start + j
+                  return (
+                    <div key={f.properties.id} className="thumb">
+                      <button className="thumb-open" onClick={() => onOpen(i)}>
+                        <span className="thumb-img">
+                          <LoadingImage
+                            key={f.properties.path}
+                            src={listThumb(f.properties.media_type, f.properties.path)}
+                            alt={f.properties.filename}
+                          />
+                          {f.properties.capture_kind === 'hyperlapse' && (f.properties.frame_count ?? 0) > 0 && (
+                            <span className="badge badge--hyperlapse" title="Hyperlapse render">
+                              ⊞ ×{f.properties.frame_count}
+                            </span>
+                          )}
+                          {f.properties.capture_kind === 'panorama' && (f.properties.frame_count ?? 0) > 0 && (
+                            <span className="badge badge--panorama" title="Panorama">
+                              ▦ ×{f.properties.frame_count}
+                            </span>
+                          )}
+                          {f.properties.star_rating !== null && (
+                            <span
+                              className="badge badge--stars"
+                              title={`${f.properties.star_rating}★ rating`}
+                            >
+                              {'★'.repeat(f.properties.star_rating)}
+                              {'☆'.repeat(5 - f.properties.star_rating)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="thumb-name">
+                          {f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}
+                        </span>
+                      </button>
+                      <button
+                        className="retag"
+                        onClick={() => onRetag(i)}
+                        title="Re-tag this file's location by clicking the map"
+                      >
+                        ⌖ Re-tag location
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

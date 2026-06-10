@@ -321,3 +321,33 @@ def test_geocode_test_without_bootstrap_is_clean_error(tmp_path):
     )
     assert result.exit_code != 0
     assert "bootstrap" in result.output.lower()
+
+
+def test_stitch_bench_errors_when_hugin_absent(tmp_path, monkeypatch):
+    # The Hugin check precedes any DB work, so a clean error needs no panorama.
+    cfg = _write_cfg(tmp_path)
+    monkeypatch.setattr("geosorter.cli.derived.find_hugin", lambda _d=None: None)
+    result = CliRunner().invoke(cli, ["stitch-bench", "--config", str(cfg), "1"])
+    assert result.exit_code != 0
+    assert "Hugin" in result.output
+
+
+def test_stitch_bench_errors_for_non_panorama(tmp_path, monkeypatch):
+    from geosorter import db
+
+    cfg = _write_cfg(tmp_path)
+    # Pretend Hugin is present so the command reaches the not-a-panorama guard.
+    monkeypatch.setattr("geosorter.cli.derived.find_hugin", lambda _d=None: {"x": "x"})
+    conn = db.connect(tmp_path / "index.db", integrity_check=False)
+    db.init_index_schema(conn)
+    conn.execute(
+        "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
+        "local_date, lat, lon, gps_source, sha256, status) "
+        "VALUES (1,'P',?, 'a.JPG','photo','2024-07-04',40.0,-105.0,'exif','d','organized')",
+        (str(tmp_path / "a.JPG"),),
+    )
+    conn.commit()
+    conn.close()
+    result = CliRunner().invoke(cli, ["stitch-bench", "--config", str(cfg), "1"])
+    assert result.exit_code != 0
+    assert "not an organized panorama" in result.output
