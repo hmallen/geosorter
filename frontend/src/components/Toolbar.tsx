@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useOrganizeJob } from '../useOrganizeJob'
 import { useUndoJob } from '../useUndoJob'
 import { useRescanJob } from '../useRescanJob'
@@ -19,7 +19,11 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({ onDone, stitchTargets, onReload }: ToolbarProps) {
-  const { count, refresh } = useInboxCount()
+  // Suspend the inbox-badge poll while a destructive job runs (synced to `busy` in the
+  // effect below). Stable ref -> the useInboxCount interval is established once, not
+  // reset each render; the interval reads pausedRef.current freshly at each tick.
+  const pausedRef = useRef(false)
+  const { count, refresh } = useInboxCount(5000, pausedRef)
   // The inbox listing is owned here (Toolbar is alive from app startup) so the scan
   // runs once on mount and the Process Inbox panel opens pre-populated instead of
   // showing a "Scanning inbox…" delay each time.
@@ -45,6 +49,11 @@ export default function Toolbar({ onDone, stitchTargets, onReload }: ToolbarProp
   // (organize/undo/rescan) — only by its own running flag.
   const stitchAll = useStitchAll(onReload)
   const busy = running || undoing || rescanning
+  // Write the ref in an effect (not during render — react-hooks/refs) so the inbox poll
+  // suspends while a destructive job runs.
+  useEffect(() => {
+    pausedRef.current = busy
+  }, [busy])
 
   return (
     <div className="toolbar">
