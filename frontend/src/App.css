@@ -302,6 +302,10 @@
 
 .lightbox-body {
   max-width: 92vw;
+  /* Definite height (not just max-height) so the media's `max-height: 100%`
+     resolves — against an indefinite-height ancestor it is treated as `none`,
+     letting a tall video/image overflow its flex box onto the controls below. */
+  height: 92vh;
   max-height: 92vh;
   display: flex;
   flex-direction: column;
@@ -314,6 +318,8 @@
 .lightbox-media {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden; /* safety belt: media can never visually spill past its box */
   display: flex;
   align-items: center;
   justify-content: center;
