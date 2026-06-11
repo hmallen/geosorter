@@ -1,6 +1,23 @@
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  color: #1a1a1a;
+
+  /* Dark-theme tokens (dark-only default; m-implement-dark-theme-default).
+     These are the single source of truth the rest of the SPA references via
+     var(); the two follow-up CSS tasks (markers, lightbox close) reuse them. */
+  --bg: #0f1116;            /* page / map letterbox */
+  --surface: #1b1f29;       /* panels, toolbar, inbox dropdown */
+  --surface-2: #252b38;     /* raised chips: legend, map-controls, buttons */
+  --surface-3: #2e3645;     /* hover state for surface-2 controls */
+  --text: #e6e9ef;
+  --text-muted: #9aa3b2;
+  --border: #323a4a;
+  --accent: #1978c8;        /* brand blue, kept */
+  --accent-contrast: #ffffff;
+  --danger: #ff6b6b;        /* replaces low-contrast #b00020 */
+  --placeholder: #2a2f3a;   /* thumb-loading placeholder (was #eee) */
+
+  color: var(--text);
+  background: var(--bg);
 }
 
 * {
@@ -12,4 +29,17 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+/* Definite dark page background so there is no white flash behind the fixed
+   .app / around the map before tiles paint. */
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Native form controls pick up the brand accent on dark (checkboxes, etc.). */
+input,
+progress {
+  accent-color: var(--accent);
 }

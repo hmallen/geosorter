@@ -4,8 +4,10 @@ import type { StyleSpecification, HeatmapLayerSpecification } from 'maplibre-gl'
 import type { FeatureCollection, Point } from 'geojson'
 import type { LibraryFeature } from './types'
 
-// Default vector basemap (hosted OpenFreeMap; the only online dependency).
-export const VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+// Default vector basemap (hosted CARTO dark-matter; keyless). Dark to match the
+// dark-only UI theme so the map reads as one cohesive dark surface rather than a
+// bright rectangle under dark chrome.
+export const VECTOR_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 
 // Esri World Imagery — a free raster basemap. Attribution is required and is
 // baked into the source so MapLibre renders it in the attribution control.
