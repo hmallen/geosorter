@@ -97,6 +97,7 @@ export default function Lightbox({
 
   return (
     <div className="lightbox" onClick={onClose}>
+      <button className="lightbox-close" onClick={onClose} aria-label="Close">×</button>
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
         <div className="lightbox-media">
           {frameZoom ? (
@@ -182,7 +183,6 @@ export default function Lightbox({
           <button onClick={prev} aria-label="Previous">‹</button>
           <span>{f.properties.filename}</span>
           <button onClick={next} aria-label="Next">›</button>
-          <button onClick={onClose} aria-label="Close">×</button>
         </div>
       </div>
     </div>
