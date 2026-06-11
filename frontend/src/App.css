@@ -71,12 +71,24 @@
 }
 
 .pin {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   background: #e0533d;
-  border: 2px solid #fff;
+  border: 2.5px solid #fff;
   border-radius: 50%;
   cursor: pointer;
+  /* Inner 1px dark ring delineates the white ring on bright imagery (snow/sand);
+     the soft drop shadow gives depth on dark imagery — so single pins stay obvious
+     on both the dark-matter vector basemap and the Esri satellite imagery. */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.6);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Hover affordance — scoped with :not(.pin--legend) so legend swatches never animate. */
+.pin:not(.pin--legend):hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), 0 3px 8px rgba(0, 0, 0, 0.7);
+  z-index: 1;
 }
 
 /* Inferred-location markers: distinct amber fill + dashed ring (B8). */
@@ -174,6 +186,11 @@
   display: inline-block;
   position: static;
   cursor: default;
+  /* Keep legend swatches small + flat despite the larger, shadowed on-map pins. */
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  box-shadow: none;
 }
 
 /* On-map view toggles: satellite basemap + density heatmap (B8). */
