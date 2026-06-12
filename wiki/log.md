@@ -136,3 +136,15 @@ stitched hero, a **dedicated read-only `max_workers=1` pool** independent of the
 organize/undo/retag worker, the `files.stitch_status` column (schema v3: NULL/pending/ok/failed,
 panorama rows only), and the traversal-proof file-id-keyed `/api/stitch/{id}` serve route.
 Added the index entry + a new topic page.
+
+## [2026-06-11] update | DJI Panorama Stitching — projection auto-detection (m-fix-panorama-projection-autodetect)
+Updated the DJI Panorama Stitching page: the stitch pipeline no longer hard-codes
+equirectangular. `panorama_stitch` reads the HFOV that `autooptimiser -s` writes to the
+`.pto` `p`-line and maps it to the `pano_modify --projection` code (≥270° equirectangular,
+≥120° cylindrical, else rectilinear), so low-tile-count / non-360 (180/wide/vertical)
+panos stitch instead of being rejected. Documented the now projection-aware validity gate
+(flat aspect envelope [0.2, 8.0] vs equirectangular [1.3, 3.0]), the new
+`files.stitch_projection` column (schema v4) that drives the frontend hero viewer
+(`PanoSphere` 360 vs flat zoomable `FlatHero`), the ETag projection fold, and the
+cache-hit projection backfill that recovers a value lost to an index-DB rebuild (never
+overwriting the authoritative cold-run HFOV value).

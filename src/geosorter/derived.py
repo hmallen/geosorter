@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -73,6 +74,26 @@ STITCH_MIN_LONG_EDGE = 2000
 STITCH_MIN_ASPECT = 1.3
 STITCH_MAX_ASPECT = 3.0
 STITCH_MAX_BLACK_FRAC = 0.15
+# Projection auto-detection (m-fix-panorama-projection-autodetect). Not every DJI
+# panorama is a full 360 sphere — it also shoots 180/wide/vertical. `autooptimiser -s`
+# already estimates the panorama's horizontal field of view and a suitable projection
+# into the .pto; we read that HFOV back and pick the pano_modify projection from it
+# (instead of the old hard-coded equirectangular), then validate per-projection.
+#   - HFOV >= 270deg  -> equirectangular (Hugin code 2), the full-sphere PanoSphere hero
+#   - HFOV >= 120deg  -> cylindrical (code 1), a wide "flat" hero
+#   - otherwise        -> rectilinear (code 0), a narrow "flat" hero
+STITCH_EQUIRECT_MIN_HFOV = 270.0
+STITCH_CYLINDRICAL_MIN_HFOV = 120.0
+# Hugin pano_modify --projection codes (subset we emit).
+_PROJ_RECTILINEAR = 0
+_PROJ_CYLINDRICAL = 1
+_PROJ_EQUIRECTANGULAR = 2
+# A non-equirectangular ("flat") hero is validated against a far wider aspect envelope
+# than the equirectangular [1.3, 3.0] — a 180/wide pano is legitimately up to ~6:1 and
+# a vertical pano is tall (< 1) — so it is no longer wrongly rejected as "not
+# equirectangular-like". The long-edge range + black-void guard still apply to both.
+STITCH_FLAT_MIN_ASPECT = 0.2
+STITCH_FLAT_MAX_ASPECT = 8.0
 # Per-step subprocess ceiling. The spike's slowest step (cpfind) was ~188 s; the
 # generous 20 min bound only fires on a genuinely stuck process.
 STITCH_STEP_TIMEOUT_S = 1200
@@ -93,6 +114,22 @@ class HuginNotFound(RuntimeError):
 
 class StitchFailed(RuntimeError):
     """A stitch step failed, timed out, or produced a degenerate result."""
+
+
+@dataclass(frozen=True)
+class StitchResult:
+    """Outcome of a :func:`panorama_stitch` run.
+
+    ``path`` is the cached hero JPEG. ``projection`` is the viewer-relevant kind the
+    pipeline produced — ``'equirectangular'`` (a full-sphere 360, rendered by the
+    frontend ``PanoSphere``) or ``'flat'`` (a non-360 pano, rendered as a flat
+    zoomable image). On a freshness cache HIT it is ``''`` (empty), meaning "no new
+    projection info this call" — the caller keeps whatever was recorded when the hero
+    was first stitched (legacy cached heroes predate this feature and are all 360,
+    which the frontend treats as equirectangular by default)."""
+
+    path: Path
+    projection: str
 
 
 def _cache_path(cache_root: Path | str, rel_key: str, kind: str, ext: str) -> Path:
@@ -442,22 +479,81 @@ def _run_hugin(cmd: list[str], *, timeout: int = STITCH_STEP_TIMEOUT_S) -> None:
         )
 
 
-def _stitch_gate(path: Path) -> None:
-    """Raise :class:`StitchFailed` unless ``path`` is a plausible equirectangular.
+def _parse_pto_hfov(pto_text: str) -> float:
+    """Read the panorama horizontal field of view from an optimised Hugin ``.pto``.
+
+    ``autooptimiser -s`` writes the output panorama's geometry onto the project's
+    ``p`` line, e.g. ``p f2 w6000 h3000 v360 ...`` where ``v`` is the horizontal FOV
+    in degrees. We read that ``v`` back to decide the projection instead of forcing
+    equirectangular. Raises :class:`StitchFailed` when no ``p`` line / ``v`` token is
+    present (a malformed or unoptimised project — treated as a stitch failure)."""
+    for line in pto_text.splitlines():
+        if line.startswith("p "):
+            match = re.search(r"\bv([\d.]+)", line)
+            if match is not None:
+                try:
+                    return float(match.group(1))
+                except ValueError as exc:  # a malformed token the loose regex admitted
+                    raise StitchFailed(
+                        f"malformed panorama HFOV token {match.group(1)!r}"
+                    ) from exc
+    raise StitchFailed("could not read panorama HFOV from optimised project")
+
+
+def _choose_projection(hfov: float) -> tuple[int, str]:
+    """Map a panorama HFOV to a ``(pano_modify projection code, viewer kind)`` pair.
+
+    A near-full sphere stays equirectangular (the ``PanoSphere`` 360 hero); a narrower
+    field of view becomes a ``'flat'`` hero (cylindrical for a wide pano, rectilinear
+    for a narrow one) so it is no longer forced into a 2:1 sphere and rejected."""
+    if hfov >= STITCH_EQUIRECT_MIN_HFOV:
+        return (_PROJ_EQUIRECTANGULAR, "equirectangular")
+    if hfov >= STITCH_CYLINDRICAL_MIN_HFOV:
+        return (_PROJ_CYLINDRICAL, "flat")
+    return (_PROJ_RECTILINEAR, "flat")
+
+
+def classify_stitched_projection(path: Path) -> str:
+    """Best-effort projection kind of an ALREADY-stitched hero, from its aspect.
+
+    The cold-run HFOV-derived projection (:func:`_choose_projection`) is authoritative
+    and is what gets recorded. This aspect-based fallback exists only to BACKFILL a
+    projection that was never recorded — e.g. a cache file that survived an index-DB
+    rebuild, or a crash between the cache write and the DB update — so a cached flat
+    hero is not stuck defaulting to the 360 sphere viewer. It is never used to
+    overwrite a recorded value (aspect cannot distinguish a 2:1 cylindrical pano from a
+    true equirectangular, so it is a recovery heuristic, not the source of truth)."""
+    with Image.open(path) as img:
+        width, height = img.size
+    aspect = width / height if height else 0.0
+    if STITCH_MIN_ASPECT <= aspect <= STITCH_MAX_ASPECT:
+        return "equirectangular"
+    return "flat"
+
+
+def _stitch_gate(path: Path, kind: str = "equirectangular") -> None:
+    """Raise :class:`StitchFailed` unless ``path`` is a plausible stitch for ``kind``.
 
     The cv2 failure mode the spike rejected was a warped partial with a ~45% black
-    void. The gate verifies a sane size, a wide (equirectangular-like) aspect, and a
-    near-black-pixel fraction under :data:`STITCH_MAX_BLACK_FRAC`, so a degenerate or
-    failed stitch is never cached or served.
+    void. The gate verifies a sane size, an aspect within the envelope for the chosen
+    projection (equirectangular is the original ``[1.3, 3.0]``; a non-360 ``'flat'``
+    pano uses the far wider ``[0.2, 8.0]`` so a 180/wide/vertical result is accepted),
+    and a near-black-pixel fraction under :data:`STITCH_MAX_BLACK_FRAC`, so a
+    degenerate or failed stitch is never cached or served. The long-edge range and the
+    black-void guard are projection-independent and apply to both kinds.
     """
+    if kind == "equirectangular":
+        min_aspect, max_aspect = STITCH_MIN_ASPECT, STITCH_MAX_ASPECT
+    else:
+        min_aspect, max_aspect = STITCH_FLAT_MIN_ASPECT, STITCH_FLAT_MAX_ASPECT
     with Image.open(path) as img:
         width, height = img.size
         long_edge = max(width, height)
         if not (STITCH_MIN_LONG_EDGE <= long_edge <= STITCH_LONG_EDGE_CAP):
             raise StitchFailed(f"stitch long-edge {long_edge}px out of range")
         aspect = width / height if height else 0.0
-        if not (STITCH_MIN_ASPECT <= aspect <= STITCH_MAX_ASPECT):
-            raise StitchFailed(f"stitch aspect {aspect:.2f} not equirectangular-like")
+        if not (min_aspect <= aspect <= max_aspect):
+            raise StitchFailed(f"stitch aspect {aspect:.2f} out of range for {kind}")
         small = img.convert("L")
         small.thumbnail((512, 512))  # sample cheaply; the void fraction is global
         histogram = small.histogram()  # 256 luminance buckets
@@ -479,15 +575,23 @@ def panorama_stitch(
     celeste: bool = True,
     optimise_lens: bool = True,
     on_step: Callable[[int, int, str], None] | None = None,
-) -> Path:
-    """Return a cached 360 equirectangular JPEG stitched from a panorama's tiles.
+) -> StitchResult:
+    """Return a cached JPEG hero stitched from a panorama's tiles + its projection.
 
     Runs the spike-proven Hugin pipeline (``pto_gen -> cpfind --multirow --celeste
-    -> cpclean -> autooptimiser -> pano_modify (equirectangular) -> hugin_executor``)
-    in a private temp dir, each step a list-form subprocess with a timeout, strictly
-    off the crash-safe move path (called only by the background stitch job). The
-    result is mtime-cached under ``library_root/.geosorter-cache/stitch/`` (fresh
-    while no tile is newer than the cache) and validity-gated before caching.
+    -> cpclean -> autooptimiser -> pano_modify -> hugin_executor``) in a private temp
+    dir, each step a list-form subprocess with a timeout, strictly off the crash-safe
+    move path (called only by the background stitch job). The result is mtime-cached
+    under ``library_root/.geosorter-cache/stitch/`` (fresh while no tile is newer than
+    the cache) and validity-gated before caching.
+
+    The projection is auto-detected (m-fix-panorama-projection-autodetect): after
+    ``autooptimiser -s`` estimates the panorama geometry, the optimised ``.pto`` HFOV
+    is read (:func:`_parse_pto_hfov`) and mapped (:func:`_choose_projection`) to the
+    ``pano_modify --projection`` code, so a non-360 (180/wide/vertical) pano stitches
+    to a valid ``'flat'`` hero instead of being forced into an equirectangular sphere
+    and rejected. The returned :class:`StitchResult` carries that projection kind so
+    the caller can record it and the frontend can pick its viewer.
 
     Each pipeline step is logged (with its elapsed time) and, when ``on_step`` is
     given, reported as ``on_step(step_index, step_total, step_name)`` *before* the
@@ -502,7 +606,7 @@ def panorama_stitch(
     out = stitch_cache_path(cache_root, rel_key)
     newest = max(t.stat().st_mtime for t in tiles)
     if out.exists() and out.stat().st_mtime >= newest:
-        return out
+        return StitchResult(out, "")  # cache hit: caller keeps the recorded projection
 
     tools = find_hugin(hugin_bin_dir)
     if tools is None:
@@ -530,17 +634,10 @@ def panorama_stitch(
         if optimise_lens:
             autoopt_cmd.append("-l")
         autoopt_cmd += ["-s", "-o", pto, pto]
-        steps: list[tuple[str, list[str]]] = [
-            ("pto_gen", [tools["pto_gen"], "-o", pto, *[str(t) for t in tiles]]),
-            ("cpfind", cpfind_cmd),
-            ("cpclean", [tools["cpclean"], "-o", pto, pto]),
-            ("autooptimiser", autoopt_cmd),
-            ("pano_modify", [tools["pano_modify"], "--projection=2", f"--canvas={canvas}",
-                             "--crop=AUTO", "-o", pto, pto]),
-            ("hugin_executor", [tools["hugin_executor"], "--stitching", f"--prefix={prefix}", pto]),
-        ]
-        total = len(steps)
-        for index, (name, cmd) in enumerate(steps, start=1):
+
+        total = 6  # fixed 6-step pipeline (on_step contract is stable for the UI)
+
+        def _do(index: int, name: str, cmd: list[str]) -> None:
             if on_step is not None:
                 on_step(index, total, name)
             logger.info(
@@ -553,11 +650,31 @@ def panorama_stitch(
                 primary_source.name, index, total, name, time.perf_counter() - started,
             )
 
+        # Steps 1-4 project + align the tiles; autooptimiser -s estimates the output
+        # geometry into the .pto. THEN read that geometry to pick the projection step 5
+        # builds the canvas for (instead of hard-coding equirectangular).
+        _do(1, "pto_gen", [tools["pto_gen"], "-o", pto, *[str(t) for t in tiles]])
+        _do(2, "cpfind", cpfind_cmd)
+        _do(3, "cpclean", [tools["cpclean"], "-o", pto, pto])
+        _do(4, "autooptimiser", autoopt_cmd)
+
+        hfov = _parse_pto_hfov(Path(pto).read_text())
+        proj_code, kind = _choose_projection(hfov)
+        logger.info(
+            "panorama stitch %s: HFOV %.1f deg -> projection %d (%s)",
+            primary_source.name, hfov, proj_code, kind,
+        )
+
+        _do(5, "pano_modify", [tools["pano_modify"], f"--projection={proj_code}",
+                               f"--canvas={canvas}", "--crop=AUTO", "-o", pto, pto])
+        _do(6, "hugin_executor",
+            [tools["hugin_executor"], "--stitching", f"--prefix={prefix}", pto])
+
         tifs = sorted(work.glob("out*.tif"))
         if not tifs:
             raise StitchFailed("hugin_executor produced no output TIFF")
         tif = tifs[0]
-        _stitch_gate(tif)  # raises before anything is cached
+        _stitch_gate(tif, kind)  # projection-aware; raises before anything is cached
 
         def _produce(dest: Path) -> None:
             with Image.open(tif) as img:
@@ -568,4 +685,4 @@ def panorama_stitch(
 
         _atomic_write(out, _produce)
         _touch_to_mtime(out, newest)  # pin freshness to the newest tile (SMB-safe)
-    return out
+    return StitchResult(out, kind)

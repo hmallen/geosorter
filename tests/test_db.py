@@ -37,6 +37,7 @@ CREATE TABLE schema_version (
 
 _B9A_NEW_COLUMNS = {"capture_kind", "frame_count", "star_rating"}
 _B13_NEW_COLUMN = {"stitch_status"}  # added by the v2->v3 migration
+_V4_NEW_COLUMN = {"stitch_projection"}  # added by the v3->v4 migration
 
 # A v2 (B9a-era) ``files`` table — the current schema MINUS the B13 stitch_status
 # column. Used to prove the v2->v3 upgrade adds stitch_status losslessly.
@@ -99,6 +100,29 @@ def _make_v2_index_db(path):
         "4.8, -75.6, 'panorama', 35)"
     )
     conn.execute("INSERT INTO schema_version (version) VALUES (2)")
+    conn.commit()
+    return conn
+
+
+# A v3 (B13-era) ``files`` table — the v2 DDL PLUS stitch_status, MINUS the v4
+# stitch_projection column. Used to prove the v3->v4 upgrade adds it losslessly.
+_V3_FILES_DDL = _V2_FILES_DDL.replace(
+    "    star_rating       INTEGER,\n",
+    "    star_rating       INTEGER,\n    stitch_status     TEXT,\n",
+)
+
+
+def _make_v3_index_db(path):
+    """Create a synthetic v3 index DB (B13 columns, no stitch_projection) at version 3."""
+    conn = db.connect(path)
+    conn.executescript(_V3_FILES_DDL)
+    conn.execute(
+        "INSERT INTO files (dest_path, filename, media_type, sha256, status, lat, lon, "
+        "capture_kind, frame_count, stitch_status) "
+        "VALUES ('C:/lib/pano.jpg', 'pano.jpg', 'photo', 'def456', 'organized', "
+        "4.8, -75.6, 'panorama', 12, 'ok')"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (3)")
     conn.commit()
     return conn
 
@@ -170,8 +194,10 @@ def test_migrate_v1_to_v2_adds_columns_losslessly(tmp_path):
 
         db.init_index_schema(conn)  # runs the migration on the existing v1 DB
 
-        assert (_B9A_NEW_COLUMNS | _B13_NEW_COLUMN) <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+        assert (_B9A_NEW_COLUMNS | _B13_NEW_COLUMN | _V4_NEW_COLUMN) <= _columns(conn, "files")
+        # migrate_index_schema stamps the CURRENT SCHEMA_VERSION once every target
+        # column is present, so an old v1 DB jumps straight to the latest (now 4).
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 4
         # the pre-existing row survives, new columns read as NULL
         row = conn.execute(
             "SELECT sha256, capture_kind, frame_count, star_rating, stitch_status FROM files"
@@ -188,7 +214,7 @@ def test_migrate_v1_to_v2_is_idempotent(tmp_path):
         db.init_index_schema(conn)
         db.init_index_schema(conn)  # second run must be a clean no-op
         assert _B9A_NEW_COLUMNS <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 4
         # exactly one schema_version row (no duplicate stamping)
         assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 1
     finally:
@@ -206,7 +232,7 @@ def test_migrate_v2_to_v3_adds_stitch_status_losslessly(tmp_path):
         db.init_index_schema(conn)  # runs the v2->v3 migration on the existing DB
 
         assert _B13_NEW_COLUMN <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 4
         # the pre-existing panorama row survives, stitch_status reads as NULL
         row = conn.execute(
             "SELECT sha256, capture_kind, frame_count, stitch_status FROM files"
@@ -217,12 +243,34 @@ def test_migrate_v2_to_v3_adds_stitch_status_losslessly(tmp_path):
         conn.close()
 
 
+def test_migrate_v3_to_v4_adds_stitch_projection_losslessly(tmp_path):
+    conn = _make_v3_index_db(tmp_path / "v3.db")
+    try:
+        # precondition: v3 has stitch_status but not stitch_projection, at version 3
+        assert _B13_NEW_COLUMN <= _columns(conn, "files")
+        assert not (_V4_NEW_COLUMN & _columns(conn, "files"))
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+
+        db.init_index_schema(conn)  # runs the v3->v4 migration on the existing DB
+
+        assert _V4_NEW_COLUMN <= _columns(conn, "files")
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 4
+        # the pre-existing panorama row survives, stitch_projection reads as NULL
+        row = conn.execute(
+            "SELECT sha256, capture_kind, stitch_status, stitch_projection FROM files"
+        ).fetchone()
+        assert row[0] == "def456"
+        assert row[1] == "panorama" and row[2] == "ok" and row[3] is None
+    finally:
+        conn.close()
+
+
 def test_fresh_install_is_current_with_new_columns(tmp_path):
-    conn = db.connect(tmp_path / "fresh_v3.db")
+    conn = db.connect(tmp_path / "fresh_v4.db")
     try:
         db.init_index_schema(conn)
-        assert (_B9A_NEW_COLUMNS | _B13_NEW_COLUMN) <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+        assert (_B9A_NEW_COLUMNS | _B13_NEW_COLUMN | _V4_NEW_COLUMN) <= _columns(conn, "files")
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 4
     finally:
         conn.close()
 
