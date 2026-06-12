@@ -2,8 +2,8 @@
 title: DJI Panorama Stitching (Hugin)
 tags: [dji, panorama, stitching, hugin, derived-assets, geosorter]
 created: 2026-06-05
-updated: 2026-06-05
-sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch]
+updated: 2026-06-11
+sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch, task:m-fix-panorama-projection-autodetect]
 ---
 
 # DJI Panorama Stitching (Hugin)
@@ -14,8 +14,12 @@ A DJI "sphere"/360 panorama is captured as a directory of overlapping tiles —
 calibration.** B12 files this as a `panorama` capture unit (primary tile +
 `panorama_frame` companions, see [Phase 1 Backend](phase1-backend-api.md) and the
 companion-grouping docs); B13 adds an optional, lazy, server-side **stitched
-360 equirectangular hero** built on top of it, with graceful fallback to the tile
-gallery whenever stitching is unavailable.
+hero** built on top of it, with graceful fallback to the tile gallery whenever
+stitching is unavailable. The projection is **auto-detected** from the tile geometry
+(m-fix-panorama-projection-autodetect): a full 360 sphere produces an equirectangular
+hero (the immersive `PanoSphere` viewer); a non-360 (180/wide/vertical) pano produces a
+flat hero (a flat zoomable image). See *Projection auto-detection* and
+*Output-validity gate* below.
 
 ## Why Hugin, not OpenCV (the spike's central finding)
 
@@ -43,14 +47,24 @@ output is seam-free where cv2's was a warped partial.
 pto_gen      -o p.pto <all tiles>                  # project from the tile set
 cpfind       --multirow --celeste -o p.pto p.pto   # control points; celeste masks sky
 cpclean      -o p.pto p.pto                         # prune bad control points
-autooptimiser -a -m -l -s -o p.pto p.pto            # optimize positions + photometric
-pano_modify  --projection=2 --canvas=6000x3000 --crop=AUTO -o p.pto p.pto
+autooptimiser -a -m -l -s -o p.pto p.pto            # optimize positions + photometric + FOV
+pano_modify  --projection=<inferred> --canvas=4000x2000 --crop=AUTO -o p.pto p.pto
 hugin_executor --stitching --prefix=out p.pto       # nona + enblend -> out.tif
 ```
 
+- **Projection auto-detection (m-fix-panorama-projection-autodetect).** Not every DJI
+  panorama is a full 360 sphere — it also shoots 180, wide, and vertical panos. `--canvas`
+  default shrank to `4000x2000` (m-frontend-pano-ux). The projection is **no longer
+  hard-coded**: `autooptimiser -s` already estimates the panorama's horizontal field of
+  view (HFOV) and writes it to the `.pto` `p`-line (`v<HFOV>`); `panorama_stitch` reads
+  that HFOV back (`derived._parse_pto_hfov`) and maps it (`derived._choose_projection`) to
+  the `pano_modify --projection` code — **HFOV ≥ 270° → equirectangular (code 2)**;
+  **≥ 120° → cylindrical (code 1)**; **otherwise → rectilinear (code 0)**. The last two are
+  "flat" (non-360) heroes. This fixes low-tile-count / non-360 panoramas (e.g. the 5.38:1
+  result that the old equirectangular-only gate rejected). A full 360 sphere is
+  ~35 tiles and still resolves to equirectangular (no regression).
 - `--projection=2` is **equirectangular** (the 360×180 sphere flattened to a 2:1
-  rectangle). `--canvas=6000x3000` caps the sphere; `--crop=AUTO` trims empty margins,
-  so the real output is ~**6000×2683** (16 MP, aspect ≈ 2.24:1).
+  rectangle); `--crop=AUTO` trims empty margins, so a real 360 output is ~2:1.
 - **Cost:** ~**7 min** wall-clock (`cpfind` ~188 s + `autooptimiser` ~81 s +
   `enblend` ~136 s), peak ~**434 MiB** RSS (`enblend` streams/tiles, so it is *more*
   memory-frugal than cv2's ~2 GB). This cost is why stitching is **lazy, cached, and
@@ -65,12 +79,17 @@ the tile gallery.
 ## Output-validity gate
 
 A stitch is only cached/served after passing a cheap Pillow gate, so a degenerate
-result (the cv2-style void, or a failed run) is never shown as a hero:
+result (the cv2-style void, or a failed run) is never shown as a hero. The gate is
+**projection-aware** (`_stitch_gate(path, kind)`, m-fix-panorama-projection-autodetect):
 
-- long edge within `[2000, 6000]` px (the cap also bounds `enblend` time/memory),
-- aspect within `[1.3, 3.0]` (equirectangular-like, lenient for `--crop=AUTO`),
-- near-black-pixel fraction `≤ 15 %` (luminance < 8, via the histogram) — this is the
-  direct guard against the cv2 ~45 %-void failure mode.
+- long edge within `[2000, 6000]` px (the cap also bounds `enblend` time/memory) — both
+  projections,
+- aspect — **equirectangular** within `[1.3, 3.0]` (lenient for `--crop=AUTO`); a
+  non-360 **flat** hero within the far wider `[0.2, 8.0]` (a 180/wide pano is legitimately
+  up to ~6:1, a vertical pano is tall, < 1), so it is no longer wrongly rejected as
+  "not equirectangular-like",
+- near-black-pixel fraction `≤ 15 %` (luminance < 8, via the histogram) — both
+  projections; the direct guard against the cv2 ~45 %-void failure mode.
 
 A failed pipeline step, a timeout, or a gate rejection all surface as a single
 `failed` outcome → the client falls back to the gallery.
@@ -92,6 +111,18 @@ A failed pipeline step, a timeout, or a gate rejection all surface as a single
   lets the map UI know whether a hero exists without probing the cache. Hugin-absent
   resolves to a job status of `unavailable` and leaves the column `NULL` (not a
   failure — the gallery is the expected experience).
+- **`stitch_projection` provenance + viewer choice** (schema v4,
+  m-fix-panorama-projection-autodetect). A second nullable `files.stitch_projection`
+  column (`NULL` | `equirectangular` | `flat`, panorama rows only) records the detected
+  projection alongside the `ok` status, so the map UI picks the hero viewer straight off
+  the `/api/library` GeoJSON: **equirectangular → the 360 `PanoSphere` sphere viewer**;
+  **flat → a flat zoomable image (`FlatHero`)**. A `NULL` (legacy hero stitched before
+  this feature — all of which were 360, since the old gate rejected everything else)
+  defaults to `PanoSphere`. The `/api/library` ETag folds a `stitch_projection` code sum
+  so a projection change can't 304 stale. On a freshness cache hit (no fresh HFOV) the
+  projection is **backfilled from the cached hero's aspect only when `NULL`**
+  (`classify_stitched_projection`) — recovering a cache that outlived its index-DB row,
+  never overwriting the authoritative cold-run HFOV-derived value.
 - **Traversal-proof serving.** `GET /api/stitch/{file_id}` is **file-id-keyed**: it
   derives the `.jpg` cache path server-side from the stored primary `dest_path` and
   never accepts a client relpath, so the `.pto`/`out.tif` intermediates (which live

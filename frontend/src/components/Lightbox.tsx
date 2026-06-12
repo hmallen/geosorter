@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { collageUrl, fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
+import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature } from '../types'
+import FlatHero from './FlatHero'
 import LoadingImage from './LoadingImage'
 
 // Lazy so three.js + photo-sphere-viewer (~600 kB) only load when a stitched 360
@@ -49,6 +51,11 @@ export default function Lightbox({
   const stitch = fileId !== undefined ? stitchByFile[fileId] : undefined
   const heroReady =
     isPanorama && (f?.properties.stitch_status === 'ok' || stitch?.status === 'ok')
+  // Pick the hero viewer from the detected projection (m-fix-panorama-projection-
+  // autodetect): prefer a non-empty in-session run value, else the library value (a
+  // cache hit reports '' then backfills the library — see resolvePanoViewer). A non-360
+  // 'flat' hero uses a flat zoomable image, else the 360 PanoSphere.
+  const panoViewer = resolvePanoViewer(stitch?.projection, f?.properties.stitch_projection)
   // Only offer to stitch when tiles were actually filed — a 0-tile panorama can't be
   // stitched (same gate as the frame gallery), so the button never starts a doomed job.
   const stitchable = isPanorama && (f?.properties.frame_count ?? 0) > 0
@@ -103,12 +110,19 @@ export default function Lightbox({
           {frameZoom ? (
             <LoadingImage key={frameZoom} src={previewUrl(frameZoom)} alt="source frame" />
           ) : heroReady ? (
-            <Suspense fallback={<span className="img-spinner" aria-label="loading viewer" />}>
-              <PanoSphere
+            panoViewer === 'flat' ? (
+              <FlatHero
                 src={stitchUrl(f.properties.id)}
-                alt={`${f.properties.filename} (stitched 360 panorama)`}
+                alt={`${f.properties.filename} (stitched panorama)`}
               />
-            </Suspense>
+            ) : (
+              <Suspense fallback={<span className="img-spinner" aria-label="loading viewer" />}>
+                <PanoSphere
+                  src={stitchUrl(f.properties.id)}
+                  alt={`${f.properties.filename} (stitched 360 panorama)`}
+                />
+              </Suspense>
+            )
           ) : f.properties.media_type === 'video' ? (
             <video
               src={videoUrl(f.properties.path)}

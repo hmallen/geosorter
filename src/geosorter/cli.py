@@ -454,14 +454,14 @@ def stitch_bench(config_path: str | None, file_id: int) -> None:
     for label, canvas in (("old 6000x3000", "6000x3000"), ("new 4000x2000", "4000x2000")):
         with tempfile.TemporaryDirectory(prefix="geosorter-bench-") as tmp:
             started = time.perf_counter()
-            derived.panorama_stitch(
+            result = derived.panorama_stitch(
                 tmp, rel_key, primary, frames,
                 hugin_bin_dir=cfg.hugin_bin_dir, canvas=canvas,
                 celeste=cfg.stitch_celeste, optimise_lens=cfg.stitch_optimise_lens,
             )
             elapsed = time.perf_counter() - started
         results[label] = elapsed
-        click.echo(f"  {label}: {elapsed:.1f}s")
+        click.echo(f"  {label}: {elapsed:.1f}s (projection: {result.projection})")
 
     old, new = results["old 6000x3000"], results["new 4000x2000"]
     if new > 0:

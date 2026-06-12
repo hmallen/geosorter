@@ -13,6 +13,10 @@ export interface StitchState {
   step?: number
   step_total?: number
   step_name?: string
+  // Detected projection of a successful hero (m-fix-panorama-projection-autodetect):
+  // 'equirectangular' | 'flat' | '' while in progress. Lets the lightbox pick its
+  // viewer immediately on completion, before the library reload.
+  projection?: string
   error: string | null
 }
 

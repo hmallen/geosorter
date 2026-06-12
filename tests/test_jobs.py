@@ -9,8 +9,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from geosorter import db
-from geosorter.derived import HuginNotFound, StitchFailed
+from PIL import Image
+
+from geosorter import db, derived
+from geosorter.derived import HuginNotFound, StitchFailed, StitchResult
 from geosorter.jobs import JobManager, WorkerBusy, _compute_eta
 from geosorter.organize import BatchReport
 from geosorter.rescan import RescanReport
@@ -478,6 +480,16 @@ def _read_stitch_status(cfg, file_id):
         conn.close()
 
 
+def _read_stitch_projection(cfg, file_id):
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    try:
+        return conn.execute(
+            "SELECT stitch_projection FROM files WHERE id=?", (file_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
 def test_submit_stitch_success_writes_ok(tmp_path):
     cfg, file_id, primary, frames = _build_index_with_panorama(tmp_path)
     seen = {}
@@ -487,14 +499,16 @@ def test_submit_stitch_success_writes_ok(tmp_path):
         seen["rel_key"] = rel_key
         seen["primary"] = prim
         seen["frames"] = list(frms)
-        return Path("stitched.jpg")
+        return StitchResult(Path("stitched.jpg"), "flat")
 
     mgr = JobManager(cfg, stitch_fn=fake_stitch)
     job_id = mgr.submit_stitch(file_id)
     st = _wait_stitch(mgr, job_id)
     assert st.state == "done"
     assert st.status == "ok"
+    assert st.projection == "flat"  # surfaced on the job snapshot
     assert _read_stitch_status(cfg, file_id) == "ok"
+    assert _read_stitch_projection(cfg, file_id) == "flat"  # recorded in the files row
     # the job loaded the primary + frame tiles from the DB and passed them through,
     # plus the proxy cache root (None -> library_root) + the primary's library-rel key.
     assert seen["primary"] == str(primary)
@@ -510,7 +524,7 @@ def test_submit_stitch_reports_step_progress(tmp_path):
 
     def stepping_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step, **_):
         on_step(3, 6, "cpclean")
-        return Path("stitched.jpg")
+        return StitchResult(Path("stitched.jpg"), "equirectangular")
 
     mgr = JobManager(cfg, stitch_fn=stepping_stitch)
     st = _wait_stitch(mgr, mgr.submit_stitch(file_id))
@@ -561,7 +575,7 @@ def test_submit_stitch_dedups_inflight_and_marks_pending(tmp_path):
     def blocking_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
         entered.set()
         release.wait(2.0)
-        return Path("stitched.jpg")
+        return StitchResult(Path("stitched.jpg"), "equirectangular")
 
     mgr = JobManager(cfg, stitch_fn=blocking_stitch)
     j1 = mgr.submit_stitch(file_id)
@@ -573,6 +587,41 @@ def test_submit_stitch_dedups_inflight_and_marks_pending(tmp_path):
     st = _wait_stitch(mgr, j1)
     assert st.status == "ok"
     assert _read_stitch_status(cfg, file_id) == "ok"
+
+
+def test_submit_stitch_cache_hit_backfills_null_projection(tmp_path):
+    # A cached hero survives at the canonical path but stitch_projection is NULL (e.g.
+    # the index DB was rebuilt while the cache on library_root survived). The next stitch
+    # is a freshness cache hit (projection=''); the job must BACKFILL the projection from
+    # the cached hero's aspect so a flat hero isn't stuck defaulting to the 360 viewer.
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+    out = derived.stitch_cache_path(cfg.library_root, "pano/PANO_0001.JPG")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (4000, 743), "skyblue").save(out)  # 5.38:1 -> flat
+
+    mgr = JobManager(cfg, stitch_fn=lambda *a, **k: StitchResult(Path("ignored.jpg"), ""))
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id))
+    assert st.status == "ok"
+    assert _read_stitch_projection(cfg, file_id) == "flat"  # backfilled from the cache
+
+
+def test_submit_stitch_cache_hit_does_not_overwrite_recorded_projection(tmp_path):
+    # A cache hit must NEVER overwrite an authoritative cold-run projection, even when
+    # the cached hero's aspect disagrees (a 2:1-ish cylindrical pano recorded 'flat').
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    conn.execute(
+        "UPDATE files SET stitch_projection='equirectangular' WHERE id=?", (file_id,)
+    )
+    conn.commit()
+    conn.close()
+    out = derived.stitch_cache_path(cfg.library_root, "pano/PANO_0001.JPG")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (4000, 743), "skyblue").save(out)  # flat aspect — must be IGNORED
+
+    mgr = JobManager(cfg, stitch_fn=lambda *a, **k: StitchResult(Path("ignored.jpg"), ""))
+    _wait_stitch(mgr, mgr.submit_stitch(file_id))
+    assert _read_stitch_projection(cfg, file_id) == "equirectangular"  # unchanged
 
 
 def test_stitch_pool_independent_of_destructive_pool(tmp_path):
@@ -587,7 +636,7 @@ def test_stitch_pool_independent_of_destructive_pool(tmp_path):
         return BatchReport(batch_id="x")
 
     mgr = JobManager(cfg, organize_fn=slow_organize,
-                     stitch_fn=lambda *a, **k: Path("x.jpg"))
+                     stitch_fn=lambda *a, **k: StitchResult(Path("x.jpg"), "equirectangular"))
     mgr.submit()  # fills the destructive pool
     st = _wait_stitch(mgr, mgr.submit_stitch(file_id))  # must complete anyway
     assert st.status == "ok"

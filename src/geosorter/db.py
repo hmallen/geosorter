@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4  # v3->v4: files.stitch_projection (m-fix-panorama-projection-autodetect)
 
 _INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS files (
     frame_count       INTEGER,                       -- # source frames for hyperlapse/panorama (B10/B12)
     star_rating       INTEGER,                       -- DJI in-app star rating, from MISC catalog (B11)
     stitch_status     TEXT,                          -- panorama hero: NULL=none|'pending'|'ok'|'failed' (B13)
+    stitch_projection TEXT,                          -- panorama hero projection: NULL|'equirectangular'|'flat' (v4)
     capture_ts_utc    TEXT,                          -- ISO 8601 UTC
     capture_ts_local  TEXT,                          -- ISO 8601 with local offset
     local_date        TEXT,                          -- YYYY-MM-DD (GPS-derived local)
@@ -211,6 +212,7 @@ _INDEX_MIGRATIONS: dict[str, str] = {
     "frame_count": "INTEGER",
     "star_rating": "INTEGER",
     "stitch_status": "TEXT",
+    "stitch_projection": "TEXT",
 }
 
 
