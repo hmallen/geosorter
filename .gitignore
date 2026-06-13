@@ -36,3 +36,6 @@ src/geosorter/webui/
 
 # Stray local lockfile backups (e.g. created before a manual uv.lock edit)
 uv.lock.bak
+
+# graphify generated knowledge graph (rebuilt locally via `graphify update .`)
+graphify-out/

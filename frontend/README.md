@@ -27,11 +27,11 @@ npm --prefix frontend run dev
 ## Test
 
 ```bash
-npm --prefix frontend run test   # Vitest: api / clusters / organizeJob / selection
+npm --prefix frontend run test   # Vitest: api / clusters / organizeJob / viewport
 ```
 
 The pure logic (media-URL builders, supercluster wrapper, organize-job polling,
-marker→files selection) is unit-tested; the UI and end-to-end flow are verified by a
+viewport bounds filtering) is unit-tested; the UI and end-to-end flow are verified by a
 manual smoke.
 
 ## Build (production / same-origin)
@@ -49,7 +49,7 @@ The build output (`src/geosorter/webui/`) is gitignored and produced on demand �
 - `src/api.ts` — typed media-URL builders + `fetchLibrary`
 - `src/clusters.ts` — `supercluster` wrapper (`buildIndex`/`clustersFor`/…)
 - `src/organizeJob.ts` — `POST /api/organize` + status polling state machine
-- `src/selection.ts` — marker/cluster → file list
+- `src/viewport.ts` — `featuresInBounds` (pure bounds filter for the side panel)
 - `src/useLibrary.ts`, `src/useOrganizeJob.ts` — React hooks
 - `src/components/` — `MapView`, `FileListPanel`, `Lightbox`, `Toolbar`
 - `src/*.test.ts` — Vitest unit tests (node environment)

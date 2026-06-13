@@ -264,11 +264,25 @@
   color: var(--text);
 }
 
+/* Empty state when the viewport contains no captures (viewport-filtered panel). */
+.panel-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 /* Scroll container for the virtualized thumbnail grid (react-virtual). The grid
    layout moved to .grid-row so only viewport-visible rows mount/request. */
 .grid {
   overflow-y: auto;
   overflow-x: hidden; /* never a horizontal scrollbar; filenames ellipsis-clamp */
+  /* Always reserve the scrollbar gutter so the content width is identical whether or
+     not the vertical scrollbar is shown. Without this, the scrollbar appearing on an
+     overflowing list narrows the row width → the 1fr square thumbnails shrink → the
+     virtualizer's measured total height drops → the scrollbar is removed → width grows
+     again → an infinite layout-feedback loop ("vibrating" panel). */
+  scrollbar-gutter: stable;
   padding: 8px;
 }
 

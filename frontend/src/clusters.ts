@@ -1,5 +1,5 @@
 // Pure supercluster wrapper: build an index from the library GeoJSON and query
-// clusters/leaves per viewport. Kept side-effect-free so it is unit-testable.
+// clusters per viewport. Kept side-effect-free so it is unit-testable.
 import Supercluster from 'supercluster'
 import type { FeatureProps, LibraryFeature } from './types'
 
@@ -26,11 +26,4 @@ export function clustersFor(
 
 export function expansionZoom(index: Supercluster<FeatureProps>, clusterId: number): number {
   return index.getClusterExpansionZoom(clusterId)
-}
-
-export function leaves(
-  index: Supercluster<FeatureProps>,
-  clusterId: number,
-): Supercluster.PointFeature<FeatureProps>[] {
-  return index.getLeaves(clusterId, Infinity)
 }

@@ -9,12 +9,18 @@ interface Props {
   files: LibraryFeature[]
   onOpen: (index: number) => void
   onRetag: (index: number) => void
-  onClose: () => void
 }
 
-export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props) {
+export default function FileListPanel({ files, onOpen, onRetag }: Props) {
+  const empty = files.length === 0
   const place = files[0]?.properties.place_string ?? ''
   const date = files[0]?.properties.local_date ?? ''
+  // The viewport-driven list can span many places/dates, so only label it with the
+  // first file's place when every file shares that place (a co-located point or a
+  // tight cluster), and only append the date when they also share that date;
+  // otherwise show a neutral count header.
+  const onePlace = !empty && files.every((f) => f.properties.place_string === place)
+  const oneDate = onePlace && files.every((f) => f.properties.local_date === date)
 
   // Drag-to-resize: the panel is too narrow for long filenames at the default
   // width, so a left-edge handle lets the user widen it (clamped to a usable range).
@@ -74,12 +80,24 @@ export default function FileListPanel({ files, onOpen, onRetag, onClose }: Props
       />
       <div className="panel-head">
         <div>
-          <strong>{place}</strong>
-          <br />
-          <small>{date} · {files.length} file(s)</small>
+          {empty ? (
+            <strong>In view</strong>
+          ) : onePlace ? (
+            <>
+              <strong>{place}</strong>
+              <br />
+              <small>{oneDate ? `${date} · ` : ''}{files.length} file(s)</small>
+            </>
+          ) : (
+            <>
+              <strong>In view</strong>
+              <br />
+              <small>{files.length} file(s)</small>
+            </>
+          )}
         </div>
-        <button onClick={onClose} aria-label="Close">×</button>
       </div>
+      {empty && <div className="panel-empty">No captures in view</div>}
       <div className="grid" ref={scrollRef}>
         <div className="grid-sizer" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((vrow) => {
