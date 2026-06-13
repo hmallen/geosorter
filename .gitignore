@@ -40,6 +40,9 @@ uv.lock.bak
 # pytest --basetemp scratch dir (suite run with --basetemp=...pytmp-geosorter)
 pytmp-geosorter/
 
+# Playwright MCP browser-run artifacts (console logs, page snapshots, screenshots)
+.playwright-mcp/
+
 # graphify transient artifacts — the top-level graph outputs (graph.json,
 # GRAPH_REPORT.md, manifest.json, ...) are tracked; the AST cache and dated
 # snapshot dirs are regenerated and need not be committed.

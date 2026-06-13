@@ -70,15 +70,28 @@ export default function MapView({ features, onMarkerClick, onMapClick, onBoundsC
       style={{ position: 'absolute', inset: 0 }}
     >
       <NavigationControl position="top-left" />
-      <div className="map-controls">
-        <label>
-          <input type="checkbox" checked={satellite} onChange={(e) => setSatellite(e.target.checked)} />
-          Satellite
-        </label>
-        <label>
-          <input type="checkbox" checked={heatmap} onChange={(e) => setHeatmap(e.target.checked)} />
-          Heatmap
-        </label>
+      {/* Bottom-left overlay stack: view toggles above the marker legend. Anchored
+          here (not top-right) because the file-list panel is a permanent right-edge
+          fixture that would otherwise occlude the controls. */}
+      <div className="map-overlay-bl">
+        <div className="map-controls">
+          <label>
+            <input type="checkbox" checked={satellite} onChange={(e) => setSatellite(e.target.checked)} />
+            Satellite
+          </label>
+          <label>
+            <input type="checkbox" checked={heatmap} onChange={(e) => setHeatmap(e.target.checked)} />
+            Heatmap
+          </label>
+        </div>
+        {!heatmap && (
+          <div className="map-legend">
+            <span><i className="pin pin--legend" /> GPS</span>
+            <span><i className="pin pin--inferred pin--legend" /> inferred</span>
+            <span><i className="pin pin--manual pin--legend" /> manual</span>
+            <span><i className="pin pin--panorama pin--legend" /> panorama</span>
+          </div>
+        )}
       </div>
       {heatmap && (
         <Source id="library-heat" type="geojson" data={heatData}>
@@ -137,14 +150,6 @@ export default function MapView({ features, onMarkerClick, onMapClick, onBoundsC
           </Marker>
         )
       })}
-      {!heatmap && (
-        <div className="map-legend">
-          <span><i className="pin pin--legend" /> GPS</span>
-          <span><i className="pin pin--inferred pin--legend" /> inferred</span>
-          <span><i className="pin pin--manual pin--legend" /> manual</span>
-          <span><i className="pin pin--panorama pin--legend" /> panorama</span>
-        </div>
-      )}
     </Map>
   )
 }
