@@ -96,6 +96,11 @@ export default function Toolbar({ onDone, stitchTargets, onReload }: ToolbarProp
           </button>
         )
       )}
+      {!stitchAll.running && stitchAll.result && stitchAll.result.failed > 0 && (
+        <span className="job" title="See the ⚠ stitch badges in the file list">
+          ⚠ {stitchAll.result.failed} stitch(es) failed
+        </span>
+      )}
       {job && job.state === 'running' && total !== null && (
         <span className="job job--progress" title={progressLabel(job)}>
           <progress value={Math.min(job.processed, total)} max={total} />

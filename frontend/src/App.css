@@ -470,6 +470,21 @@
   background: rgba(124, 77, 196, 0.85);
 }
 
+/* Panorama stitch-failed indicator (m-fix-wide-pano-stitch-and-failure-ux): top-right
+   so it never collides with the top-left capture-kind badge or the bottom-left stars.
+   Danger tint so a failed hero is obvious while browsing the list. */
+.badge--stitch-failed {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--danger);
+  color: var(--accent-contrast);
+  pointer-events: none;
+}
+
 /* DJI in-app star rating (B11): bottom-left so it never collides with the
    top-left capture-kind badge. Gold stars on a dark chip. */
 .badge--stars {

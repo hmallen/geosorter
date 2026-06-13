@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { runStitchAll, type StitchAllProgress } from './stitchAllJob'
+import { runStitchAll, type StitchAllProgress, type StitchAllSummary } from './stitchAllJob'
 
 // Drives the optional, interruptible "Stitch all panoramas" toolbar action. The
 // stitch pool is independent of the destructive worker, so this can run while the
@@ -9,6 +9,9 @@ import { runStitchAll, type StitchAllProgress } from './stitchAllJob'
 export function useStitchAll(onComplete: () => void) {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<StitchAllProgress | null>(null)
+  // The last completed run's summary (incl. failedIds), so the UI can report which
+  // panoramas failed after the batch finishes. Cleared at the start of a new run.
+  const [result, setResult] = useState<StitchAllSummary | null>(null)
   const cancelled = useRef(false)
 
   const start = useCallback(
@@ -16,11 +19,13 @@ export function useStitchAll(onComplete: () => void) {
       if (ids.length === 0 || running) return
       cancelled.current = false
       setRunning(true)
+      setResult(null)
       setProgress({ done: 0, total: ids.length, current: ids[0] })
       runStitchAll(fetch, ids, {
         shouldContinue: () => !cancelled.current,
         onProgress: setProgress,
       })
+        .then(setResult)
         .catch(() => undefined) // runStitchAll never rejects, but stay defensive
         .finally(() => {
           setRunning(false)
@@ -35,5 +40,5 @@ export function useStitchAll(onComplete: () => void) {
     cancelled.current = true
   }, [])
 
-  return { running, progress, start, cancel }
+  return { running, progress, result, start, cancel }
 }
