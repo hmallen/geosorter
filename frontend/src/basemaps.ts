@@ -20,6 +20,14 @@ export const SATELLITE_STYLE: StyleSpecification = {
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
+      // Cap the source so MapLibre OVERZOOMS (upscales the deepest native tile) for any
+      // zoom past 18 instead of requesting tiles Esri may not have. Esri World Imagery's
+      // coverage thins out at high zoom in remote areas (this library skews to
+      // parks/peaks/hydro), where a missing z19+ tile 404s into a blank/grey void after
+      // a cluster click or deep manual zoom. z18 imagery exists essentially everywhere a
+      // drone flies, so capping here guarantees no blank tiles — at the cost of slightly
+      // soft (upscaled) imagery past z18 even where Esri does have crisp deeper tiles.
+      maxzoom: 18,
       attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
     },
   },
