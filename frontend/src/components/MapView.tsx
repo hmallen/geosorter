@@ -3,22 +3,28 @@ import Map, { Layer, Marker, NavigationControl, Source } from 'react-map-gl/mapl
 import type { MapEvent, MapLayerMouseEvent, ViewStateChangeEvent } from 'react-map-gl/maplibre'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type Supercluster from 'supercluster'
-import { buildIndex, clustersFor, expansionZoom, type BBox, type ClusterOrPoint } from '../clusters'
+import { buildIndex, clustersFor, expansionZoom, type BBox } from '../clusters'
 import { VECTOR_STYLE, SATELLITE_STYLE, HEATMAP_LAYER, heatmapData } from '../basemaps'
-import type { FeatureProps, LibraryFeature } from '../types'
+import type { LibraryFeature } from '../types'
 
 const WORLD: BBox = [-180, -85, 180, 85]
 
 interface Props {
   features: LibraryFeature[]
-  onSelect: (index: Supercluster<FeatureProps>, item: ClusterOrPoint) => void
+  // Clicking a single capture marker reports its file id so App can open it in the
+  // lightbox. A cluster click is handled internally (zoom to expand) and never fires
+  // this. Omitted (undefined) during re-tag placement so marker clicks are inert.
+  onMarkerClick?: (id: number) => void
   // Re-tag placement mode (B8): when set, a map-background click reports the
-  // clicked coordinate (lng, lat) instead of selecting markers.
+  // clicked coordinate (lng, lat) instead of opening a marker.
   onMapClick?: (lng: number, lat: number) => void
+  // Viewport-filtered panel: report the settled viewport bounds to App so the
+  // side panel can list only captures on screen. Fired on the same
+  // onLoad/onMoveEnd cadence as the internal cluster bbox (already debounced).
+  onBoundsChange?: (bounds: BBox) => void
 }
 
-export default function MapView({ features, onSelect, onMapClick }: Props) {
+export default function MapView({ features, onMarkerClick, onMapClick, onBoundsChange }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const [view, setView] = useState({ longitude: -98, latitude: 39, zoom: 3 })
   const [bbox, setBbox] = useState<BBox>(WORLD)
@@ -29,8 +35,10 @@ export default function MapView({ features, onSelect, onMapClick }: Props) {
 
   const syncBounds = useCallback((map: MapLibreMap) => {
     const b = map.getBounds()
-    setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()])
-  }, [])
+    const next: BBox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+    setBbox(next)
+    onBoundsChange?.(next)
+  }, [onBoundsChange])
 
   return (
     <Map
@@ -44,8 +52,18 @@ export default function MapView({ features, onSelect, onMapClick }: Props) {
           zoom: e.viewState.zoom,
         })
       }
-      onLoad={(e: MapEvent) => syncBounds(e.target)}
-      onMoveEnd={(e: ViewStateChangeEvent) => syncBounds(e.target)}
+      onLoad={(e: MapEvent) => {
+        // Subscribe to maplibre's `moveend` DIRECTLY on the map, not via react-map-gl's
+        // `onMoveEnd` prop. In controlled mode react-map-gl suppresses its own camera
+        // callbacks while it applies a programmatic view change (its `_internalUpdate`
+        // guard), so `onMoveEnd` never fires for a cluster-click zoom and the panel
+        // would stay stale. A direct listener is not gated by that flag, so it fires for
+        // BOTH user gestures and programmatic moves — and `getBounds()` is already
+        // current because the move has finished. This replaces the `onMoveEnd` prop.
+        const map = e.target
+        syncBounds(map)
+        map.on('moveend', () => syncBounds(map))
+      }}
       onClick={(e: MapLayerMouseEvent) => onMapClick?.(e.lngLat.lng, e.lngLat.lat)}
       cursor={onMapClick ? 'crosshair' : undefined}
       mapStyle={satellite ? SATELLITE_STYLE : VECTOR_STYLE}
@@ -79,8 +97,10 @@ export default function MapView({ features, onSelect, onMapClick }: Props) {
               anchor="center"
               onClick={(ev) => {
                 ev.originalEvent.stopPropagation()
+                // Controlled camera move. The bounds refresh is handled by the direct
+                // maplibre `moveend` listener wired in onLoad (react-map-gl's own
+                // onMoveEnd is suppressed for this programmatic change).
                 setView({ longitude: lon, latitude: lat, zoom: expansionZoom(index, cluster_id) })
-                onSelect(index, c)
               }}
             >
               <div className="cluster">{point_count}</div>
@@ -105,8 +125,12 @@ export default function MapView({ features, onSelect, onMapClick }: Props) {
             latitude={lat}
             anchor="center"
             onClick={(ev) => {
+              // During re-tag placement onMarkerClick is undefined: don't swallow the
+              // click, so it falls through to the map's onMapClick (pickLocation) and
+              // a new location can be placed even directly on top of an existing pin.
+              if (!onMarkerClick) return
               ev.originalEvent.stopPropagation()
-              onSelect(index, c)
+              onMarkerClick(props.id)
             }}
           >
             <div className={`pin${variant}`} title={`${props.filename}${note}`} />
