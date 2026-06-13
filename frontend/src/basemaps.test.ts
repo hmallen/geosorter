@@ -22,11 +22,13 @@ describe('basemaps', () => {
   })
 
   it('SATELLITE_STYLE is an Esri raster style with attribution', () => {
-    const sources = SATELLITE_STYLE.sources as Record<string, { type: string; tiles?: string[]; attribution?: string }>
+    const sources = SATELLITE_STYLE.sources as Record<string, { type: string; tiles?: string[]; attribution?: string; maxzoom?: number }>
     const raster = Object.values(sources).find((s) => s.type === 'raster')
     expect(raster).toBeDefined()
     expect(raster?.tiles?.[0]).toContain('World_Imagery')
     expect(raster?.attribution && raster.attribution.length).toBeGreaterThan(0)
+    // Capped so MapLibre overzooms past z18 instead of fetching blank/missing tiles.
+    expect(raster?.maxzoom).toBe(18)
     const rasterLayers = SATELLITE_STYLE.layers.filter((l) => l.type === 'raster')
     expect(rasterLayers).toHaveLength(1)
   })
