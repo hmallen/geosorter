@@ -8,6 +8,7 @@ const noFetch = (() => {
 
 const ok = (id: number): StitchState => ({ state: 'done', status: 'ok', file_id: id, error: null })
 const failed = (id: number): StitchState => ({ state: 'done', status: 'failed', file_id: id, error: 'x' })
+const unavailable = (id: number): StitchState => ({ state: 'done', status: 'unavailable', file_id: id, error: null })
 
 describe('runStitchAll', () => {
   it('runs every id in order and counts completions', async () => {
@@ -18,7 +19,7 @@ describe('runStitchAll', () => {
     })
     const summary = await runStitchAll(noFetch, [1, 2, 3], { runStitchFn })
     expect(order).toEqual([1, 2, 3])
-    expect(summary).toEqual({ completed: 3, failed: 0, cancelled: false })
+    expect(summary).toEqual({ completed: 3, failed: 0, cancelled: false, failedIds: [] })
   })
 
   it('stops early (after the in-flight one) when shouldContinue turns false', async () => {
@@ -43,7 +44,7 @@ describe('runStitchAll', () => {
       id === 2 ? failed(id) : ok(id),
     )
     const summary = await runStitchAll(noFetch, [1, 2, 3], { runStitchFn })
-    expect(summary).toEqual({ completed: 2, failed: 1, cancelled: false })
+    expect(summary).toEqual({ completed: 2, failed: 1, cancelled: false, failedIds: [2] })
   })
 
   it('counts a thrown stitch as failed and continues', async () => {
@@ -52,7 +53,28 @@ describe('runStitchAll', () => {
       return ok(id)
     })
     const summary = await runStitchAll(noFetch, [1, 2, 3], { runStitchFn })
-    expect(summary).toEqual({ completed: 2, failed: 1, cancelled: false })
+    expect(summary).toEqual({ completed: 2, failed: 1, cancelled: false, failedIds: [2] })
+  })
+
+  it('does not count an unavailable stitch (Hugin absent) as failed', async () => {
+    // 'unavailable' leaves stitch_status NULL (no failed badge) — it is not a failure
+    // of that panorama, so it must be excluded from failedIds/failed.
+    const runStitchFn = vi.fn(async (_f: typeof fetch, id: number) =>
+      id === 2 ? unavailable(id) : ok(id),
+    )
+    const summary = await runStitchAll(noFetch, [1, 2, 3], { runStitchFn })
+    expect(summary).toEqual({ completed: 2, failed: 0, cancelled: false, failedIds: [] })
+  })
+
+  it('collects every failed id (status-failed and thrown) in order', async () => {
+    const runStitchFn = vi.fn(async (_f: typeof fetch, id: number) => {
+      if (id === 2) return failed(id) // status !== 'ok'
+      if (id === 4) throw new Error('boom') // thrown start error
+      return ok(id)
+    })
+    const summary = await runStitchAll(noFetch, [1, 2, 3, 4], { runStitchFn })
+    expect(summary.failedIds).toEqual([2, 4])
+    expect(summary.failed).toBe(2)
   })
 
   it('reports progress per id', async () => {

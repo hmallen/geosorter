@@ -15,6 +15,7 @@ export interface StitchAllProgress {
 export interface StitchAllSummary {
   completed: number // status === 'ok'
   failed: number // status !== 'ok' or the stitch threw
+  failedIds: number[] // the file_ids that failed — so the UI can point at them
   cancelled: boolean // stopped early because shouldContinue returned false
 }
 
@@ -35,21 +36,25 @@ export async function runStitchAll(
 ): Promise<StitchAllSummary> {
   const { shouldContinue, onProgress, intervalMs, runStitchFn = runStitch } = opts
   let completed = 0
-  let failed = 0
+  const failedIds: number[] = []
   for (let i = 0; i < ids.length; i++) {
     if (shouldContinue && !shouldContinue()) {
-      return { completed, failed, cancelled: true }
+      return { completed, failed: failedIds.length, failedIds, cancelled: true }
     }
     const id = ids[i]
     onProgress?.({ done: i, total: ids.length, current: id })
     try {
       const st = await runStitchFn(fetchFn, id, { intervalMs })
       if (st.status === 'ok') completed += 1
-      else failed += 1
+      else if (st.status === 'unavailable') {
+        // Hugin not installed: the panorama is not a failure (the backend leaves
+        // stitch_status NULL, so no failed badge renders) — exclude it from failedIds
+        // so the "N stitch(es) failed" note doesn't point at non-existent badges.
+      } else failedIds.push(id)
     } catch {
-      failed += 1 // a thrown stitch (network/start error) is one failure, not a stop
+      failedIds.push(id) // a thrown stitch (network/start error) is one failure, not a stop
     }
     onProgress?.({ done: i + 1, total: ids.length, current: null })
   }
-  return { completed, failed, cancelled: false }
+  return { completed, failed: failedIds.length, failedIds, cancelled: false }
 }

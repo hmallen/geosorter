@@ -3,7 +3,7 @@ title: DJI Panorama Stitching (Hugin)
 tags: [dji, panorama, stitching, hugin, derived-assets, geosorter]
 created: 2026-06-05
 updated: 2026-06-13
-sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch, task:m-fix-panorama-projection-autodetect, task:m-cli-restitch-fix-projection]
+sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch, task:m-fix-panorama-projection-autodetect, task:m-cli-restitch-fix-projection, task:m-fix-wide-pano-stitch-and-failure-ux]
 ---
 
 # DJI Panorama Stitching (Hugin)
@@ -63,6 +63,14 @@ hugin_executor --stitching --prefix=out p.pto       # nona + enblend -> out.tif
   "flat" (non-360) heroes. This fixes low-tile-count / non-360 panoramas (e.g. the 5.38:1
   result that the old equirectangular-only gate rejected). A full 360 sphere is
   ~35 tiles and still resolves to equirectangular (no regression).
+- **Wide single-row 360 reclassification (m-fix-wide-pano-stitch-and-failure-ux).** A
+  single-row 360 sweep has HFOV ≥ 270° so `_choose_projection` picks equirectangular, but
+  `--crop=AUTO` trims it to a wide thin strip (~8:1) — not a 2:1 sphere, so the equirectangular
+  gate `[1.3, 3.0]` rejected it. `panorama_stitch` now **reclassifies** a chosen-equirectangular
+  output whose rendered aspect falls outside `[1.3, 3.0]` but inside the flat envelope to
+  **flat** — one-way (a true sphere renders within `[1.3, 3.0]` and is unaffected), reusing the
+  already-rendered output (no second Hugin pass) — so it passes the (widened) flat gate, records
+  `stitch_projection='flat'`, and routes to the flat hero instead of failing.
 - `--projection=2` is **equirectangular** (the 360×180 sphere flattened to a 2:1
   rectangle); `--crop=AUTO` trims empty margins, so a real 360 output is ~2:1.
 - **Cost:** ~**7 min** wall-clock (`cpfind` ~188 s + `autooptimiser` ~81 s +
@@ -85,9 +93,10 @@ result (the cv2-style void, or a failed run) is never shown as a hero. The gate 
 - long edge within `[2000, 6000]` px (the cap also bounds `enblend` time/memory) — both
   projections,
 - aspect — **equirectangular** within `[1.3, 3.0]` (lenient for `--crop=AUTO`); a
-  non-360 **flat** hero within the far wider `[0.2, 8.0]` (a 180/wide pano is legitimately
-  up to ~6:1, a vertical pano is tall, < 1), so it is no longer wrongly rejected as
-  "not equirectangular-like",
+  non-360 **flat** hero within the far wider `[0.2, 16.0]` (a 180/wide pano is legitimately
+  up to ~6:1, a single-row 360 sweep is a wide thin strip ~8:1 and up, a vertical pano is
+  tall, < 1), so it is no longer wrongly rejected as "not equirectangular-like" — the max was
+  raised 8.0 → 16.0 (m-fix-wide-pano-stitch-and-failure-ux),
 - near-black-pixel fraction `≤ 15 %` (luminance < 8, via the histogram) — both
   projections; the direct guard against the cv2 ~45 %-void failure mode.
 
@@ -110,7 +119,12 @@ A failed pipeline step, a timeout, or a gate rejection all surface as a single
   (`NULL`=not attempted | `pending` | `ok` | `failed`, schema v3, panorama rows only)
   lets the map UI know whether a hero exists without probing the cache. Hugin-absent
   resolves to a job status of `unavailable` and leaves the column `NULL` (not a
-  failure — the gallery is the expected experience).
+  failure — the gallery is the expected experience). The map UI surfaces a
+  `stitch_status==='failed'` panorama with a persistent `badge--stitch-failed` in the
+  file-list panel (GeoJSON-driven, survives reload), and the "Stitch all panoramas" run
+  reports a failed count (`runStitchAll`'s `failedIds`, which excludes the non-failure
+  `unavailable` case) — so a stuck panorama is identifiable, not just a number
+  (m-fix-wide-pano-stitch-and-failure-ux).
 - **`stitch_projection` provenance + viewer choice** (schema v4,
   m-fix-panorama-projection-autodetect). A second nullable `files.stitch_projection`
   column (`NULL` | `equirectangular` | `flat`, panorama rows only) records the detected
