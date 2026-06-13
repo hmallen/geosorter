@@ -634,6 +634,34 @@
   height: 78vh;
 }
 
+/* Flat zoomable hero for a non-360 stitched panorama (m-fix-panorama-projection-
+   autodetect). Fits the frame by default; .flat-hero--zoomed shows the image at
+   native size and scrolls so a wide/tall pano can be panned. */
+.flat-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+}
+.flat-hero img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.flat-hero--zoomed {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.flat-hero--zoomed img {
+  max-width: none;
+  max-height: none;
+  object-fit: none;
+  cursor: zoom-out;
+}
+
 /* Derived-asset image: spinner while loading + a failed marker after retries
    (round-2 fix A). The wrapper is contextual so the existing `<container> img`
    selectors keep styling the inner <img>. */

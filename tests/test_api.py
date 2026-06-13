@@ -32,15 +32,15 @@ def _probe_codec(path: Path) -> str:
 
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
           gps_source="exif", capture_kind=None, frame_count=None, star_rating=None,
-          stitch_status=None):
+          stitch_status=None, stitch_projection=None):
     cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
         "local_date, lat, lon, codec, gps_source, sha256, status, capture_kind, "
-        "frame_count, star_rating, stitch_status) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "frame_count, star_rating, stitch_status, stitch_projection) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
          "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status,
-         capture_kind, frame_count, star_rating, stitch_status),
+         capture_kind, frame_count, star_rating, stitch_status, stitch_projection),
     )
     return cur.lastrowid
 
@@ -265,7 +265,18 @@ def test_library_etag_changes_on_in_place_update(tmp_path):
     conn.close()
     stitched = client.get("/api/library", headers={"If-None-Match": etag2})
     assert stitched.status_code == 200  # stitch_status flip is NOT a 304
-    assert stitched.headers["etag"] != etag2
+    etag3 = stitched.headers["etag"]
+    assert etag3 != etag2
+
+    # A stitch_projection change (e.g. a cache-hit backfill) with status already 'ok'
+    # leaves id/count/status-sum unchanged — the projection fold must still flip the ETag.
+    conn = db.connect(index_db, integrity_check=False)
+    conn.execute("UPDATE files SET stitch_projection='flat' WHERE filename='a.JPG'")
+    conn.commit()
+    conn.close()
+    reproj = client.get("/api/library", headers={"If-None-Match": etag3})
+    assert reproj.status_code == 200  # stitch_projection flip is NOT a 304
+    assert reproj.headers["etag"] != etag3
 
 
 def test_video_codec_lookup_handles_long_path_prefix(tmp_path):
@@ -444,7 +455,7 @@ def test_library_exposes_star_rating(tmp_path):
 # --------------------------------------------------------------------------- #
 # Panorama stitch (B13): GeoJSON stitch_status, the cached-hero serve route, and
 # the POST-start + status-poll job plumbing.
-def _panorama_stitch_cfg(tmp_path, *, stitch_status=None):
+def _panorama_stitch_cfg(tmp_path, *, stitch_status=None, stitch_projection=None):
     library = tmp_path / "library"
     (library / "P").mkdir(parents=True)
     inbox = tmp_path / "inbox"
@@ -462,7 +473,8 @@ def _panorama_stitch_cfg(tmp_path, *, stitch_status=None):
     fid = _seed(conn, dest_path=str(library / "P" / "PANO_0001.JPG"),
                 filename="PANO_0001.JPG", media_type="photo", status="organized",
                 lat=4.81, lon=-75.68, gps_source="exif", capture_kind="panorama",
-                frame_count=2, stitch_status=stitch_status)
+                frame_count=2, stitch_status=stitch_status,
+                stitch_projection=stitch_projection)
     conn.commit()
     conn.close()
     return cfg, fid, library
@@ -476,6 +488,18 @@ def test_library_exposes_stitch_status(tmp_path):
         if f["properties"]["filename"] == "PANO_0001.JPG"
     )
     assert feat["properties"]["stitch_status"] == "ok"
+
+
+def test_library_exposes_stitch_projection(tmp_path):
+    cfg, _, _ = _panorama_stitch_cfg(
+        tmp_path, stitch_status="ok", stitch_projection="flat"
+    )
+    client = TestClient(api.create_app(cfg))
+    feat = next(
+        f for f in client.get("/api/library").json()["features"]
+        if f["properties"]["filename"] == "PANO_0001.JPG"
+    )
+    assert feat["properties"]["stitch_projection"] == "flat"
 
 
 def test_stitch_image_served_when_cached(tmp_path):
@@ -513,7 +537,7 @@ def test_stitch_routes_404_for_non_panorama_and_unknown(client_and_lib):
 
 def test_stitch_post_starts_job_and_status_polls(tmp_path):
     cfg, fid, _ = _panorama_stitch_cfg(tmp_path)
-    jm = JobManager(cfg, stitch_fn=lambda *a, **k: Path("stitched.jpg"))
+    jm = JobManager(cfg, stitch_fn=lambda *a, **k: derived.StitchResult(Path("stitched.jpg"), "equirectangular"))
     client = TestClient(api.create_app(cfg, job_manager=jm))
     resp = client.post(f"/api/stitch/{fid}")
     assert resp.status_code == 200
@@ -542,7 +566,7 @@ def test_stitch_status_reports_step_progress(tmp_path):
     def fake(*a, on_step=None, **k):
         on_step(3, 6, "cpclean")
         proceed.wait(2.0)  # hold the job 'running' so the test can observe the step
-        return Path("stitched.jpg")
+        return derived.StitchResult(Path("stitched.jpg"), "equirectangular")
 
     jm = JobManager(cfg, stitch_fn=fake)
     client = TestClient(api.create_app(cfg, job_manager=jm))

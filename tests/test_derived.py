@@ -277,12 +277,23 @@ def _fake_hugin_tools(hugin_bin_dir=None):
     return {name: name for name in derived._HUGIN_TOOLS}
 
 
-def _fake_run_factory(fill: str = "skyblue", size: tuple[int, int] = (3000, 1400)):
-    """A fake _run_hugin that emits a known out.tif on the --stitching step."""
+def _fake_run_factory(
+    fill: str = "skyblue", size: tuple[int, int] = (3000, 1400), hfov: float = 360.0
+):
+    """A fake _run_hugin that drives the projection-aware pipeline.
+
+    On the ``autooptimiser`` step it writes an optimised ``.pto`` whose ``p`` line
+    carries ``hfov`` (so ``panorama_stitch`` can read the HFOV back and pick the
+    projection); on the ``--stitching`` step it emits a known ``out.tif``. Default
+    ``hfov=360`` + a 2.14:1 ``size`` keeps the equirectangular path (the prior
+    behaviour) so the existing assertions hold."""
     calls: list[list[str]] = []
 
     def _run(cmd, *, timeout: int = derived.STITCH_STEP_TIMEOUT_S):
         calls.append(cmd)
+        if Path(cmd[0]).name == "autooptimiser":
+            pto = cmd[cmd.index("-o") + 1]
+            Path(pto).write_text(f'p f2 w6000 h3000 v{hfov} n"TIFF_m"\n')
         if "--stitching" in cmd:
             prefix = next(a.split("=", 1)[1] for a in cmd if a.startswith("--prefix="))
             Image.new("RGB", size, fill).save(prefix + ".tif")
@@ -298,16 +309,19 @@ def test_panorama_stitch_success_caches_and_is_idempotent(tmp_path, monkeypatch)
     run, calls = _fake_run_factory()
     monkeypatch.setattr(derived, "_run_hugin", run)
 
-    out = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
+    result = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
+    out = result.path
     assert out.exists()
+    assert result.projection == "equirectangular"  # default fake HFOV 360 -> full sphere
     with Image.open(out) as img:
         assert img.format == "JPEG"
     assert out.is_relative_to(cache / CACHE / "stitch")
     first_calls = len(calls)
     assert first_calls >= 6  # the full 6-step pipeline ran
 
-    out2 = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
-    assert out2 == out
+    result2 = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert result2.path == out
+    assert result2.projection == ""  # cache hit -> no new projection info
     assert len(calls) == first_calls  # cache hit -> no further hugin invocations
 
 
@@ -378,9 +392,10 @@ def test_panorama_stitch_real_hugin_e2e(tmp_path):
     if len(tiles) < 2:
         pytest.skip(f"no local panorama tiles at {pano_dir}")
 
-    out = derived.panorama_stitch(tmp_path, "PANO_0001.JPG", tiles[0], tiles[1:])
-    assert out.is_file()
-    derived._stitch_gate(out)  # the real output passes the equirectangular gate
+    result = derived.panorama_stitch(tmp_path, "PANO_0001.JPG", tiles[0], tiles[1:])
+    assert result.path.is_file()
+    assert result.projection in ("equirectangular", "flat")
+    derived._stitch_gate(result.path, result.projection)  # real output passes its gate
 
 
 # --- Stitch step opt-out + canvas config (m-frontend-pano-ux) -------------- #
@@ -420,6 +435,109 @@ def test_panorama_stitch_keeps_celeste_and_lens_by_default(tmp_path, monkeypatch
     # The default canvas shrank to 4000x2000 (m-frontend-pano-ux).
     pano_modify = next(c for c in calls if Path(c[0]).name == "pano_modify")
     assert "--canvas=4000x2000" in pano_modify
+
+
+# --- Projection auto-detection (m-fix-panorama-projection-autodetect) ------ #
+
+
+def test_parse_pto_hfov_reads_p_line_v_token():
+    pto = (
+        'p f2 w6000 h3000 v360 E0 R0 n"TIFF_m c:LZW"\n'
+        'm g1 i0 f0 m2 p0.00784314\n'
+        'i w4032 h3024 f0 v78.8 ...\n'  # an image line (its own v) must NOT win
+    )
+    assert derived._parse_pto_hfov(pto) == 360.0
+    assert derived._parse_pto_hfov('p f1 w4000 h1400 v149.5 n"TIFF_m"\n') == 149.5
+
+
+def test_parse_pto_hfov_missing_p_line_raises():
+    with pytest.raises(derived.StitchFailed):
+        derived._parse_pto_hfov('m g1 i0\ni w4032 h3024 v78.8\n')  # no p line
+
+
+def test_parse_pto_hfov_malformed_token_raises():
+    # The loose [\d.]+ regex can admit a token float() rejects (e.g. v3.6.0); the
+    # docstring promises StitchFailed for a malformed project, not a bare ValueError.
+    with pytest.raises(derived.StitchFailed):
+        derived._parse_pto_hfov('p f2 w6000 h3000 v3.6.0 n"x"\n')
+
+
+def test_classify_stitched_projection_by_aspect(tmp_path):
+    eq = tmp_path / "eq.jpg"
+    Image.new("RGB", (4000, 2000), "skyblue").save(eq)  # 2:1 -> equirectangular
+    assert derived.classify_stitched_projection(eq) == "equirectangular"
+    flat = tmp_path / "flat.jpg"
+    Image.new("RGB", (4000, 743), "skyblue").save(flat)  # 5.38:1 -> flat
+    assert derived.classify_stitched_projection(flat) == "flat"
+
+
+def test_choose_projection_by_hfov():
+    assert derived._choose_projection(360.0) == (2, "equirectangular")
+    assert derived._choose_projection(280.0) == (2, "equirectangular")
+    assert derived._choose_projection(270.0) == (2, "equirectangular")
+    assert derived._choose_projection(200.0) == (1, "flat")
+    assert derived._choose_projection(120.0) == (1, "flat")
+    assert derived._choose_projection(119.9) == (0, "flat")
+    assert derived._choose_projection(90.0) == (0, "flat")
+
+
+def test_stitch_gate_is_projection_aware(tmp_path):
+    # A 4000x743 (~5.38:1) wide pano — the file_id 14 failure shape. It is rejected
+    # as equirectangular (out of [1.3, 3.0]) but ACCEPTED as a flat hero.
+    wide = tmp_path / "wide.tif"
+    Image.new("RGB", (4000, 743), "skyblue").save(wide)
+    with pytest.raises(derived.StitchFailed):
+        derived._stitch_gate(wide, "equirectangular")
+    derived._stitch_gate(wide, "flat")  # passes — no raise
+
+    # A 4000x2000 (2:1) equirectangular result passes the equirectangular gate.
+    sphere = tmp_path / "sphere.tif"
+    Image.new("RGB", (4000, 2000), "skyblue").save(sphere)
+    derived._stitch_gate(sphere, "equirectangular")
+
+    # A tall 743x4000 (~0.19) vertical pano: flat's lower bound is 0.2, so this is
+    # rejected even as flat (degenerate sliver); a 800x4000 (0.2) tall pano passes.
+    tall_ok = tmp_path / "tall.tif"
+    Image.new("RGB", (800, 4000), "skyblue").save(tall_ok)
+    derived._stitch_gate(tall_ok, "flat")
+
+    # Black-void guard is projection-independent: rejected for BOTH kinds.
+    void = tmp_path / "void.tif"
+    Image.new("RGB", (4000, 2000), "black").save(void)
+    with pytest.raises(derived.StitchFailed):
+        derived._stitch_gate(void, "equirectangular")
+    with pytest.raises(derived.StitchFailed):
+        derived._stitch_gate(void, "flat")
+
+
+def test_panorama_stitch_flat_projection_for_narrow_pano(tmp_path, monkeypatch):
+    # A narrow-FOV pano (HFOV 149) must stitch as a flat hero: pano_modify gets the
+    # cylindrical projection (code 1), the wide 5.38:1 output passes the flat gate, and
+    # the StitchResult reports projection='flat' (regression for the file_id 14 reject).
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, calls = _fake_run_factory(size=(4000, 743), hfov=149.0)
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    result = derived.panorama_stitch(tmp_path / "c", "pano/PANO_0001.JPG", primary, frames)
+    assert result.projection == "flat"
+    pano_modify = next(c for c in calls if Path(c[0]).name == "pano_modify")
+    assert "--projection=1" in pano_modify  # cylindrical, not the old hard-coded =2
+
+
+def test_panorama_stitch_equirect_projection_for_full_sphere(tmp_path, monkeypatch):
+    # A full sphere (HFOV 360) keeps equirectangular (code 2) — no regression.
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, calls = _fake_run_factory(size=(4000, 2000), hfov=360.0)
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    result = derived.panorama_stitch(tmp_path / "c", "pano/PANO_0001.JPG", primary, frames)
+    assert result.projection == "equirectangular"
+    pano_modify = next(c for c in calls if Path(c[0]).name == "pano_modify")
+    assert "--projection=2" in pano_modify
 
 
 # --- Instant raw-tile collage (m-frontend-pano-ux) ------------------------- #

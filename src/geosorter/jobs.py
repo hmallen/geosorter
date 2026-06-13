@@ -20,7 +20,13 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
 from . import config, db, pathing
-from .derived import HuginNotFound, StitchFailed, panorama_stitch
+from .derived import (
+    HuginNotFound,
+    StitchFailed,
+    classify_stitched_projection,
+    panorama_stitch,
+    stitch_cache_path,
+)
 from .organize import run_organize
 from .rescan import run_rescan
 from .retag import retag_file
@@ -162,6 +168,11 @@ class StitchJobState:
     step: int = 0
     step_total: int = 6
     step_name: str = ""
+    # The detected projection of a successful hero (m-fix-panorama-projection-autodetect):
+    # 'equirectangular' (PanoSphere 360 viewer) | 'flat' (flat zoomable image) | '' while
+    # in progress / on a cache hit. Lets the lightbox pick its viewer before the library
+    # reload brings files.stitch_projection.
+    projection: str = ""
     error: str | None = None
 
 
@@ -501,13 +512,60 @@ class JobManager:
             state = self._stitch_jobs.get(job_id)
             return replace(state) if state is not None else None
 
-    def _mark_stitch_status(self, file_id: int, status: str | None) -> None:
-        """Write ``files.stitch_status`` for a panorama row (NULL clears it)."""
+    def _mark_stitch_status(
+        self, file_id: int, status: str | None, projection: str | None = None
+    ) -> None:
+        """Write ``files.stitch_status`` for a panorama row (NULL clears it).
+
+        When ``projection`` is given (only on a successful 'ok' stitch), the detected
+        ``stitch_projection`` is written in the SAME UPDATE. The GeoJSON ETag folds in a
+        ``stitch_projection`` code sum (alongside the ``stitch_status`` sum), so a
+        conditional GET never 304s with a stale projection (m-fix-panorama-projection-
+        autodetect)."""
         conn = db.connect(self._cfg.index_db_path, integrity_check=False)
         try:
+            if projection is not None:
+                conn.execute(
+                    "UPDATE files SET stitch_status=?, stitch_projection=? "
+                    "WHERE id=? AND capture_kind='panorama'",
+                    (status, projection, file_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE files SET stitch_status=? WHERE id=? AND capture_kind='panorama'",
+                    (status, file_id),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _backfill_stitch_projection(
+        self, file_id: int, cache_root, rel_key: str
+    ) -> None:
+        """Record a projection for a cached hero whose ``stitch_projection`` is NULL.
+
+        Called only on a freshness cache HIT (the stitch returned no new HFOV). It fills
+        the column from the cached hero's aspect (:func:`classify_stitched_projection`)
+        ONLY when it was never recorded — never overwriting an authoritative cold-run
+        value — so a cached flat hero that outlived its index-DB row (rebuild, or a crash
+        between the cache write and the DB update) is not stuck in the 360 sphere viewer.
+        The ``WHERE ... IS NULL`` makes it a no-op when a value already exists."""
+        conn = db.connect(self._cfg.index_db_path, integrity_check=False)
+        try:
+            row = conn.execute(
+                "SELECT stitch_projection FROM files "
+                "WHERE id=? AND capture_kind='panorama'",
+                (file_id,),
+            ).fetchone()
+            if row is None or row[0] is not None:
+                return  # not a panorama, or already recorded — never overwrite
+            out = stitch_cache_path(cache_root, rel_key)
+            if not out.exists():
+                return  # no cached hero to classify (shouldn't happen on a cache hit)
             conn.execute(
-                "UPDATE files SET stitch_status=? WHERE id=? AND capture_kind='panorama'",
-                (status, file_id),
+                "UPDATE files SET stitch_projection=? "
+                "WHERE id=? AND capture_kind='panorama' AND stitch_projection IS NULL",
+                (classify_stitched_projection(out), file_id),
             )
             conn.commit()
         finally:
@@ -552,7 +610,7 @@ class JobManager:
             state.step_name = name
 
         try:
-            self._stitch_fn(
+            result = self._stitch_fn(
                 proxy_cache_dir, rel_key, primary, frames,
                 hugin_bin_dir=self._cfg.hugin_bin_dir,
                 canvas=self._cfg.stitch_canvas,
@@ -582,7 +640,18 @@ class JobManager:
             state.error = str(exc)
             return
 
-        self._mark_stitch_status(file_id, "ok")
+        state.projection = result.projection
+        if result.projection:
+            # Cold run: the HFOV-derived projection is authoritative — record it.
+            self._mark_stitch_status(file_id, "ok", result.projection)
+        else:
+            # Freshness cache hit (no new HFOV): mark ok, then BACKFILL the projection
+            # from the cached hero's aspect ONLY if it was never recorded — e.g. the
+            # cache survived an index-DB rebuild, or a crash landed between the cache
+            # write and the DB update. This never overwrites a cold-run value, so a
+            # cached flat hero is not left defaulting to the 360 sphere viewer.
+            self._mark_stitch_status(file_id, "ok")
+            self._backfill_stitch_projection(file_id, proxy_cache_dir, rel_key)
         state.status = "ok"
         state.state = "done"
 

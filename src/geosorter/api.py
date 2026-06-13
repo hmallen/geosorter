@@ -224,10 +224,12 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         # unchanged library answers If-None-Match with 304 BEFORE building the
         # 8-12 MB feature list. MAX(id)+COUNT(*) flips on any add/prune, but the
         # in-place UPDATEs (retag.py moves lat/lon; jobs._mark_stitch_status flips
-        # stitch_status) leave both unchanged — so the key also folds in a
-        # microdegree sum of lat/lon (any retag moves the coordinate) and a
-        # stitch-status code sum, or a retag/stitch reload would wrongly 304 and
-        # the map would keep the stale marker.
+        # stitch_status / stitch_projection) leave both unchanged — so the key also
+        # folds in a microdegree sum of lat/lon (any retag moves the coordinate), a
+        # stitch-status code sum, AND a stitch-projection code sum (a cache-hit
+        # backfill can change projection while status stays 'ok'), or a
+        # retag/stitch reload would wrongly 304 and the map would keep a stale marker
+        # or route a hero to the wrong viewer.
         conn = _index()
         try:
             ver = conn.execute(
@@ -235,12 +237,14 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "CAST(total(lat) * 1000000 AS INTEGER), "
                 "CAST(total(lon) * 1000000 AS INTEGER), "
                 "CAST(total(CASE stitch_status WHEN 'pending' THEN 1 "
-                "WHEN 'ok' THEN 2 WHEN 'failed' THEN 3 ELSE 0 END) AS INTEGER) "
+                "WHEN 'ok' THEN 2 WHEN 'failed' THEN 3 ELSE 0 END) AS INTEGER), "
+                "CAST(total(CASE stitch_projection WHEN 'equirectangular' THEN 1 "
+                "WHEN 'flat' THEN 2 ELSE 0 END) AS INTEGER) "
                 "FROM files "
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchone()
             max_id, count, max_created = (ver[0] or 0), ver[1], ver[2]
-            etag = f'W/"lib-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}"'
+            etag = f'W/"lib-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}"'
             inm = request.headers.get("if-none-match")
             if inm is not None and _etag_matches(inm, etag):
                 return Response(
@@ -254,7 +258,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, media_type, codec, "
                 "gps_source, capture_kind, frame_count, star_rating, stitch_status, "
-                "dest_path, lat, lon "
+                "stitch_projection, dest_path, lat, lon "
                 "FROM files WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
         finally:
@@ -275,6 +279,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                     "frame_count": r["frame_count"],
                     "star_rating": r["star_rating"],
                     "stitch_status": r["stitch_status"],
+                    "stitch_projection": r["stitch_projection"],
                     "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
