@@ -160,12 +160,33 @@
   background: var(--surface-3);
 }
 
-/* Map legend explaining the GPS vs inferred marker styles. */
-.map-legend {
+/* Bottom-left overlay stack: view toggles (.map-controls) above the marker
+   legend (.map-legend). Both are static flex children of this wrapper so the
+   stack grows upward from the bottom-left corner without a legend-height-dependent
+   magic offset. Anchored left (not right) to clear the permanent file-list panel. */
+.map-overlay-bl {
   position: absolute;
   bottom: 12px;
   left: 12px;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  /* The wrapper is wider/taller than its children (it shrink-wraps to the wider
+     legend), so its transparent dead space — the inter-child gap and the strip
+     beside the narrower controls box — would otherwise swallow map drag/click.
+     Let those pass through; only the interactive controls below opt back in. */
+  pointer-events: none;
+}
+
+/* Map legend explaining the GPS vs inferred marker styles. */
+.map-legend {
+  /* Opt back in (the wrapper is pointer-events:none) so the opaque legend box
+     blocks its own footprint — a click on the legend must not fall through to the
+     map beneath it (e.g. drop a re-tag pin or hit a marker hidden behind it). The
+     transparent inter-child gap still passes through. */
+  pointer-events: auto;
   display: flex;
   gap: 12px;
   padding: 6px 10px;
@@ -193,12 +214,11 @@
   box-shadow: none;
 }
 
-/* On-map view toggles: satellite basemap + density heatmap (B8). */
+/* On-map view toggles: satellite basemap + density heatmap (B8). Static child of
+   .map-overlay-bl (positioning lives on the wrapper). Re-enable pointer events
+   (the wrapper sets pointer-events:none) so the checkboxes stay clickable. */
 .map-controls {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
