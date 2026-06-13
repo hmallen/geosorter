@@ -2,8 +2,8 @@
 title: DJI Panorama Stitching (Hugin)
 tags: [dji, panorama, stitching, hugin, derived-assets, geosorter]
 created: 2026-06-05
-updated: 2026-06-11
-sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch, task:m-fix-panorama-projection-autodetect]
+updated: 2026-06-13
+sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch, task:m-fix-panorama-projection-autodetect, task:m-cli-restitch-fix-projection]
 ---
 
 # DJI Panorama Stitching (Hugin)
@@ -127,6 +127,35 @@ A failed pipeline step, a timeout, or a gate rejection all surface as a single
   derives the `.jpg` cache path server-side from the stored primary `dest_path` and
   never accepts a client relpath, so the `.pto`/`out.tif` intermediates (which live
   only in an auto-cleaned temp dir) are structurally unservable.
+
+## Retroactive re-stitch (m-cli-restitch-fix-projection)
+
+Heroes stitched **before** projection auto-detection were forced into the hard-coded
+equirectangular canvas, so a non-360 (180/wide/vertical) pano had the **wrong geometry
+baked into the cached JPEG** — re-recording `stitch_projection` alone cannot fix it; the
+Hugin pipeline must be **re-run**. The `geosorter restitch` CLI verb is that one-shot
+migration (`src/geosorter/restitch.py`, mirrors `rescan.py`):
+
+- **Selection.** Default = `capture_kind='panorama' AND stitch_status='ok' AND
+  stitch_projection IS NULL` — a **precise "predate the fix" marker**, since
+  `stitch_projection` is written *only* by the auto-detect code. `--all` drops the NULL
+  clause (re-stitches every `ok` panorama; minutes each).
+- **Force cold re-stitch.** It re-runs `derived.panorama_stitch(..., force=True)`, a new
+  keyword that skips **only** the freshness cache early-return so the pipeline runs cold
+  and returns the freshly auto-detected projection. **Failure-safe:** `_stitch_gate`/Hugin
+  steps raise *before* the final `_atomic_write`, so a failed re-stitch leaves the existing
+  (wrong-but-present) hero untouched; a success atomically replaces it. The new projection
+  is then written to `files.stitch_projection`.
+- **Index-DB-only + per-row resilience.** Like `rescan`, it writes only the index DB
+  (the two stitch columns) and never moves/deletes a media file; the cached hero is the
+  sole on-disk artifact replaced (regenerable). A `StitchFailed` or a missing-on-disk row
+  (`OSError`) is reported per-row and skipped — it never aborts the batch. A failed
+  re-stitch is **not** flipped to `stitch_status='failed'` (least-destructive, unlike
+  `jobs._run_stitch`). Hugin absent → reported `unavailable`, nothing written.
+- **Scope.** CLI-only (`restitch [--all] [--dry-run] [--yes]`) — no API route, no job
+  pool, no frontend change. The map UI already routes `flat → FlatHero` and
+  `equirectangular → PanoSphere` off the `/api/library` GeoJSON, so a corrected projection
+  shows on the next library load.
 
 ## Install
 

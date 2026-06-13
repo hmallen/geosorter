@@ -25,6 +25,7 @@ from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
 from .rescan import RescanReport, run_rescan
+from .restitch import RestitchReport, run_restitch
 from .undo import UndoReport, latest_batch_id, run_undo
 
 _CONFIG_OPTION = click.option(
@@ -371,6 +372,62 @@ def _render_rescan_report(report: RescanReport) -> None:
         )
         for o in report.orphaned:
             click.echo(f"    ! {o}")
+
+
+@cli.command()
+@_CONFIG_OPTION
+@click.option("--all", "force_all", is_flag=True,
+              help="Re-stitch every 'ok' panorama, not just those missing a recorded projection.")
+@click.option("--dry-run", is_flag=True,
+              help="List the panoramas that would be re-stitched; change nothing.")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
+def restitch(config_path: str | None, force_all: bool, dry_run: bool, yes: bool) -> None:
+    """Re-stitch panorama heroes baked in the wrong projection (pre-auto-detect).
+
+    Older panoramas were stitched before projection auto-detection and forced into an
+    equirectangular canvas; this re-runs the Hugin pipeline so each gets its correct
+    projection. By default it targets only panoramas with no recorded projection
+    (``--all`` re-stitches every successfully-stitched panorama). Re-runs Hugin per
+    panorama — minutes each. Writes only the index DB's stitch columns and the
+    regenerable cached hero; it never touches a media file.
+    """
+    cfg = config.load(config_path)
+    if not dry_run and not yes and not click.confirm(
+        "Re-stitch the selected panoramas (re-runs Hugin per panorama — minutes each)?",
+        default=False,
+    ):
+        click.echo("Aborted. Nothing was re-stitched.")
+        return
+    try:
+        report = run_restitch(
+            cfg, force_all=force_all, dry_run=dry_run, progress=lambda msg: click.echo(msg)
+        )
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_restitch_report(report)
+
+
+def _render_restitch_report(report: RestitchReport) -> None:
+    if report.dry_run:
+        click.echo(f"Re-stitch (dry run): {report.targets} panorama(s) would be re-stitched.")
+        return
+    if report.unavailable:
+        click.echo(
+            f"Hugin not found — nothing re-stitched ({report.targets} panorama(s) selected). "
+            "Install Hugin or set hugin_bin_dir, then re-run."
+        )
+        return
+    click.echo("Re-stitch complete.")
+    click.echo(f"  selected:   {report.targets}")
+    breakdown = (
+        " (" + ", ".join(f"{k}: {v}" for k, v in sorted(report.projections.items())) + ")"
+        if report.projections else ""
+    )
+    click.echo(f"  restitched: {report.restitched}{breakdown}")
+    if report.failed:
+        click.echo(f"  failed:     {report.failed} (existing hero kept):")
+        for err in report.errors:
+            click.echo(f"    ! {err}")
 
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}

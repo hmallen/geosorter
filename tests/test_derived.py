@@ -325,6 +325,56 @@ def test_panorama_stitch_success_caches_and_is_idempotent(tmp_path, monkeypatch)
     assert len(calls) == first_calls  # cache hit -> no further hugin invocations
 
 
+def test_panorama_stitch_force_bypasses_fresh_cache(tmp_path, monkeypatch):
+    # force=True re-runs the pipeline cold even when the cached hero is fresh, so a
+    # hero baked at the old hard-coded projection can be regenerated with the new
+    # auto-detect; force=False (default) keeps the freshness cache-hit short-circuit.
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    cache = tmp_path / "proxytier"
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, calls = _fake_run_factory()
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    first = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert first.path.exists()
+    after_first = len(calls)
+
+    # default (force=False): a fresh cache hit, no further Hugin work
+    hit = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames)
+    assert hit.projection == ""
+    assert len(calls) == after_first
+
+    # force=True: runs the pipeline cold again and returns the real projection
+    forced = derived.panorama_stitch(
+        cache, "pano/PANO_0001.JPG", primary, frames, force=True
+    )
+    assert forced.projection == "equirectangular"
+    assert len(calls) > after_first
+
+
+def test_panorama_stitch_force_failure_preserves_existing_hero(tmp_path, monkeypatch):
+    # A forced re-stitch that FAILS must not destroy the already-cached hero: the
+    # gate/Hugin failures raise before _atomic_write replaces the cache file.
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    cache = tmp_path / "proxytier"
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, _ = _fake_run_factory()
+    monkeypatch.setattr(derived, "_run_hugin", run)
+    out = derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames).path
+    original = out.read_bytes()
+
+    def _boom(cmd, *, timeout: int = derived.STITCH_STEP_TIMEOUT_S):
+        raise derived.StitchFailed("cpfind failed")
+
+    monkeypatch.setattr(derived, "_run_hugin", _boom)
+    with pytest.raises(derived.StitchFailed):
+        derived.panorama_stitch(cache, "pano/PANO_0001.JPG", primary, frames, force=True)
+    assert out.exists()
+    assert out.read_bytes() == original  # untouched on failure
+
+
 def test_panorama_stitch_reports_steps(tmp_path, monkeypatch):
     # The on_step callback fires once per Hugin pipeline step, in order, so the
     # background job (and the UI) can show which of the six steps is running.
