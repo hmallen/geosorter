@@ -10,8 +10,8 @@
     "semantic_hash": ""
   },
   "frontend/src/App.tsx": {
-    "mtime": 1781096198.2322042,
-    "ast_hash": "89e62c2cedd43698b3e8fc6ded15108c",
+    "mtime": 1781325418.0598922,
+    "ast_hash": "e6faf5497a792e5360cc3c81227491ac",
     "semantic_hash": ""
   },
   "frontend/src/api.test.ts": {
@@ -25,28 +25,28 @@
     "semantic_hash": ""
   },
   "frontend/src/basemaps.test.ts": {
-    "mtime": 1781193863.087706,
-    "ast_hash": "e8d7a8d77b03a1b295f56b5e897d46f0",
+    "mtime": 1781350563.7547848,
+    "ast_hash": "ee2ca61e4df9fa514a3a6727f16d53e7",
     "semantic_hash": ""
   },
   "frontend/src/basemaps.ts": {
-    "mtime": 1781169860.7013977,
-    "ast_hash": "86b47a873e6af44b844611268455c105",
+    "mtime": 1781350563.7557895,
+    "ast_hash": "26573b93c68b96bbbf6cf796dfadb378",
     "semantic_hash": ""
   },
   "frontend/src/clusters.test.ts": {
-    "mtime": 1781193873.1337523,
+    "mtime": 1781342607.2478027,
     "ast_hash": "311553a47769c42c0fff1fb655081713",
     "semantic_hash": ""
   },
   "frontend/src/clusters.ts": {
-    "mtime": 1780441682.7341142,
-    "ast_hash": "af3fc8a35e603abfaacf6b1361a40bb2",
-    "semantic_hash": "af3fc8a35e603abfaacf6b1361a40bb2"
+    "mtime": 1781342595.4564137,
+    "ast_hash": "624cbc05027991161c96ffe91cc64444",
+    "semantic_hash": ""
   },
   "frontend/src/components/FileListPanel.tsx": {
-    "mtime": 1781096198.2332366,
-    "ast_hash": "63a7710df77c9df1a398f24a39381372",
+    "mtime": 1781325418.0614066,
+    "ast_hash": "ec6b85de536f196b6e09829e2ab770ac",
     "semantic_hash": ""
   },
   "frontend/src/components/InboxPanel.tsx": {
@@ -55,7 +55,7 @@
     "semantic_hash": "2068cc6f7dce6b9d0e633395d1b1d27e"
   },
   "frontend/src/components/Lightbox.tsx": {
-    "mtime": 1781195582.0212047,
+    "mtime": 1781325418.0614066,
     "ast_hash": "ec6b3bdeaaf70353e99c690ad5e6d76c",
     "semantic_hash": ""
   },
@@ -65,9 +65,9 @@
     "semantic_hash": "b047b963e0792883367bea91ff53712c"
   },
   "frontend/src/components/MapView.tsx": {
-    "mtime": 1780625668.7146366,
-    "ast_hash": "df04824622bd070522db44ba12c95eb5",
-    "semantic_hash": "df04824622bd070522db44ba12c95eb5"
+    "mtime": 1781341608.7653449,
+    "ast_hash": "167d42e9629c8097a10752efd1a8a4e4",
+    "semantic_hash": ""
   },
   "frontend/src/components/PanoSphere.tsx": {
     "mtime": 1780694545.6971438,
@@ -134,28 +134,18 @@
     "ast_hash": "51a4e73fb466263dc94033f4ef459968",
     "semantic_hash": "51a4e73fb466263dc94033f4ef459968"
   },
-  "frontend/src/selection.test.ts": {
-    "mtime": 1781193851.2417555,
-    "ast_hash": "920182fe6cca5386b6724d34fa346bff",
-    "semantic_hash": ""
-  },
-  "frontend/src/selection.ts": {
-    "mtime": 1780441682.76334,
-    "ast_hash": "8313b949a6dc8a5ff0e7f4941f6df091",
-    "semantic_hash": "8313b949a6dc8a5ff0e7f4941f6df091"
-  },
   "frontend/src/stitchJob.test.ts": {
     "mtime": 1780674410.6613698,
     "ast_hash": "b54c909e13b72f03ced1d0d36170a331",
     "semantic_hash": "b54c909e13b72f03ced1d0d36170a331"
   },
   "frontend/src/stitchJob.ts": {
-    "mtime": 1781193754.2042718,
+    "mtime": 1781325418.06292,
     "ast_hash": "c221029bd05887974255a2a40f1f63d5",
     "semantic_hash": ""
   },
   "frontend/src/types.ts": {
-    "mtime": 1781193746.7864108,
+    "mtime": 1781325418.06292,
     "ast_hash": "759cf42ed61908859ca9f09c40fa1cba",
     "semantic_hash": ""
   },
@@ -240,13 +230,13 @@
     "semantic_hash": "6521a422ed5702c91bdc77fa8adf1b7c"
   },
   "src/geosorter/api.py": {
-    "mtime": 1781194782.605481,
+    "mtime": 1781325418.0898244,
     "ast_hash": "c0862501cac92b71e585b0ed1b44f5eb",
     "semantic_hash": ""
   },
   "src/geosorter/cli.py": {
-    "mtime": 1781193712.2323346,
-    "ast_hash": "8c535715ca4b0e656c3d6efe3eb05709",
+    "mtime": 1781352541.8463058,
+    "ast_hash": "813821c55601290e420637f9953174cc",
     "semantic_hash": ""
   },
   "src/geosorter/config.py": {
@@ -255,13 +245,13 @@
     "semantic_hash": ""
   },
   "src/geosorter/db.py": {
-    "mtime": 1781193424.963668,
+    "mtime": 1781325418.0903337,
     "ast_hash": "db20148d08045a0494105361afd60a49",
     "semantic_hash": ""
   },
   "src/geosorter/derived.py": {
-    "mtime": 1781194707.7565193,
-    "ast_hash": "e6cce36b7c37460fdf18f64d5c770cee",
+    "mtime": 1781352343.9455683,
+    "ast_hash": "b0d0f2449e50f723d73d3c3e59a3a751",
     "semantic_hash": ""
   },
   "src/geosorter/geocoder.py": {
@@ -290,7 +280,7 @@
     "semantic_hash": "0ec78edf0528763b33d8c132088f05a0"
   },
   "src/geosorter/jobs.py": {
-    "mtime": 1781194763.7673028,
+    "mtime": 1781325418.0903337,
     "ast_hash": "3936675e6c0345dfdda6e8cba71707a1",
     "semantic_hash": ""
   },
@@ -350,13 +340,13 @@
     "semantic_hash": "0c760b137fd97b1dff8abd5d92a751fc"
   },
   "tests/test_api.py": {
-    "mtime": 1781194852.8926685,
+    "mtime": 1781325418.091846,
     "ast_hash": "37d6cef057347822e89487dc7fb5f18b",
     "semantic_hash": ""
   },
   "tests/test_cli.py": {
-    "mtime": 1781096198.2919612,
-    "ast_hash": "57a1bfd17f0fddf691d158cc16697b9c",
+    "mtime": 1781352487.9544382,
+    "ast_hash": "28231e19e9cd43ce21f8f34036bed8f4",
     "semantic_hash": ""
   },
   "tests/test_config.py": {
@@ -365,13 +355,13 @@
     "semantic_hash": ""
   },
   "tests/test_db.py": {
-    "mtime": 1781193511.415062,
+    "mtime": 1781325418.091846,
     "ast_hash": "f0bfc5cb3600e6d584c76d5bdbc062e8",
     "semantic_hash": ""
   },
   "tests/test_derived.py": {
-    "mtime": 1781194844.82451,
-    "ast_hash": "95b959170b8332f493db178f370060ff",
+    "mtime": 1781352319.968845,
+    "ast_hash": "6ece13a8f9df7d048cfa4bdf5da15403",
     "semantic_hash": ""
   },
   "tests/test_geocoder.py": {
@@ -405,7 +395,7 @@
     "semantic_hash": "5c8863bd5da53a2c370b318917ade0ac"
   },
   "tests/test_jobs.py": {
-    "mtime": 1781194874.7965112,
+    "mtime": 1781325418.0928535,
     "ast_hash": "35dc1bc5c39e77a6ed7b141e006f5fa6",
     "semantic_hash": ""
   },
@@ -480,9 +470,9 @@
     "semantic_hash": "07476152910d9dd48e55934cde07cccb"
   },
   "frontend/README.md": {
-    "mtime": 1780441642.2921388,
-    "ast_hash": "c127cfef2f4b69229edd40d034b0045d",
-    "semantic_hash": "c127cfef2f4b69229edd40d034b0045d"
+    "mtime": 1781325418.0598922,
+    "ast_hash": "f1175baac8bf147a9d3ff5ea66aa0543",
+    "semantic_hash": ""
   },
   "frontend/index.html": {
     "mtime": 1780441642.2793884,
@@ -520,7 +510,7 @@
     "semantic_hash": "0eabc074bb4d34390e661d67e8fb3d61"
   },
   "wiki/log.md": {
-    "mtime": 1781196622.0843124,
+    "mtime": 1781325418.0933614,
     "ast_hash": "7f19943ee3793b66df9f84b86c7f75f0",
     "semantic_hash": ""
   },
@@ -540,7 +530,7 @@
     "semantic_hash": "953f5d5c1038c5e7b53c928d9a5a83bd"
   },
   "wiki/pages/dji-panorama-stitching.md": {
-    "mtime": 1781196557.2056806,
+    "mtime": 1781325418.0933614,
     "ast_hash": "23c5501703a6d373e3836f93e536bb45",
     "semantic_hash": ""
   },
@@ -605,8 +595,8 @@
     "semantic_hash": "47344e2be0d7cf3a6c14441158d51e4f"
   },
   "CLAUDE.md": {
-    "mtime": 1781196491.283353,
-    "ast_hash": "4399bf6da728c128f016076e2be02557",
+    "mtime": 1781342893.0294044,
+    "ast_hash": "c706cce79ed238fa5868b014b0e357a5",
     "semantic_hash": ""
   },
   "CLAUDE.sessions.md": {
@@ -625,8 +615,8 @@
     "semantic_hash": ""
   },
   "src/geosorter/webui/index.html": {
-    "mtime": 1781231989.689809,
-    "ast_hash": "b34f4e71e881334bfd38990ea497994b",
+    "mtime": 1781350569.261988,
+    "ast_hash": "f7c4376b4cad8a428a41559a58851d79",
     "semantic_hash": ""
   },
   "src/geosorter/webui/favicon.svg": {
@@ -685,8 +675,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/FlatHero.tsx": {
-    "mtime": 1781193775.99123,
-    "ast_hash": "f6b37c5b136bb2e2fbbf5449c3cb6929",
+    "mtime": 1781325418.0614066,
+    "ast_hash": "4f1795eec100f11574db343541b46ea6",
     "semantic_hash": ""
   },
   "frontend/src/inboxPoll.test.ts": {
@@ -700,37 +690,22 @@
     "semantic_hash": ""
   },
   "frontend/src/panoViewer.test.ts": {
-    "mtime": 1781195566.4726255,
-    "ast_hash": "5c2bc1d82ea0212040c844ce46f61702",
+    "mtime": 1781325418.0624132,
+    "ast_hash": "703d1c2c62036196a8423373590df6bb",
     "semantic_hash": ""
   },
   "frontend/src/panoViewer.ts": {
-    "mtime": 1781195553.639535,
-    "ast_hash": "c49844e09adfc471d40cf7195c74972b",
-    "semantic_hash": ""
-  },
-  "src/geosorter/webui/assets/PanoSphere-DZOvIo5B.js": {
-    "mtime": 1781231989.688803,
-    "ast_hash": "32f2d4c80eb09a3491c4221ee43cced4",
-    "semantic_hash": ""
-  },
-  "src/geosorter/webui/assets/index-DPYtH9hh.js": {
-    "mtime": 1781231989.6877303,
-    "ast_hash": "089b94d8eec41a04aa36aebb3c8ab2ad",
-    "semantic_hash": ""
-  },
-  "src/geosorter/webui/assets/maplibre-gl-Ddh3-Ks_.js": {
-    "mtime": 1781231989.688803,
-    "ast_hash": "054cc2041523fa3c04d7180e4f3699f1",
+    "mtime": 1781325418.06292,
+    "ast_hash": "2a5839b7da4911075eda056d396e410d",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_inbox_count_populated0/inbox/notes.txt": {
-    "mtime": 1781195073.001597,
+    "mtime": 1781353085.0655859,
     "ast_hash": "415290769594460e2e485922904f345d",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_spa_mounted_when_dir_exis0/webui/index.html": {
-    "mtime": 1781195074.1548579,
+    "mtime": 1781353086.1051958,
     "ast_hash": "6a3057c71e6f9ae9795b477c7e45acf6",
     "semantic_hash": ""
   },
@@ -745,32 +720,32 @@
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_classify_stitched_project0/eq.jpg": {
-    "mtime": 1781195072.3763716,
+    "mtime": 1781353090.034858,
     "ast_hash": "829692579168d9e619c522e6506156c1",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_classify_stitched_project0/flat.jpg": {
-    "mtime": 1781195072.3887255,
+    "mtime": 1781353090.0454478,
     "ast_hash": "293cb4477b91a46776012be57012346d",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_collage_served_for_panora0/cache/.geosorter-cache/collage/P/PANO_0001.jpg": {
-    "mtime": 1781195073.8913343,
+    "mtime": 1781353085.866089,
     "ast_hash": "9c0f644b8b5177a38209e4f423830560",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_collage_served_for_panora0/library/P/PANO_0001.JPG": {
-    "mtime": 1781195073.8907833,
+    "mtime": 1781353085.8650835,
     "ast_hash": "67dc2ad0d43eaf11a89fa19d53fdd5b9",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_collage_served_for_panora0/library/P/PANO_0001_frames/PANO_0002.JPG": {
-    "mtime": 1781195073.8913343,
+    "mtime": 1781353085.866089,
     "ast_hash": "b8f3062ca5795e39ff813958296b4884",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_collage_served_for_panora0/library/P/PANO_0001_frames/PANO_0003.JPG": {
-    "mtime": 1781195073.8913343,
+    "mtime": 1781353085.866089,
     "ast_hash": "b8f3062ca5795e39ff813958296b4884",
     "semantic_hash": ""
   },
@@ -810,247 +785,247 @@
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_generation_concurrency_ca0/s.jpg": {
-    "mtime": 1781195072.8252392,
+    "mtime": 1781353090.4724655,
     "ast_hash": "959d1bbd3e062721fa2f6c99c89b8420",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_inbox_count_populated0/inbox/DJI_0001.JPG": {
-    "mtime": 1781195073.000587,
+    "mtime": 1781353085.0655859,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_inbox_list0/inbox/DCIM/DJI_0001.JPG": {
-    "mtime": 1781195073.0302558,
+    "mtime": 1781353085.0903122,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_library_path_roundtrips_w0/real_lib/Place/2024-01-01/p.JPG": {
-    "mtime": 1781195074.6278477,
+    "mtime": 1781353086.5299168,
     "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_composes0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.7585182,
+    "mtime": 1781353090.3975723,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_composes0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.7595897,
+    "mtime": 1781353090.3985815,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_composes0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.7595897,
+    "mtime": 1781353090.3986554,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_composes0/lib/pano/PANO_0004.JPG": {
-    "mtime": 1781195072.7605948,
+    "mtime": 1781353090.399665,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_composes0/localtier/.geosorter-cache/collage/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.7605948,
+    "mtime": 1781353090.399665,
     "ast_hash": "3a45901ddc2b2fcc204108959ae91b97",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.771422,
+    "mtime": 1781353090.410357,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.7719226,
+    "mtime": 1781353090.4118674,
     "ast_hash": "6fcae3853a37a429a9f65b4a9f0d4c66",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.7719226,
+    "mtime": 1781353090.4118674,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate0/localtier/.geosorter-cache/collage/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.7719226,
+    "mtime": 1781353090.4118674,
     "ast_hash": "ad22b15c58e4aabd7e1bcda1dd24af9c",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate1/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.8138227,
+    "mtime": 1781353090.462768,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate1/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.8153348,
+    "mtime": 1781353090.4642882,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_collage_tolerate1/localtier/.geosorter-cache/collage/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.8153348,
+    "mtime": 1781353090.4642882,
     "ast_hash": "ad22b15c58e4aabd7e1bcda1dd24af9c",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_drops_cel0/c/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.1763625,
+    "mtime": 1781353089.8764956,
     "ast_hash": "a89641f7ec68891a32b950a841028921",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_drops_cel0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.17485,
+    "mtime": 1781353089.8759902,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_drops_cel0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.1758554,
+    "mtime": 1781353089.8764956,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_drops_cel0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.1763625,
+    "mtime": 1781353089.8764956,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_equirect_0/c/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.6465573,
+    "mtime": 1781353090.2877307,
     "ast_hash": "37cb5f2d75a34a74ab3c2427f50a7e8a",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_equirect_0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.645038,
+    "mtime": 1781353090.2867258,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_equirect_0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.6465573,
+    "mtime": 1781353090.2867258,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_equirect_0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.6465573,
+    "mtime": 1781353090.2877307,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_flat_proj0/c/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.5950341,
+    "mtime": 1781353090.2335012,
     "ast_hash": "dfee5ab9402f62755c5081b81fb6468e",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_flat_proj0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.5935223,
+    "mtime": 1781353090.2324955,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_flat_proj0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.5945272,
+    "mtime": 1781353090.2324955,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_flat_proj0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.5950341,
+    "mtime": 1781353090.2335012,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_keeps_cel0/c/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.2609105,
+    "mtime": 1781353089.9420388,
     "ast_hash": "a89641f7ec68891a32b950a841028921",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_keeps_cel0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.2593987,
+    "mtime": 1781353089.9410377,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_keeps_cel0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.2593987,
+    "mtime": 1781353089.9415386,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_keeps_cel0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.2609105,
+    "mtime": 1781353089.9420388,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_missing_h0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.1020563,
+    "mtime": 1781353089.8135245,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_missing_h0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.1031394,
+    "mtime": 1781353089.8140311,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_missing_h0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.1040707,
+    "mtime": 1781353089.8140311,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_pipeline_0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.1072361,
+    "mtime": 1781353089.8170648,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_pipeline_0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.1082423,
+    "mtime": 1781353089.8178062,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_pipeline_0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.1087494,
+    "mtime": 1781353089.8183155,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_rejects_d0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.1128488,
+    "mtime": 1781353089.821342,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_rejects_d0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.1128488,
+    "mtime": 1781353089.8223474,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_rejects_d0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.1138544,
+    "mtime": 1781353089.8228562,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_reports_s0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195072.0201156,
+    "mtime": 1781353089.746577,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_reports_s0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195072.0212119,
+    "mtime": 1781353089.747084,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_reports_s0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195072.0212119,
+    "mtime": 1781353089.747084,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_reports_s0/proxytier/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195072.0212119,
+    "mtime": 1781353089.747084,
     "ast_hash": "a89641f7ec68891a32b950a841028921",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_success_c0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.9375403,
+    "mtime": 1781353089.4820366,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_success_c0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.9380476,
+    "mtime": 1781353089.4831033,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_success_c0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.939054,
+    "mtime": 1781353089.4831033,
     "ast_hash": "578be82c6ebf94d51777ed541cd11991",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_panorama_stitch_success_c0/proxytier/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195071.939054,
+    "mtime": 1781353089.4831033,
     "ast_hash": "a89641f7ec68891a32b950a841028921",
     "semantic_hash": ""
   },
@@ -1060,22 +1035,22 @@
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_preview_caps_long_edge_at0/big.jpg": {
-    "mtime": 1781195071.7533865,
+    "mtime": 1781353089.3234675,
     "ast_hash": "68c0425d051a9ae01eeee211e2365cce",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_preview_caps_long_edge_at0/cache/.geosorter-cache/previews/big.jpg": {
-    "mtime": 1781195071.7533865,
+    "mtime": 1781353089.3234675,
     "ast_hash": "2be25f6a807f91afdd0f3341093fb1ff",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_preview_endpoint_returns_0/cache/.geosorter-cache/previews/photo.jpg": {
-    "mtime": 1781195074.092236,
+    "mtime": 1781353086.0515995,
     "ast_hash": "63ea538fb6c4e026bce73a5b1a1eb672",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_preview_endpoint_returns_0/library/photo.jpg": {
-    "mtime": 1781195074.092236,
+    "mtime": 1781353086.0515995,
     "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
     "semantic_hash": ""
   },
@@ -1085,212 +1060,212 @@
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_safe_cache_path_rejects_p0/cache/f.jpg": {
-    "mtime": 1781195074.1522863,
+    "mtime": 1781353086.1026635,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_safe_cache_path_rejects_p0/elsewhere/f.jpg": {
-    "mtime": 1781195074.1522863,
+    "mtime": 1781353086.1026635,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_same_basename_different_f0/A/DJI_0001.JPG": {
-    "mtime": 1781195071.3406034,
+    "mtime": 1781353088.949416,
     "ast_hash": "7f764144739dc157c2a992272bfb4106",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_same_basename_different_f0/B/DJI_0001.JPG": {
-    "mtime": 1781195071.3406034,
+    "mtime": 1781353088.949416,
     "ast_hash": "ef7214738986d0f6180e2e55f53fbf6e",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_same_basename_different_f0/cache/.geosorter-cache/thumbs/A/DJI_0001.jpg": {
-    "mtime": 1781195071.3406034,
+    "mtime": 1781353088.949416,
     "ast_hash": "d5fd281a1b26d37fd729ceee25fee1bc",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_same_basename_different_f0/cache/.geosorter-cache/thumbs/B/DJI_0001.jpg": {
-    "mtime": 1781195071.3406034,
+    "mtime": 1781353088.949416,
     "ast_hash": "c95b1010ad4aa627e40a1b39d6e756a3",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_image_served_when_0/library/.geosorter-cache/stitch/P/PANO_0001.jpg": {
-    "mtime": 1781195073.687239,
+    "mtime": 1781353085.6924183,
     "ast_hash": "b0a46e16215d4a9a514d171a0ab546c2",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_pool_independent_o0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.238837,
+    "mtime": 1781353091.6400688,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_pool_independent_o0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.2398953,
+    "mtime": 1781353091.6400688,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_pool_independent_o0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.2398953,
+    "mtime": 1781353091.6400688,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_status_unknown_ret0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.1294155,
+    "mtime": 1781353091.5364037,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_status_unknown_ret0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.1294155,
+    "mtime": 1781353091.5364037,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_stitch_status_unknown_ret0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.130421,
+    "mtime": 1781353091.5364037,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_b0/lib/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195071.1828063,
+    "mtime": 1781353091.5855002,
     "ast_hash": "293cb4477b91a46776012be57012346d",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_b0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.1628013,
+    "mtime": 1781353091.5691502,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_b0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.163243,
+    "mtime": 1781353091.5701542,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_b0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.163243,
+    "mtime": 1781353091.5702095,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_d0/lib/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
-    "mtime": 1781195071.2215126,
+    "mtime": 1781353091.622211,
     "ast_hash": "293cb4477b91a46776012be57012346d",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_d0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.2016802,
+    "mtime": 1781353091.603364,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_d0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.2021885,
+    "mtime": 1781353091.603364,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_cache_hit_d0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.2021885,
+    "mtime": 1781353091.603364,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_dedups_infl0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.1382332,
+    "mtime": 1781353091.5449777,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_dedups_infl0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.1382332,
+    "mtime": 1781353091.5455604,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_dedups_infl0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.1392407,
+    "mtime": 1781353091.5455604,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_failed_writ0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.0822668,
+    "mtime": 1781353091.491701,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_failed_writ0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.0822668,
+    "mtime": 1781353091.491701,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_failed_writ0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.0822668,
+    "mtime": 1781353091.491701,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_reports_ste0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.059988,
+    "mtime": 1781353091.47043,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_reports_ste0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.0604956,
+    "mtime": 1781353091.47043,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_reports_ste0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.0604956,
+    "mtime": 1781353091.4714336,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_success_wri0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.0345843,
+    "mtime": 1781353091.4474518,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_success_wri0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.0345843,
+    "mtime": 1781353091.4484577,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_success_wri0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.0345843,
+    "mtime": 1781353091.4484577,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_unavailable0/lib/pano/PANO_0001.JPG": {
-    "mtime": 1781195071.1068902,
+    "mtime": 1781353091.514427,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_unavailable0/lib/pano/PANO_0002.JPG": {
-    "mtime": 1781195071.1068902,
+    "mtime": 1781353091.514427,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_submit_stitch_unavailable0/lib/pano/PANO_0003.JPG": {
-    "mtime": 1781195071.1068902,
+    "mtime": 1781353091.514427,
     "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumb_endpoint_returns_jp0/cache/.geosorter-cache/thumbs/photo.jpg": {
-    "mtime": 1781195074.0550163,
+    "mtime": 1781353086.0156949,
     "ast_hash": "f191caca56c2e208d1cf626f3d88e472",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumb_endpoint_returns_jp0/library/photo.jpg": {
-    "mtime": 1781195074.0550163,
+    "mtime": 1781353086.0156949,
     "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumb_served_from_local_c0/cache/.geosorter-cache/thumbs/photo.jpg": {
-    "mtime": 1781195074.1330018,
+    "mtime": 1781353086.0869417,
     "ast_hash": "f191caca56c2e208d1cf626f3d88e472",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumb_served_from_local_c0/library/photo.jpg": {
-    "mtime": 1781195074.1330018,
+    "mtime": 1781353086.0869417,
     "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumbnail_applies_exif_tr0/cache/.geosorter-cache/thumbs/oriented.jpg": {
-    "mtime": 1781195071.2808437,
+    "mtime": 1781353088.8891382,
     "ast_hash": "e46796caf04ce33fdde9f98a462a1969",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumbnail_applies_exif_tr0/oriented.jpg": {
-    "mtime": 1781195071.2808437,
+    "mtime": 1781353088.8891382,
     "ast_hash": "69c98fcc5f88fcf3be3784b2c844e47f",
     "semantic_hash": ""
   },
@@ -1305,22 +1280,22 @@
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumbnail_skips_draft_for0/cache/.geosorter-cache/thumbs/shot.jpg": {
-    "mtime": 1781195071.3143806,
+    "mtime": 1781353088.9225247,
     "ast_hash": "c35eb7cc7bc3bd0839eba32548b77077",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumbnail_skips_draft_for0/shot.png": {
-    "mtime": 1781195071.3143806,
+    "mtime": 1781353088.9225247,
     "ast_hash": "15cd1e77a6d95f2301d2ac0542f0a3d9",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumbnail_uses_jpeg_draft0/big.jpg": {
-    "mtime": 1781195071.29329,
+    "mtime": 1781353088.901791,
     "ast_hash": "154adb4235074a09517ffa3309d0ed01",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_thumbnail_uses_jpeg_draft0/cache/.geosorter-cache/thumbs/big.jpg": {
-    "mtime": 1781195071.29329,
+    "mtime": 1781353088.901791,
     "ast_hash": "c73b0ce3303c37e7c3e66097671c9a2a",
     "semantic_hash": ""
   },
@@ -1340,33 +1315,2663 @@
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_video_codec_lookup_handle0/library/.geosorter-cache/proxies/clips/v.mp4": {
-    "mtime": 1781195073.2849135,
+    "mtime": 1781353085.3112938,
     "ast_hash": "47023d0e23cba8923bd8a8ad55bd5c73",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_video_codec_lookup_handle0/library/clips/v.mp4": {
-    "mtime": 1781195073.2849135,
+    "mtime": 1781353085.3112938,
     "ast_hash": "47344e2be0d7cf3a6c14441158d51e4f",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_video_codec_lookup_handle0/served.mp4": {
-    "mtime": 1781195073.4229794,
+    "mtime": 1781353085.44527,
     "ast_hash": "47023d0e23cba8923bd8a8ad55bd5c73",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_video_endpoint_serves_h260/library/.geosorter-cache/proxies/clips/v.mp4": {
-    "mtime": 1781195074.1994245,
+    "mtime": 1781353086.1465187,
     "ast_hash": "47023d0e23cba8923bd8a8ad55bd5c73",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_video_endpoint_serves_h260/library/clips/v.mp4": {
-    "mtime": 1781195074.1994245,
+    "mtime": 1781353086.1465187,
     "ast_hash": "47344e2be0d7cf3a6c14441158d51e4f",
     "semantic_hash": ""
   },
   "pytmp-geosorter/test_video_endpoint_serves_h260/served.mp4": {
-    "mtime": 1781195074.2862618,
+    "mtime": 1781353086.2282057,
     "ast_hash": "47023d0e23cba8923bd8a8ad55bd5c73",
+    "semantic_hash": ""
+  },
+  "frontend/src/viewport.test.ts": {
+    "mtime": 1781325418.06292,
+    "ast_hash": "e0733c5b381fa0fc890e2714a99fbc23",
+    "semantic_hash": ""
+  },
+  "frontend/src/viewport.ts": {
+    "mtime": 1781325418.06292,
+    "ast_hash": "3bd0efe2c8e715cfd00289a048b07331",
+    "semantic_hash": ""
+  },
+  "src/geosorter/restitch.py": {
+    "mtime": 1781353075.6846545,
+    "ast_hash": "d29e5382e39c58fad3e815860db9aed0",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/PanoSphere-BbBVk-SY.js": {
+    "mtime": 1781350569.2614772,
+    "ast_hash": "069b3dcfc934599bdf14c166407aee3c",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/index-CGn3COlP.js": {
+    "mtime": 1781350569.2614772,
+    "ast_hash": "75eb14d794009d8bcb155569d16dc979",
+    "semantic_hash": ""
+  },
+  "src/geosorter/webui/assets/maplibre-gl-DRCcFo3I.js": {
+    "mtime": 1781350569.261988,
+    "ast_hash": "ca51d9394cb92ecde829fdb8d9ea246f",
+    "semantic_hash": ""
+  },
+  "tests/test_restitch.py": {
+    "mtime": 1781353056.214393,
+    "ast_hash": "6f4c7d9e59ce1d9d581b7ceadc2345f1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_bootstrap_with_features0/src/admin1CodesASCII.txt": {
+    "mtime": 1781353088.6817324,
+    "ast_hash": "cfd3261a88de43b5493df5af6dbc5145",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_bootstrap_with_features0/src/admin2Codes.txt": {
+    "mtime": 1781353088.6817324,
+    "ast_hash": "72c0855d27aaf5dbae8b33c3750f5da2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_bootstrap_with_features0/src/allCountries.txt": {
+    "mtime": 1781353088.683781,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_bootstrap_with_features0/src/allCountries_sample.txt": {
+    "mtime": 1781353088.68274,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_bootstrap_with_features0/src/cities500.txt": {
+    "mtime": 1781353088.68274,
+    "ast_hash": "46aec7a2eee2a5a27fab2823e62e7311",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_bootstrap_with_features0/src/countryInfo.txt": {
+    "mtime": 1781353088.68274,
+    "ast_hash": "14bbac73e709dcbb78e5ed8b015da0b5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_counts_dji_capture_and_fi0/inbox/notes.txt": {
+    "mtime": 1781353090.852823,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_features_covered_by_spati0/src/admin1CodesASCII.txt": {
+    "mtime": 1781353090.7882879,
+    "ast_hash": "cfd3261a88de43b5493df5af6dbc5145",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_features_covered_by_spati0/src/admin2Codes.txt": {
+    "mtime": 1781353090.789292,
+    "ast_hash": "72c0855d27aaf5dbae8b33c3750f5da2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_features_covered_by_spati0/src/allCountries.txt": {
+    "mtime": 1781353090.7908204,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_features_covered_by_spati0/src/allCountries_sample.txt": {
+    "mtime": 1781353090.789292,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_features_covered_by_spati0/src/cities500.txt": {
+    "mtime": 1781353090.789292,
+    "ast_hash": "46aec7a2eee2a5a27fab2823e62e7311",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_features_covered_by_spati0/src/countryInfo.txt": {
+    "mtime": 1781353090.7903142,
+    "ast_hash": "14bbac73e709dcbb78e5ed8b015da0b5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_geocode_test_prints_candi0/src/admin1CodesASCII.txt": {
+    "mtime": 1781353088.6938608,
+    "ast_hash": "cfd3261a88de43b5493df5af6dbc5145",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_geocode_test_prints_candi0/src/admin2Codes.txt": {
+    "mtime": 1781353088.6938608,
+    "ast_hash": "72c0855d27aaf5dbae8b33c3750f5da2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_geocode_test_prints_candi0/src/allCountries.txt": {
+    "mtime": 1781353088.695441,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_geocode_test_prints_candi0/src/allCountries_sample.txt": {
+    "mtime": 1781353088.6943724,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_geocode_test_prints_candi0/src/cities500.txt": {
+    "mtime": 1781353088.6943724,
+    "ast_hash": "46aec7a2eee2a5a27fab2823e62e7311",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_geocode_test_prints_candi0/src/countryInfo.txt": {
+    "mtime": 1781353088.6943724,
+    "ast_hash": "14bbac73e709dcbb78e5ed8b015da0b5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_custom_code0/src/admin1CodesASCII.txt": {
+    "mtime": 1781353090.770451,
+    "ast_hash": "cfd3261a88de43b5493df5af6dbc5145",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_custom_code0/src/admin2Codes.txt": {
+    "mtime": 1781353090.770451,
+    "ast_hash": "72c0855d27aaf5dbae8b33c3750f5da2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_custom_code0/src/allCountries.txt": {
+    "mtime": 1781353090.771968,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_custom_code0/src/allCountries_sample.txt": {
+    "mtime": 1781353090.770451,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_custom_code0/src/cities500.txt": {
+    "mtime": 1781353090.770451,
+    "ast_hash": "46aec7a2eee2a5a27fab2823e62e7311",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_custom_code0/src/countryInfo.txt": {
+    "mtime": 1781353090.7714586,
+    "ast_hash": "14bbac73e709dcbb78e5ed8b015da0b5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_filters_to_0/src/admin1CodesASCII.txt": {
+    "mtime": 1781353090.7588203,
+    "ast_hash": "cfd3261a88de43b5493df5af6dbc5145",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_filters_to_0/src/admin2Codes.txt": {
+    "mtime": 1781353090.7588203,
+    "ast_hash": "72c0855d27aaf5dbae8b33c3750f5da2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_filters_to_0/src/allCountries.txt": {
+    "mtime": 1781353090.760332,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_filters_to_0/src/allCountries_sample.txt": {
+    "mtime": 1781353090.759825,
+    "ast_hash": "eed4f090dcf41ac4e51700e487046846",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_filters_to_0/src/cities500.txt": {
+    "mtime": 1781353090.759825,
+    "ast_hash": "46aec7a2eee2a5a27fab2823e62e7311",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_load_features_filters_to_0/src/countryInfo.txt": {
+    "mtime": 1781353090.760332,
+    "ast_hash": "14bbac73e709dcbb78e5ed8b015da0b5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_byte_progress_forwarded0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.521073,
+    "ast_hash": "ca27a8dbde25577cb3e9de03a676c574",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_cancel_between_groups_lea0/inbox/DJI_0002.JPG": {
+    "mtime": 1781353092.8335433,
+    "ast_hash": "a9f0e61a137d86aa9db53465e0801612",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_cancel_between_groups_lea0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.8401768,
+    "ast_hash": "8b04d5e3775d298e78455efc5ca404d5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_collision_different_conte0/library/Place/2024-07-04/2024-07-04_09-15-00_X.JPG": {
+    "mtime": 1781353092.605452,
+    "ast_hash": "fbd17ddef276ea15252e4b9b91758267",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_collision_different_conte0/library/Place/2024-07-04/2024-07-04_09-15-00_X_2.JPG": {
+    "mtime": 1781353092.6075792,
+    "ast_hash": "f125b22cf257c2ec750c7a597e11c924",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_commit_delete_removes_sou0/library/out.JPG": {
+    "mtime": 1781353092.3367476,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_committed_mixed_footage_e0/library/_unknown/2023-01-07/2023-01-07_17-44-36_DJI_0001.JPG": {
+    "mtime": 1781353093.349958,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_happy0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.325552,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_happy0/library/Place/2024-07-04/out.JPG": {
+    "mtime": 1781353092.3260589,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_provided_0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.4221363,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_provided_1/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.4316468,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_provided_1/library/out.JPG": {
+    "mtime": 1781353092.4331598,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_reports_p0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.3879447,
+    "ast_hash": "28fa8130f4c1680a496bec0f7932566b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_reports_p0/library/out.JPG": {
+    "mtime": 1781353092.3909693,
+    "ast_hash": "28fa8130f4c1680a496bec0f7932566b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_uses_prov0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.4120586,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_and_verify_uses_prov0/library/out.JPG": {
+    "mtime": 1781353092.4135683,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_retries_transient_os0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.4413166,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_copy_retries_transient_os0/library/out.JPG": {
+    "mtime": 1781353092.4428282,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_dedup_skips_identical_con0/inbox/DJI_0002.JPG": {
+    "mtime": 1781353092.5843434,
+    "ast_hash": "f8aeb3a8368e8d146968c49124a2dd98",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_dedup_skips_identical_con0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.5813186,
+    "ast_hash": "f8aeb3a8368e8d146968c49124a2dd98",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_disk_full_cleans_partial0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.358041,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_disk_preflight_raises0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.6884322,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_disk_untouched_for_surviv0/library/Boulder, Colorado, United States/2024-07-05/2024-07-05_09-15-00_DJI_0002.JPG": {
+    "mtime": 1781353095.1348495,
+    "ast_hash": "027ef3c53fcf464664d2c55ec916b166",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_distinct_captures_form_di0/DJI_0005.JPG": {
+    "mtime": 5000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_distinct_captures_form_di0/DJI_0006.JPG": {
+    "mtime": 6000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_dry_run_writes_nothing0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.6384945,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_enospc_not_retried0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.451047,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_extract_chunk_restart_res0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.7497487,
+    "ast_hash": "d7ba9bbfda42b9657f14ee37ef76150b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_first_run_gate_declined0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.6551597,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_freespace_abort_before_sh0/inbox/DJI_0002.JPG": {
+    "mtime": 1781353092.70261,
+    "ast_hash": "220738d31c552ef1d0743a09c906ab3e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_freespace_abort_before_sh0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.7091672,
+    "ast_hash": "fb9de1177377fb6fadba1ceefd295477",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_group_photo_with_dng0/DJI_0001.JPG": {
+    "mtime": 1000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_borrows_frame_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240829183426_0021_D_frames/HYPERLAPSE_0001.JPG": {
+    "mtime": 1781353092.862398,
+    "ast_hash": "9901fea8a5183176ae0d3355ffae87cc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_borrows_frame_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240829183426_0021_D_frames/HYPERLAPSE_0002.JPG": {
+    "mtime": 1781353092.8639657,
+    "ast_hash": "343173f14b0477108d95edc02e32a3bc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_borrows_frame_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240829183426_0021_D_frames/HYPERLAPSE_0003.JPG": {
+    "mtime": 1781353092.865477,
+    "ast_hash": "9bce464280f1f5f57894edaddb667cdc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_render_and_fra0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_render_and_fra0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_render_and_fra0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_render_and_fra0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0004.JPG": {
+    "mtime": 1004.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_render_and_fra0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0005.JPG": {
+    "mtime": 1005.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_retain_false_f0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9901fea8a5183176ae0d3355ffae87cc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_retain_false_f0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "343173f14b0477108d95edc02e32a3bc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_retain_false_f0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9bce464280f1f5f57894edaddb667cdc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_is_already_moved0/library/out.JPG": {
+    "mtime": 1781353092.4033237,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_keeps_present_files0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353094.9767227,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_groups_with_co0/inbox/DCIM/100MEDIA/DJI_0002.JPG": {
+    "mtime": 1781353090.8690171,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_hyperlapse_is_0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_hyperlapse_is_0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_hyperlapse_is_0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_hyperlapse_is_0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0004.JPG": {
+    "mtime": 1004.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_hyperlapse_is_0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0005.JPG": {
+    "mtime": 1005.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_root_level_gro0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353090.871549,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_midflight_kill_recovers0/library/out.JPG": {
+    "mtime": 1781353092.3682215,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_neighbor_gps_inference_fi0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.5581481,
+    "ast_hash": "3f2a84707f8ea1a913e911eb0a8fb382",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_neighbor_gps_inference_fi0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-20-00_DJI_0002.JPG": {
+    "mtime": 1781353092.5606706,
+    "ast_hash": "ed64c10d4414b9fbfe8ce770726a92b2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_neighbor_gps_inference_fi0/library/_no-gps/2024-07-04/DJI_0003.JPG": {
+    "mtime": 1781353092.5626953,
+    "ast_hash": "227837719b0315d4bea2bb5ab6aa5401",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_organize_dry_run_real_pho0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353086.8403597,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_organize_first_run_gate_d0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353086.825072,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_organize_photo_end_to_end0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.5007932,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_organize_quarantines_no_g0/library/_no-gps/2024-07-04/DJI_0009.JPG": {
+    "mtime": 1781353092.5389283,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_organize_then_undo_cli0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353088.2010567,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_organize_then_verify_libr0/library/_unknown/2023-01-07/2023-01-07_17-44-36_DJI_0001.JPG": {
+    "mtime": 1781353087.9361112,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_files_as_capture0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_PANO_0001.JPG": {
+    "mtime": 1781353092.9076805,
+    "ast_hash": "a049b59e393d7688dac1a0162aab2912",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_files_as_capture0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_PANO_0001_frames/PANO_0002.JPG": {
+    "mtime": 1781353092.9091916,
+    "ast_hash": "7e25a61a91a7c423db93d001274801e0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_files_as_capture0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_PANO_0001_frames/PANO_0003.JPG": {
+    "mtime": 1781353092.9117079,
+    "ast_hash": "4669fbabbeb31e16b01d37cbdb2557ec",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_files_as_capture0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_PANO_0001_frames/PANO_0004.JPG": {
+    "mtime": 1781353092.9132195,
+    "ast_hash": "01621c08f4368866043beafd84e4b889",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_byp0/lib/pano/PANO_0001.JPG": {
+    "mtime": 1781353089.5509431,
+    "ast_hash": "578be82c6ebf94d51777ed541cd11991",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_byp0/lib/pano/PANO_0002.JPG": {
+    "mtime": 1781353089.5514524,
+    "ast_hash": "578be82c6ebf94d51777ed541cd11991",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_byp0/lib/pano/PANO_0003.JPG": {
+    "mtime": 1781353089.5514524,
+    "ast_hash": "578be82c6ebf94d51777ed541cd11991",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_byp0/proxytier/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
+    "mtime": 1781353089.5514524,
+    "ast_hash": "a89641f7ec68891a32b950a841028921",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_fai0/lib/pano/PANO_0001.JPG": {
+    "mtime": 1781353089.679174,
+    "ast_hash": "578be82c6ebf94d51777ed541cd11991",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_fai0/lib/pano/PANO_0002.JPG": {
+    "mtime": 1781353089.680179,
+    "ast_hash": "578be82c6ebf94d51777ed541cd11991",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_fai0/lib/pano/PANO_0003.JPG": {
+    "mtime": 1781353089.680686,
+    "ast_hash": "578be82c6ebf94d51777ed541cd11991",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_stitch_force_fai0/proxytier/.geosorter-cache/stitch/pano/PANO_0001.jpg": {
+    "mtime": 1781353089.680686,
+    "ast_hash": "a89641f7ec68891a32b950a841028921",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0001.JPG": {
+    "mtime": 1781353090.8619096,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0002.JPG": {
+    "mtime": 1781353090.8619096,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0003.JPG": {
+    "mtime": 1781353090.8619096,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0004.JPG": {
+    "mtime": 1781353090.8619096,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0005.JPG": {
+    "mtime": 1781353090.8619096,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0006.JPG": {
+    "mtime": 1781353090.8619096,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_panorama_tiles_count_as_o0/inbox/DCIM/PANORAMA/001_0002/PANO_0007.JPG": {
+    "mtime": 1781353090.8629143,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_pending_recovery_recopies0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.4682775,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_pending_recovery_recopies0/library/out.JPG": {
+    "mtime": 1781353092.4702957,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_frames_sorted_by_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_frames_sorted_by_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_frames_sorted_by_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_frames_sorted_by_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0004.JPG": {
+    "mtime": 1004.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_frames_sorted_by_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0005.JPG": {
+    "mtime": 1005.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_links_hyperlapse_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_links_hyperlapse_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_links_hyperlapse_0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_misc_is_unclaimed0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_misc_is_unclaimed0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_misc_is_unclaimed0/card/DCIM/PANORAMA/001_0002/PANO_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_misc_is_unclaimed0/card/DCIM/PANORAMA/001_0002/PANO_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_mtime_guard_rejec0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_mtime_guard_rejec0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_mtime_guard_rejec0/card/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_orphan_frame_dir_0/card/DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_orphan_frame_dir_0/card/DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_orphan_frame_dir_0/card/DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_panorama_frames_s0/card/DCIM/PANORAMA/001_0002/PANO_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_panorama_frames_s0/card/DCIM/PANORAMA/001_0002/PANO_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_panorama_frames_s0/card/DCIM/PANORAMA/001_0002/PANO_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_panorama_frames_s0/card/DCIM/PANORAMA/001_0002/PANO_0004.JPG": {
+    "mtime": 1004.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_panorama_frames_s0/card/DCIM/PANORAMA/001_0002/PANO_0005.JPG": {
+    "mtime": 1005.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_panorama_single_f0/card/DCIM/PANORAMA/001_0002/PANO_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_routes_panorama_a0/card/DCIM/PANORAMA/001_0002/PANO_0001.JPG": {
+    "mtime": 1001.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_routes_panorama_a0/card/DCIM/PANORAMA/001_0002/PANO_0002.JPG": {
+    "mtime": 1002.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_routes_panorama_a0/card/DCIM/PANORAMA/001_0002/PANO_0003.JPG": {
+    "mtime": 1003.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_warnings_surface_0/inbox/DCIM/HYPERLAPSE/001_0099/HYPERLAPSE_0001.JPG": {
+    "mtime": 1781353093.0024354,
+    "ast_hash": "64ed3c10926ee1ede3e2395585b00a67",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_real_dji_footage_e2e0/library/_unknown/2023-01-07/2023-01-07_17-44-36_DJI_0001.JPG": {
+    "mtime": 1781353093.9218552,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_restitch_records_new_proj0/lib/pano/PANO_0001.JPG": {
+    "mtime": 1781353095.1637137,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retag_collision_with_diff0/library/Denver, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.2846067,
+    "ast_hash": "f125b22cf257c2ec750c7a597e11c924",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retag_collision_with_diff0/library/Denver, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001_2.JPG": {
+    "mtime": 1781353095.2987506,
+    "ast_hash": "fbd17ddef276ea15252e4b9b91758267",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retag_is_idempotent_when_0/library/Denver, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.2628815,
+    "ast_hash": "dd7b34dbe3b2400ba275019a0265db80",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retag_moves_organized_fil0/library/Denver, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.237604,
+    "ast_hash": "dd7b34dbe3b2400ba275019a0265db80",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retag_same_spot_updates_p0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.3367083,
+    "ast_hash": "dd7b34dbe3b2400ba275019a0265db80",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retag_unknown_id_is_not_f0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.3175154,
+    "ast_hash": "dd7b34dbe3b2400ba275019a0265db80",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_retry_exhausts_then_fails0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.4596984,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_selected_primaries_filter0/inbox/DJI_0002.JPG": {
+    "mtime": 1781353093.0185237,
+    "ast_hash": "17998f81cda3dd992be0e10e0ecc0bab",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_selected_primaries_filter0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353093.0255806,
+    "ast_hash": "58c6792a885c63654f3def2a4f144011",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_selected_primaries_none_o0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353093.043658,
+    "ast_hash": "58c6792a885c63654f3def2a4f144011",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_selected_primaries_none_o0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0002.JPG": {
+    "mtime": 1781353093.0456762,
+    "ast_hash": "17998f81cda3dd992be0e10e0ecc0bab",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_sha256_file_reports_progr0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.375276,
+    "ast_hash": "4d9b871b19b8e4072f366813f38c054d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_sweeps_stale_partials_on_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.731535,
+    "ast_hash": "d7ba9bbfda42b9657f14ee37ef76150b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_two_distinct_dji_photos0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353090.8548396,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_two_distinct_dji_photos0/inbox/DJI_0002.JPG": {
+    "mtime": 1781353090.8548396,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_cancel_stops_and_kee0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.5971348,
+    "ast_hash": "6298ea5b872e2b2c36dc23e3236cbdf0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_cancel_stops_and_kee0/library/Boulder, Colorado, United States/2024-07-05/2024-07-05_09-15-00_DJI_0002.JPG": {
+    "mtime": 1781353095.60016,
+    "ast_hash": "63cff14b79352930df1349cb067e8fc1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0001.JPG": {
+    "mtime": 1781353096.3476522,
+    "ast_hash": "9901fea8a5183176ae0d3355ffae87cc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0002.JPG": {
+    "mtime": 1781353096.3491635,
+    "ast_hash": "343173f14b0477108d95edc02e32a3bc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0003.JPG": {
+    "mtime": 1781353096.3506737,
+    "ast_hash": "9bce464280f1f5f57894edaddb667cdc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0004.JPG": {
+    "mtime": 1781353096.3516781,
+    "ast_hash": "0ef0095eee28cbc50b5dca3a740d916a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0005.JPG": {
+    "mtime": 1781353096.3521843,
+    "ast_hash": "7936d9c086f561c552a3b777b9613f0d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0006.JPG": {
+    "mtime": 1781353096.3532417,
+    "ast_hash": "0718f4e1990386e2afc7756ff4d7157d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0007.JPG": {
+    "mtime": 1781353096.3547528,
+    "ast_hash": "8a83c9aaf08bef0ec5e9ce680c505c6c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0008.JPG": {
+    "mtime": 1781353096.355757,
+    "ast_hash": "c15bc8c79fc306a7d847fb9752c35089",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0009.JPG": {
+    "mtime": 1781353096.3572698,
+    "ast_hash": "ceee93c34f1b5888a88d041507f8f3ea",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0010.JPG": {
+    "mtime": 1781353096.3577757,
+    "ast_hash": "c8fc05b323db245866102d64f73c9d59",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0011.JPG": {
+    "mtime": 1781353096.3592896,
+    "ast_hash": "f41d44d1d61cc1140db6601b7f2a4676",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0012.JPG": {
+    "mtime": 1781353096.3602953,
+    "ast_hash": "628b7c51cad67c31f93da17d54ad4397",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0013.JPG": {
+    "mtime": 1781353096.3608015,
+    "ast_hash": "8a9f16cabce434a85047cc2abc114160",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0014.JPG": {
+    "mtime": 1781353096.3623133,
+    "ast_hash": "a63e7a2c914ecd5ff53f3d1a18ff1c43",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0015.JPG": {
+    "mtime": 1781353096.3638256,
+    "ast_hash": "4331178aa9165ab26ff3d15ce1047ad5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0016.JPG": {
+    "mtime": 1781353096.3648303,
+    "ast_hash": "03383e955d99b1c53ac4706cd73d9905",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0017.JPG": {
+    "mtime": 1781353096.3653367,
+    "ast_hash": "81f78a31747ef6a046f61028151a7b50",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0018.JPG": {
+    "mtime": 1781353096.3668509,
+    "ast_hash": "f522c991565820acdf80ff4c71a78805",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0019.JPG": {
+    "mtime": 1781353096.3675964,
+    "ast_hash": "2b92b4c1a0727fca824b5300457d408b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0020.JPG": {
+    "mtime": 1781353096.3691094,
+    "ast_hash": "63a93b9953a63f7350a7018eb556b750",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0021.JPG": {
+    "mtime": 1781353096.3703122,
+    "ast_hash": "29fcd0c229d64e56f35ac74e786345c7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0022.JPG": {
+    "mtime": 1781353096.3713207,
+    "ast_hash": "fc91e744ef4294afab2a97e6c367f81d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0023.JPG": {
+    "mtime": 1781353096.3718266,
+    "ast_hash": "223df55330d4c9652b30107523ad763e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0024.JPG": {
+    "mtime": 1781353096.3733392,
+    "ast_hash": "56b38fe5f171f85ef720dd82bf9ef3d4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0025.JPG": {
+    "mtime": 1781353096.3743448,
+    "ast_hash": "eedf860c84f409bf9e9b6d97aa81d78c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0026.JPG": {
+    "mtime": 1781353096.3748522,
+    "ast_hash": "6b7b89787c14b20aeb62f132d76bc31d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0027.JPG": {
+    "mtime": 1781353096.3763633,
+    "ast_hash": "34db1c0185ad17a44a960ec32959ebb7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0028.JPG": {
+    "mtime": 1781353096.3774216,
+    "ast_hash": "2ec138fd2ec2a5a72878688b2cf17523",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0029.JPG": {
+    "mtime": 1781353096.3784814,
+    "ast_hash": "7f62a74bac8d7e22e65698af68271d16",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0030.JPG": {
+    "mtime": 1781353096.3795407,
+    "ast_hash": "9e366537088d35e7204da4b98a340ffc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0031.JPG": {
+    "mtime": 1781353096.3810534,
+    "ast_hash": "3b34db5ca8b7a9f92bcd6d5ed40bf4cf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0032.JPG": {
+    "mtime": 1781353096.3820598,
+    "ast_hash": "5615364830c59c65844292fa9cd4a02d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0033.JPG": {
+    "mtime": 1781353096.3836281,
+    "ast_hash": "07dc848fa7529cb1b6f183779dc97bdc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0034.JPG": {
+    "mtime": 1781353096.3846323,
+    "ast_hash": "94f12ce81307ce0090c7145036f30e4d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0035.JPG": {
+    "mtime": 1781353096.3851383,
+    "ast_hash": "108dee4c90bb8b5b9bf4dadcdd7b1b3a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0036.JPG": {
+    "mtime": 1781353096.3866477,
+    "ast_hash": "c77293f83f9de5bc8bef147f5cdb73ec",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0037.JPG": {
+    "mtime": 1781353096.3876536,
+    "ast_hash": "5c2a330eb650b5319b8c3423862382bf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0038.JPG": {
+    "mtime": 1781353096.388159,
+    "ast_hash": "594bf5e4e76eefd63bbacd84855429ef",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0039.JPG": {
+    "mtime": 1781353096.3891659,
+    "ast_hash": "f17f84405bbaa27a3e5a1d8798a4efe0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0040.JPG": {
+    "mtime": 1781353096.391296,
+    "ast_hash": "75393596096bd41b20885e07fc443891",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0041.JPG": {
+    "mtime": 1781353096.3918045,
+    "ast_hash": "4838d38988e2ca826d055c8582e16d4b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0042.JPG": {
+    "mtime": 1781353096.3933208,
+    "ast_hash": "b2997c643db9c6e68fd5f96befad0b7d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0043.JPG": {
+    "mtime": 1781353096.3943954,
+    "ast_hash": "80429b82eb2c3dd8c0b757efdfe9c968",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0044.JPG": {
+    "mtime": 1781353096.3959067,
+    "ast_hash": "7b83cf62bcd107000c50361696ddd659",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0045.JPG": {
+    "mtime": 1781353096.3974185,
+    "ast_hash": "559f8d9ba9d0f46f45c7d534385cb2b4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0046.JPG": {
+    "mtime": 1781353096.3989308,
+    "ast_hash": "d03e10903bf20fb73996b3fab1d6c0f6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0047.JPG": {
+    "mtime": 1781353096.399933,
+    "ast_hash": "18063df00616a659b2f2b41da6ccba9f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0048.JPG": {
+    "mtime": 1781353096.400431,
+    "ast_hash": "ed1e377c8fb851807ad81a54507360f9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0049.JPG": {
+    "mtime": 1781353096.4019423,
+    "ast_hash": "173812fa4305a18ba2c9a074824e368f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0050.JPG": {
+    "mtime": 1781353096.4029458,
+    "ast_hash": "f9a09a2df2c044271ca9258e474a08cb",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0051.JPG": {
+    "mtime": 1781353096.403452,
+    "ast_hash": "350396a8e19b12b271838b05de93e67e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0052.JPG": {
+    "mtime": 1781353096.4049635,
+    "ast_hash": "b9d290de8087a20ea39d8793243318ef",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0053.JPG": {
+    "mtime": 1781353096.4064736,
+    "ast_hash": "1d6b7046a11a20bb9c2bbc638794649c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0054.JPG": {
+    "mtime": 1781353096.407549,
+    "ast_hash": "a038a1a0114e2cf9e727c1f52d826cb8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0055.JPG": {
+    "mtime": 1781353096.4085548,
+    "ast_hash": "6251f7dca27a46a08e44b3490443d458",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0056.JPG": {
+    "mtime": 1781353096.4090614,
+    "ast_hash": "b6607109de5dd255f1ffd1e7aca37557",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0057.JPG": {
+    "mtime": 1781353096.4105747,
+    "ast_hash": "2b08bf8159090f3f30f1e2468c617d69",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0058.JPG": {
+    "mtime": 1781353096.41158,
+    "ast_hash": "6b05faa42711b2f1f542e78ffd71898d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0059.JPG": {
+    "mtime": 1781353096.4120903,
+    "ast_hash": "2941ceaaf65a68284bb6ffcb6573f1bd",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0060.JPG": {
+    "mtime": 1781353096.4136038,
+    "ast_hash": "7108a060874936c92a1af4c3fa54dae4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0061.JPG": {
+    "mtime": 1781353096.4146683,
+    "ast_hash": "ad4f8038e019d753e9b950011a6325c1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0062.JPG": {
+    "mtime": 1781353096.4161818,
+    "ast_hash": "95223df673b2e656089770d46eb2b3cf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0063.JPG": {
+    "mtime": 1781353096.417694,
+    "ast_hash": "f92f3cd63c8d746d6998636af58e937d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0064.JPG": {
+    "mtime": 1781353096.4192069,
+    "ast_hash": "d9d9d07e5bf0808fde2210ce0d236aea",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0065.JPG": {
+    "mtime": 1781353096.4202125,
+    "ast_hash": "bf64ccdf37e5ddc61805f129a22a9c4b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0066.JPG": {
+    "mtime": 1781353096.4207184,
+    "ast_hash": "4a83ce1e408fb6423572fa4e38d63945",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0067.JPG": {
+    "mtime": 1781353096.4222326,
+    "ast_hash": "b1845a7d8812539a65df2b2702d09c98",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0068.JPG": {
+    "mtime": 1781353096.4237676,
+    "ast_hash": "27da0390610782e0d7ba03f3c55b922c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0069.JPG": {
+    "mtime": 1781353096.424774,
+    "ast_hash": "2380abd1142b217cda555b6349017bcf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0070.JPG": {
+    "mtime": 1781353096.425837,
+    "ast_hash": "272c3fae882134d97403a98f6a061801",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0071.JPG": {
+    "mtime": 1781353096.4268427,
+    "ast_hash": "90dbffa5f767b3b735e1737057f21de2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0072.JPG": {
+    "mtime": 1781353096.4284258,
+    "ast_hash": "fe57d16c1738c81819b5103d241ebfeb",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0073.JPG": {
+    "mtime": 1781353096.4294314,
+    "ast_hash": "73e7f98c6be4fd04ea1adfc801cb73ad",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0074.JPG": {
+    "mtime": 1781353096.4304245,
+    "ast_hash": "cb9d086f11d28581685080198603b49d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0075.JPG": {
+    "mtime": 1781353096.4314337,
+    "ast_hash": "38daa081692d377912605cb4b0e0d223",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0076.JPG": {
+    "mtime": 1781353096.4324405,
+    "ast_hash": "a63525fc32a246e983d81175c63e011c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0077.JPG": {
+    "mtime": 1781353096.4329479,
+    "ast_hash": "e5f1fcd6df3241394cc11be8e9f3eaf9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0078.JPG": {
+    "mtime": 1781353096.4339533,
+    "ast_hash": "159c975ff16e69d7847b34ee30af0d09",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0079.JPG": {
+    "mtime": 1781353096.4344602,
+    "ast_hash": "a4facee39d1d79b4b8fa79bf4832a8ae",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0080.JPG": {
+    "mtime": 1781353096.4359748,
+    "ast_hash": "9d249d3747f1bee4243b65766554a236",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0081.JPG": {
+    "mtime": 1781353096.437487,
+    "ast_hash": "75105151baf880a4daf02c7f8653d799",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0082.JPG": {
+    "mtime": 1781353096.438491,
+    "ast_hash": "9b9d76308180edec327c563d7f0f403b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0083.JPG": {
+    "mtime": 1781353096.4389973,
+    "ast_hash": "86eed5071ecc07369d1f5fb76ef9c8df",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0084.JPG": {
+    "mtime": 1781353096.4405096,
+    "ast_hash": "8211ed23eb8c3cb2a95effa7e2b2a971",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0085.JPG": {
+    "mtime": 1781353096.4415681,
+    "ast_hash": "d3d1d3102d334ee9b5e4ec3880d1687c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0086.JPG": {
+    "mtime": 1781353096.4425738,
+    "ast_hash": "4dd215b6e5efdfc30bc8dcac9b874b4f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0087.JPG": {
+    "mtime": 1781353096.4430797,
+    "ast_hash": "6a6ab6b2e49fb042b54e44cbb78fa4ba",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0088.JPG": {
+    "mtime": 1781353096.4445913,
+    "ast_hash": "ec90c5fd636f72472cc99e40cb00ce1c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0089.JPG": {
+    "mtime": 1781353096.4455974,
+    "ast_hash": "4f92440b4cfd9f67345832ee8033d5dc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0090.JPG": {
+    "mtime": 1781353096.4461036,
+    "ast_hash": "1f8eac2ad3885509fa4227b3cba63b2c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0091.JPG": {
+    "mtime": 1781353096.447615,
+    "ast_hash": "039adaafa09d88a39cbe222ef09fd415",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0092.JPG": {
+    "mtime": 1781353096.449126,
+    "ast_hash": "2db549f76090057f4913428c09e9d199",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0093.JPG": {
+    "mtime": 1781353096.4501333,
+    "ast_hash": "f7a1d854b28b69f63a98f9714afd78f0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0094.JPG": {
+    "mtime": 1781353096.4506392,
+    "ast_hash": "d71e31559643af4ecdc39eee9e082ff4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0095.JPG": {
+    "mtime": 1781353096.4521525,
+    "ast_hash": "38484caead36663066da5d3a2326fa60",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0096.JPG": {
+    "mtime": 1781353096.453662,
+    "ast_hash": "d194e4a61565e215bda35133771d4226",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0097.JPG": {
+    "mtime": 1781353096.4546669,
+    "ast_hash": "4a9ff93fd5fb6361c85d1fcdc94d63d3",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0098.JPG": {
+    "mtime": 1781353096.455174,
+    "ast_hash": "e064cdd57de54d68d2327be311d0041e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0099.JPG": {
+    "mtime": 1781353096.4562345,
+    "ast_hash": "244941e0f4e091a683c1cd71eea68e6a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0100.JPG": {
+    "mtime": 1781353096.457745,
+    "ast_hash": "e725d6d715c4f30f0c08ce6da292e57e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0101.JPG": {
+    "mtime": 1781353096.4587543,
+    "ast_hash": "c0f5bde76534fdb7c8fcf959c1fef1da",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0102.JPG": {
+    "mtime": 1781353096.4602847,
+    "ast_hash": "cc946a368747f2ded004c60b704144c9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0103.JPG": {
+    "mtime": 1781353096.4614272,
+    "ast_hash": "5755c80ab70f4ad0c9489702f28bf5a8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0104.JPG": {
+    "mtime": 1781353096.462432,
+    "ast_hash": "7c46bb37fdf6b77137ee3eb5c59fda35",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0105.JPG": {
+    "mtime": 1781353096.4629383,
+    "ast_hash": "dbb5443e4adc7961fa082ed04f1dce47",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0106.JPG": {
+    "mtime": 1781353096.4644506,
+    "ast_hash": "174941d98901e078bbf6a877188bb653",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0107.JPG": {
+    "mtime": 1781353096.4654555,
+    "ast_hash": "5239ecf09e3c11f6c636940f067f1041",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0108.JPG": {
+    "mtime": 1781353096.4659617,
+    "ast_hash": "fcb2d729ca950e4331ff8b02d724e761",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0109.JPG": {
+    "mtime": 1781353096.4674745,
+    "ast_hash": "d8c07b561af547a082bab8882b906a1f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0110.JPG": {
+    "mtime": 1781353096.4684803,
+    "ast_hash": "48fae598b8310e301f60d190fb0b9506",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0111.JPG": {
+    "mtime": 1781353096.469994,
+    "ast_hash": "db7f9e9417a7e218e6e51849b19a4bf6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0112.JPG": {
+    "mtime": 1781353096.4705007,
+    "ast_hash": "82798dd7816aba2daf8b360b5146241e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0113.JPG": {
+    "mtime": 1781353096.4720128,
+    "ast_hash": "561312ddd7e8968d31f01b975c15c717",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0114.JPG": {
+    "mtime": 1781353096.4730768,
+    "ast_hash": "67471cc41a434e8798e2862b2bf631c4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0115.JPG": {
+    "mtime": 1781353096.4740815,
+    "ast_hash": "d9dda55612bdf84868669e288702ac26",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0116.JPG": {
+    "mtime": 1781353096.474588,
+    "ast_hash": "883f7375ea661c4d8de18ee74656d423",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0117.JPG": {
+    "mtime": 1781353096.4760997,
+    "ast_hash": "0f1bc38d7b42016dcc5a39a36f02083a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0118.JPG": {
+    "mtime": 1781353096.4776115,
+    "ast_hash": "8a21583c2bdb184b111d8297d0031760",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0119.JPG": {
+    "mtime": 1781353096.4786162,
+    "ast_hash": "ba83671c3790745b6c2fc937c95c6e10",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0120.JPG": {
+    "mtime": 1781353096.4791226,
+    "ast_hash": "76e7d6c9dfd19354ffc31be6fcff8fd2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0121.JPG": {
+    "mtime": 1781353096.4806354,
+    "ast_hash": "153cc58a459dc953751995dba10a726c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0122.JPG": {
+    "mtime": 1781353096.4806354,
+    "ast_hash": "117b3d7cc35f872548ca4d0341949d0f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0123.JPG": {
+    "mtime": 1781353096.4821475,
+    "ast_hash": "d1e46b418bfb53eee07411725149156f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0124.JPG": {
+    "mtime": 1781353096.4836583,
+    "ast_hash": "242e4416cc52067f8d42f7b9f0fa2078",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0125.JPG": {
+    "mtime": 1781353096.4836583,
+    "ast_hash": "57e4a572af5e02a48a4866deb06291f7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0126.JPG": {
+    "mtime": 1781353096.48517,
+    "ast_hash": "a21b6d52767b8a5c8f10a2018bf6af19",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0127.JPG": {
+    "mtime": 1781353096.486682,
+    "ast_hash": "dbd3227a248059f1c3cf8d3dc2b2bd89",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0128.JPG": {
+    "mtime": 1781353096.488194,
+    "ast_hash": "143a98146467ea02fd2f5cc258603b14",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0129.JPG": {
+    "mtime": 1781353096.4887908,
+    "ast_hash": "2e0e329628ed80c1728a26a7ce455bd3",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0130.JPG": {
+    "mtime": 1781353096.49039,
+    "ast_hash": "c4834d1ba7db195ebde33528705ea7da",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0131.JPG": {
+    "mtime": 1781353096.491271,
+    "ast_hash": "9b52dfbfd9ab6d2dac1374af49933fb3",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0132.JPG": {
+    "mtime": 1781353096.4917798,
+    "ast_hash": "dfe96aeed5daa4292cbcd1efb28bb5b0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0133.JPG": {
+    "mtime": 1781353096.4932957,
+    "ast_hash": "f6c987128ff096e4b58cfc179eafeed1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0134.JPG": {
+    "mtime": 1781353096.4943037,
+    "ast_hash": "1893fa015583e58376ba2591d59e2163",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0135.JPG": {
+    "mtime": 1781353096.4948113,
+    "ast_hash": "ac0fa4f43e31cc45841689ad0260d68b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0136.JPG": {
+    "mtime": 1781353096.4963257,
+    "ast_hash": "1cb49a87301be4426c755aeee8601a6d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0137.JPG": {
+    "mtime": 1781353096.4973345,
+    "ast_hash": "999009ada7b7534b050dbd1e6b4fdc60",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0138.JPG": {
+    "mtime": 1781353096.4988494,
+    "ast_hash": "58b4c5a3e8417e249f6a28064d640edf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0139.JPG": {
+    "mtime": 1781353096.4993575,
+    "ast_hash": "aed0d96c4d4766a8e2e0461c5e771ad1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0140.JPG": {
+    "mtime": 1781353096.5008702,
+    "ast_hash": "37a04f4919747d945a2999e8a50be90b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0141.JPG": {
+    "mtime": 1781353096.501876,
+    "ast_hash": "99f9dc9c60e2e18de8f9b67799061729",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0142.JPG": {
+    "mtime": 1781353096.5028832,
+    "ast_hash": "c9fa472a99b095111ab722eaf8c1dc38",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0143.JPG": {
+    "mtime": 1781353096.5038958,
+    "ast_hash": "acca8c67f8a3c4d39feadb1335fb19d4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0144.JPG": {
+    "mtime": 1781353096.505408,
+    "ast_hash": "f860f20fe393af6d9d7953d138f9bde1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0145.JPG": {
+    "mtime": 1781353096.5069256,
+    "ast_hash": "59f2176b678c5e8cb19fb2a894452702",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0146.JPG": {
+    "mtime": 1781353096.507988,
+    "ast_hash": "6c51aa966b6825630722b11e1ce0e64a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0147.JPG": {
+    "mtime": 1781353096.5089943,
+    "ast_hash": "d533274b716db77f8b6a6419920bede1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0148.JPG": {
+    "mtime": 1781353096.510509,
+    "ast_hash": "187b3c0d6c9c17f2961fdbb4b11ba346",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0149.JPG": {
+    "mtime": 1781353096.5110164,
+    "ast_hash": "8c65e362d3644e2824139045c29a6372",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0150.JPG": {
+    "mtime": 1781353096.512022,
+    "ast_hash": "becb7ae0175d0504948ce14e045b7483",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0151.JPG": {
+    "mtime": 1781353096.5125291,
+    "ast_hash": "dcf937d1d74b4bb3b52b376496704bcd",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0152.JPG": {
+    "mtime": 1781353096.5135891,
+    "ast_hash": "58645aab09ba661e0eef352848c8eeb5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0153.JPG": {
+    "mtime": 1781353096.5151014,
+    "ast_hash": "3b1beeef5f959c55e53a4a2ecb579a1d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0154.JPG": {
+    "mtime": 1781353096.516615,
+    "ast_hash": "36303c11819ef9971dcd7a77e73d4eba",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0155.JPG": {
+    "mtime": 1781353096.51762,
+    "ast_hash": "104fa11be29778ff48e5ed554ef9f119",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0156.JPG": {
+    "mtime": 1781353096.5186977,
+    "ast_hash": "5664578952f14bd0998e1f52cffeb946",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0157.JPG": {
+    "mtime": 1781353096.5202103,
+    "ast_hash": "38ce60a623bbb01a10a75bc02cbc7961",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0158.JPG": {
+    "mtime": 1781353096.5212097,
+    "ast_hash": "37561151547fd84e72f70bbe9c916dc4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0159.JPG": {
+    "mtime": 1781353096.5217109,
+    "ast_hash": "f400825c75211cb46649541f76ebea30",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0160.JPG": {
+    "mtime": 1781353096.522717,
+    "ast_hash": "a653b6222b15ad61e00f1b9ac9a0f092",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0161.JPG": {
+    "mtime": 1781353096.5248232,
+    "ast_hash": "823b34237489bce423db7b9a9e5db3f5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0162.JPG": {
+    "mtime": 1781353096.52533,
+    "ast_hash": "89ede64735f80173dfaaefc1392d0c9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0163.JPG": {
+    "mtime": 1781353096.5268452,
+    "ast_hash": "28c470ede2eb5ab2c67904ebe727548f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0164.JPG": {
+    "mtime": 1781353096.5278502,
+    "ast_hash": "4876f87172393b28e36dc18d5c7bd6cd",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0165.JPG": {
+    "mtime": 1781353096.5283554,
+    "ast_hash": "df0062f6fb311945031645e40a789760",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0166.JPG": {
+    "mtime": 1781353096.5298672,
+    "ast_hash": "267df3e4075b2ff6a33daeb8fe921773",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0167.JPG": {
+    "mtime": 1781353096.5313792,
+    "ast_hash": "8661a1f37dfa959f09bf6f4e36d416ae",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0168.JPG": {
+    "mtime": 1781353096.532386,
+    "ast_hash": "7c5f1aa66d56ec2c5bc0034dd0a604ce",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0169.JPG": {
+    "mtime": 1781353096.5328925,
+    "ast_hash": "39f1a0762ca13830ab69044672abfc50",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0170.JPG": {
+    "mtime": 1781353096.5344033,
+    "ast_hash": "fdf824b84af112be6cd321bc87043194",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0171.JPG": {
+    "mtime": 1781353096.5354087,
+    "ast_hash": "3ca497895fb8999691017717433a0bc3",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0172.JPG": {
+    "mtime": 1781353096.536415,
+    "ast_hash": "d6c3b8d63468bf2aab3aaa619ea104f4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0173.JPG": {
+    "mtime": 1781353096.5374267,
+    "ast_hash": "4608777e89175da3a42df2991bfac39c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0174.JPG": {
+    "mtime": 1781353096.5389385,
+    "ast_hash": "f6b990956a83f72a0930268d20a4cddb",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0175.JPG": {
+    "mtime": 1781353096.539944,
+    "ast_hash": "8369a67ed7e4495ce4bb97d4105d0bf4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0176.JPG": {
+    "mtime": 1781353096.5404508,
+    "ast_hash": "ee76ef58fc8ffd2dd27b7370edfddfe7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0177.JPG": {
+    "mtime": 1781353096.5419621,
+    "ast_hash": "5848a653d429a89fde2bc70af9408e58",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0178.JPG": {
+    "mtime": 1781353096.5429678,
+    "ast_hash": "e0a4e1739125b203f5038e39407163ca",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0179.JPG": {
+    "mtime": 1781353096.5445437,
+    "ast_hash": "a69a7cad6c85e5eafcedab1052ec1a56",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0180.JPG": {
+    "mtime": 1781353096.5455496,
+    "ast_hash": "2e78714fb647d55f2fb8d3821f163902",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0181.JPG": {
+    "mtime": 1781353096.547066,
+    "ast_hash": "b9f034db86e2b9a6f69e43def47889c7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0182.JPG": {
+    "mtime": 1781353096.547573,
+    "ast_hash": "b4312c4bd7ed18b17e49f6f35e277ef1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0183.JPG": {
+    "mtime": 1781353096.5490904,
+    "ast_hash": "e307c21904293608626159dfce0396ef",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0184.JPG": {
+    "mtime": 1781353096.5496762,
+    "ast_hash": "d8f36dc4be56c9c62ac4460bcc8ac26b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0185.JPG": {
+    "mtime": 1781353096.5507784,
+    "ast_hash": "96e40d4d20ea41fa7618ff8e822e344d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0186.JPG": {
+    "mtime": 1781353096.557921,
+    "ast_hash": "0391929ca2f991fd2f1812fef42c80a8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0187.JPG": {
+    "mtime": 1781353096.5594347,
+    "ast_hash": "703e40a0a2ce2aa00a2e9caf73130599",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0188.JPG": {
+    "mtime": 1781353096.5609453,
+    "ast_hash": "96d4998d070de3fa8a8362de69ce3f8e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0189.JPG": {
+    "mtime": 1781353096.5624566,
+    "ast_hash": "a75f3e0308df50777adba67ed4e4fc47",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0190.JPG": {
+    "mtime": 1781353096.5634625,
+    "ast_hash": "e3f460bf5f2411cbdac9ceb055425930",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0191.JPG": {
+    "mtime": 1781353096.5639696,
+    "ast_hash": "16330f86ad888db79b0265749b5029c5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0192.JPG": {
+    "mtime": 1781353096.5650403,
+    "ast_hash": "bdbd23260f0156082d749d086b3922bb",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0193.JPG": {
+    "mtime": 1781353096.5665524,
+    "ast_hash": "2027722d6525d8dd13a6f3c636bc4e89",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0194.JPG": {
+    "mtime": 1781353096.567558,
+    "ast_hash": "8c7f9c774207091f9ec6621131a0d1e9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0195.JPG": {
+    "mtime": 1781353096.568064,
+    "ast_hash": "9bec280cf3e310afbbf17737c048805a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0196.JPG": {
+    "mtime": 1781353096.5695744,
+    "ast_hash": "85e868361e2e7f11c2968fd222d43460",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0197.JPG": {
+    "mtime": 1781353096.5710852,
+    "ast_hash": "ba85456288755842924013509ac48f0b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0198.JPG": {
+    "mtime": 1781353096.5720904,
+    "ast_hash": "224c536e5b73e8a403c255a3f031232a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0199.JPG": {
+    "mtime": 1781353096.5725968,
+    "ast_hash": "b7fb15e4d2b08ceeb797e3581db60ff7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0200.JPG": {
+    "mtime": 1781353096.5736017,
+    "ast_hash": "d1c0385602acbe85d388bacc2e54d946",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0201.JPG": {
+    "mtime": 1781353096.574107,
+    "ast_hash": "8da5d533ed3c4fcbdadc4694fa0dc5f7",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0202.JPG": {
+    "mtime": 1781353096.5761738,
+    "ast_hash": "fbbeaa29b10e3567f4a4a4b4071afe0f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0203.JPG": {
+    "mtime": 1781353096.5766811,
+    "ast_hash": "69e75590145cb5944c1f5e4a66919087",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0204.JPG": {
+    "mtime": 1781353096.5781941,
+    "ast_hash": "4f85de22c76f916d20460cced2c95ede",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0205.JPG": {
+    "mtime": 1781353096.5792005,
+    "ast_hash": "8af6d200b4ed736af8b5884c637b9b94",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0206.JPG": {
+    "mtime": 1781353096.579707,
+    "ast_hash": "49b00150347e334b8b83a5008e33f894",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0207.JPG": {
+    "mtime": 1781353096.5812185,
+    "ast_hash": "ad77bfbd34ba7559be0a664b492dca76",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0208.JPG": {
+    "mtime": 1781353096.582168,
+    "ast_hash": "f3bd1d0375bec5bb6bcf116232427336",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0209.JPG": {
+    "mtime": 1781353096.58368,
+    "ast_hash": "9875374b4d30db26ce293bbf4fbc761d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0210.JPG": {
+    "mtime": 1781353096.5841868,
+    "ast_hash": "faba21326b2826eb99fa4879fc414cfd",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0211.JPG": {
+    "mtime": 1781353096.5852442,
+    "ast_hash": "1bed8380955cee7446e06ddc89eebadf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0212.JPG": {
+    "mtime": 1781353096.5867567,
+    "ast_hash": "d12f0aba9ed809cfeb346648311d216d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0213.JPG": {
+    "mtime": 1781353096.5877616,
+    "ast_hash": "19959688e76df4b77bfc9f7090d31279",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0214.JPG": {
+    "mtime": 1781353096.5882676,
+    "ast_hash": "f495f2188f1562a23c185ac51498cab2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0215.JPG": {
+    "mtime": 1781353096.589273,
+    "ast_hash": "c65cbd441660db765095c0995321e797",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0216.JPG": {
+    "mtime": 1781353096.590811,
+    "ast_hash": "b1d4f7849f21ed8af540e0e4ac96e9b2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0217.JPG": {
+    "mtime": 1781353096.5914843,
+    "ast_hash": "5f8108177babe8162ae2808026bda699",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0218.JPG": {
+    "mtime": 1781353096.5929956,
+    "ast_hash": "832453c4188a9475d8a319d5296bd6da",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0219.JPG": {
+    "mtime": 1781353096.594002,
+    "ast_hash": "f69506fde1cab2e22f42ed322c86bb1a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0220.JPG": {
+    "mtime": 1781353096.5945084,
+    "ast_hash": "8a680937b4ac2126028a8acca86a69f8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0221.JPG": {
+    "mtime": 1781353096.5955665,
+    "ast_hash": "9ecb3aa7e9495d2629189c22b4d227d1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0222.JPG": {
+    "mtime": 1781353096.597078,
+    "ast_hash": "046116bdfa37f542ff60f8b81a37a19e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0223.JPG": {
+    "mtime": 1781353096.5980825,
+    "ast_hash": "60a5902ac8ea8219a41afac31bf345f8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0224.JPG": {
+    "mtime": 1781353096.5985887,
+    "ast_hash": "9a6e72eb6a6be8f0d462184e0b9a509e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0225.JPG": {
+    "mtime": 1781353096.6000977,
+    "ast_hash": "c8df7d2b37fa4eab2e2196960174b9a2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0226.JPG": {
+    "mtime": 1781353096.6011038,
+    "ast_hash": "a43522daec7f015f2bae19c2c7623b06",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0227.JPG": {
+    "mtime": 1781353096.6016097,
+    "ast_hash": "1889d389ddd872dc9e44f03115eaf15e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0228.JPG": {
+    "mtime": 1781353096.6031206,
+    "ast_hash": "8681483a621f2ef357575834a1f04d8d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0229.JPG": {
+    "mtime": 1781353096.6046324,
+    "ast_hash": "ae0f4f4749deed521ba30028fad99517",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0230.JPG": {
+    "mtime": 1781353096.6056886,
+    "ast_hash": "056b8cea172c89eb23ae5ab1265a4344",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0231.JPG": {
+    "mtime": 1781353096.6066935,
+    "ast_hash": "8042e90cb31ec5f575992318b2ad83e6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0232.JPG": {
+    "mtime": 1781353096.6071994,
+    "ast_hash": "8d83efaf7b2920367b5326233ef325bf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0233.JPG": {
+    "mtime": 1781353096.6082664,
+    "ast_hash": "dbb5549bdeee0afecd239b04af8ed794",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0234.JPG": {
+    "mtime": 1781353096.609779,
+    "ast_hash": "a6bfcacc7a97e0d8972c2ca044867dea",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0235.JPG": {
+    "mtime": 1781353096.6107855,
+    "ast_hash": "8b9c7fe00d7564d8da86a0f9872ef98d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0236.JPG": {
+    "mtime": 1781353096.6118968,
+    "ast_hash": "1e0c94e7f063bbe4eb3383c42ff212e5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0237.JPG": {
+    "mtime": 1781353096.612403,
+    "ast_hash": "43f76c62c10756f5010e2946bb6ca639",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0238.JPG": {
+    "mtime": 1781353096.6139126,
+    "ast_hash": "2c8c6b78a5e7c7643bbf8d797c677f84",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0239.JPG": {
+    "mtime": 1781353096.6154284,
+    "ast_hash": "4efceda0550e66faefd638347d87d45d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0240.JPG": {
+    "mtime": 1781353096.616436,
+    "ast_hash": "6ca8b9eff80f4cdf82b6c8ca384813c2",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0241.JPG": {
+    "mtime": 1781353096.6169436,
+    "ast_hash": "658269ed4eb3a36ac4eb798686fa9b82",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0242.JPG": {
+    "mtime": 1781353096.6184573,
+    "ast_hash": "3a77798fac248c72a2564b2cd4a8e41e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0243.JPG": {
+    "mtime": 1781353096.6194618,
+    "ast_hash": "de4d91883ec0ad074470e8366ef1b8bf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0244.JPG": {
+    "mtime": 1781353096.6199684,
+    "ast_hash": "cd1aaafd862ac3799102533a1c4c123c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0245.JPG": {
+    "mtime": 1781353096.62148,
+    "ast_hash": "9b347e5d9c78255d083444df9d2a4be6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0246.JPG": {
+    "mtime": 1781353096.622487,
+    "ast_hash": "76d3052b5dd8b113bc288e9b13200c96",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0247.JPG": {
+    "mtime": 1781353096.6235375,
+    "ast_hash": "83f86a7a87c73057b998443415a829e8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0248.JPG": {
+    "mtime": 1781353096.6240437,
+    "ast_hash": "e9a65e0c66eef36364198973f9309284",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0249.JPG": {
+    "mtime": 1781353096.6255558,
+    "ast_hash": "47ce48fc7db785b693081f60e93fda9b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0250.JPG": {
+    "mtime": 1781353096.6270695,
+    "ast_hash": "3228d3d336f94260f0024b48690a2098",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0251.JPG": {
+    "mtime": 1781353096.628076,
+    "ast_hash": "93964778cab9d7f034ac639dd1fbf528",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0252.JPG": {
+    "mtime": 1781353096.6285822,
+    "ast_hash": "3181be53e5ded7e5086410dbac7c35fc",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0253.JPG": {
+    "mtime": 1781353096.630097,
+    "ast_hash": "4a25d9ad3674bca6314ee06a3d8a4235",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0254.JPG": {
+    "mtime": 1781353096.6311028,
+    "ast_hash": "f04946c3fce1705171eb14f395027ff4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0255.JPG": {
+    "mtime": 1781353096.6316097,
+    "ast_hash": "a23ed13d97360b63ec1211fc531609eb",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0256.JPG": {
+    "mtime": 1781353096.6326728,
+    "ast_hash": "1159ab00f0efe512c93578c1d43563aa",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0257.JPG": {
+    "mtime": 1781353096.6341865,
+    "ast_hash": "32b02bbf402ba671a932f4b13ddf53c4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0258.JPG": {
+    "mtime": 1781353096.6356995,
+    "ast_hash": "15a65f29c5cd55054decaee7bb194543",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0259.JPG": {
+    "mtime": 1781353096.6369178,
+    "ast_hash": "d51d114299fe576a9dcdb67290370b7d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0260.JPG": {
+    "mtime": 1781353096.6379237,
+    "ast_hash": "ac55459af92271eafd0cea4bc2001b9b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0261.JPG": {
+    "mtime": 1781353096.63843,
+    "ast_hash": "6c8a61e9d5f3ab4db708772a0a396628",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0262.JPG": {
+    "mtime": 1781353096.6399417,
+    "ast_hash": "3ddab2aa9f7c4022e7fc5057ff6b7c17",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0263.JPG": {
+    "mtime": 1781353096.641453,
+    "ast_hash": "74c524c29d502c0508c60fc44ea33eaf",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0264.JPG": {
+    "mtime": 1781353096.6425016,
+    "ast_hash": "fefbedc1a8b67a2df1b7b376fb48fe13",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0265.JPG": {
+    "mtime": 1781353096.6435611,
+    "ast_hash": "a94868050bcd7b65d86f8a9046f0e394",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0266.JPG": {
+    "mtime": 1781353096.6450708,
+    "ast_hash": "40d93feb0e026a79a5f41c5b5fccb67b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0267.JPG": {
+    "mtime": 1781353096.6460757,
+    "ast_hash": "20f6484cb81c79fa8bb861bea0d5ce2e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0268.JPG": {
+    "mtime": 1781353096.6465821,
+    "ast_hash": "01b2f7a921a7dd9c6df9f1e93bdd1fde",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0269.JPG": {
+    "mtime": 1781353096.6476429,
+    "ast_hash": "fc49d783ed88d867fd9881b9836405e5",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0270.JPG": {
+    "mtime": 1781353096.6491537,
+    "ast_hash": "a6910a84952a224806268e76c1dd16fd",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0271.JPG": {
+    "mtime": 1781353096.650159,
+    "ast_hash": "5c8b52db9c77651f434d4069eba0769a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0272.JPG": {
+    "mtime": 1781353096.6516702,
+    "ast_hash": "7ee35c920dfe2cbfa2c4f2fe88049134",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0273.JPG": {
+    "mtime": 1781353096.6521783,
+    "ast_hash": "51c04e864f0d491ba50ec6525c664912",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0274.JPG": {
+    "mtime": 1781353096.6536899,
+    "ast_hash": "b35f23c75fefe56d7d9472ec7462abef",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0275.JPG": {
+    "mtime": 1781353096.6552007,
+    "ast_hash": "429f6cb24bfec40dc17e8a093a1138ab",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0276.JPG": {
+    "mtime": 1781353096.656206,
+    "ast_hash": "5c18ff3a1a01227c8cb085d2845db25a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0277.JPG": {
+    "mtime": 1781353096.6572125,
+    "ast_hash": "4db5cf30e0de2fb9cd70ea73927aa6f6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0278.JPG": {
+    "mtime": 1781353096.6577916,
+    "ast_hash": "1bb00f5177f85a774b618322b5405994",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0279.JPG": {
+    "mtime": 1781353096.6593032,
+    "ast_hash": "7f89c50f0c0e147048bb5b1b66051f19",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0280.JPG": {
+    "mtime": 1781353096.660308,
+    "ast_hash": "113afbab79babcd7edaaeaf2fc6ad2b4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0281.JPG": {
+    "mtime": 1781353096.6608143,
+    "ast_hash": "ae6256e5cd1420323f5bdb924a49bae1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0282.JPG": {
+    "mtime": 1781353096.6623266,
+    "ast_hash": "35ca65010c1b1bb4eabfad173ced6bb9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0283.JPG": {
+    "mtime": 1781353096.6633327,
+    "ast_hash": "11d4e32ad8d546c4dac4bee1ab26117b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0284.JPG": {
+    "mtime": 1781353096.6638427,
+    "ast_hash": "a43f1f6b470449a7f138753b1242db00",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0285.JPG": {
+    "mtime": 1781353096.665355,
+    "ast_hash": "2155bc1e0aa53a60cd956e9ff3212c59",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0286.JPG": {
+    "mtime": 1781353096.666867,
+    "ast_hash": "ae73db147ee903ed3e14ae9a8d3a0d70",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0287.JPG": {
+    "mtime": 1781353096.667923,
+    "ast_hash": "57bbaaa3a16f9be24b8871967cd6266a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0288.JPG": {
+    "mtime": 1781353096.6689284,
+    "ast_hash": "4b64ef14211e52cd508d1b5e125988dd",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0289.JPG": {
+    "mtime": 1781353096.6699648,
+    "ast_hash": "32a3f473998c183bde2257526acd301b",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0290.JPG": {
+    "mtime": 1781353096.6704712,
+    "ast_hash": "189d0b43ae0babb053d30bbb6bbc45c6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0291.JPG": {
+    "mtime": 1781353096.6719825,
+    "ast_hash": "932e8c1094986f4fca3b0d2e7d79216e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0292.JPG": {
+    "mtime": 1781353096.6729932,
+    "ast_hash": "ab5e32c456b895f94f211a6922877500",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0293.JPG": {
+    "mtime": 1781353096.6735,
+    "ast_hash": "22da98a82ef175becf6f252cf1069659",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0294.JPG": {
+    "mtime": 1781353096.675012,
+    "ast_hash": "eeb2bfc009e5d642bf876dc898308e3e",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0295.JPG": {
+    "mtime": 1781353096.6765273,
+    "ast_hash": "e0705ae8ae7777bd087cafbf2186eac4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0296.JPG": {
+    "mtime": 1781353096.6775312,
+    "ast_hash": "d585c6bddffd8a88bceb092bb90a658d",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0297.JPG": {
+    "mtime": 1781353096.6780376,
+    "ast_hash": "17465b15cfb1f5f566ca4c291a72c8f1",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0298.JPG": {
+    "mtime": 1781353096.6795504,
+    "ast_hash": "4c134fce9eadf0d00246526ba94ff61f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0299.JPG": {
+    "mtime": 1781353096.6805565,
+    "ast_hash": "64b342fe7b885a0862f89b3761edffb4",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/HYPERLAPSE/001_0021/HYPERLAPSE_0300.JPG": {
+    "mtime": 1781353096.6810637,
+    "ast_hash": "ddfa9f96730f8f4ec004c687cc432aee",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_panorama_un0/inbox/DCIM/PANORAMA/001_0002/PANO_0001.JPG": {
+    "mtime": 1781353095.4806561,
+    "ast_hash": "a049b59e393d7688dac1a0162aab2912",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_panorama_un0/inbox/DCIM/PANORAMA/001_0002/PANO_0002.JPG": {
+    "mtime": 1781353095.4821565,
+    "ast_hash": "7e25a61a91a7c423db93d001274801e0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_panorama_un0/inbox/DCIM/PANORAMA/001_0002/PANO_0003.JPG": {
+    "mtime": 1781353095.483668,
+    "ast_hash": "4669fbabbeb31e16b01d37cbdb2557ec",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_panorama_un0/inbox/DCIM/PANORAMA/001_0002/PANO_0004.JPG": {
+    "mtime": 1781353095.4846733,
+    "ast_hash": "01621c08f4368866043beafd84e4b889",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_panorama_un0/inbox/DCIM/PANORAMA/001_0002/PANO_0005.JPG": {
+    "mtime": 1781353095.48518,
+    "ast_hash": "43c9ff65bbb0f3d2aa62f941b8a41fe8",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_resumes_after_partia0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353095.5581038,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_round_trips_batch0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353095.3911088,
+    "ast_hash": "45721c6caeed65dad40d67668042d017",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_skips_conflicting_so0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353095.5368495,
+    "ast_hash": "e220e8905a7d4016d5d2186a910b3112",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_skips_conflicting_so0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.5337162,
+    "ast_hash": "919c8b643b7133116b02fc0d9bb7df3f",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_targets_only_the_lat0/inbox/DJI_0002.JPG": {
+    "mtime": 1781353095.5151658,
+    "ast_hash": "027ef3c53fcf464664d2c55ec916b166",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_targets_only_the_lat0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353095.5030544,
+    "ast_hash": "e6f143b063593b1e7d41b61cd4172148",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_unextractable_file_quaran0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.7681336,
+    "ast_hash": "ce2f72b3d31bbd0d0df6420b32ad1e8a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_unextractable_file_quaran0/library/_no-gps/2026-06-13/DJI_0002.JPG": {
+    "mtime": 1781353092.771188,
+    "ast_hash": "d9d886fafb9b52b1e1fc8ba1559db780",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_verify_library_detects_bi0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.JPG": {
+    "mtime": 1781353092.796068,
+    "ast_hash": "bca7b451599e97b43bb9e793201575db",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_verify_mismatch_aborts0/inbox/DJI_0001.JPG": {
+    "mtime": 1781353092.347892,
+    "ast_hash": "17d6aa020f1a0f299ba7fe2846888b78",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_warm_library_generates_th0/cache/.geosorter-cache/posters/A/v.jpg": {
+    "mtime": 1781353096.69576,
+    "ast_hash": "4f2c79fc6ecec58c93bcac1f6c1f60d9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_warm_library_generates_th0/cache/.geosorter-cache/thumbs/A/p.jpg": {
+    "mtime": 1781353096.69576,
+    "ast_hash": "f191caca56c2e208d1cf626f3d88e472",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_warm_library_generates_th0/library/A/p.jpg": {
+    "mtime": 1781353096.69576,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_warm_library_skips_fresh0/cache/.geosorter-cache/thumbs/A/p.jpg": {
+    "mtime": 1781353096.7670848,
+    "ast_hash": "f191caca56c2e208d1cf626f3d88e472",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_warm_library_skips_fresh0/library/A/p.jpg": {
+    "mtime": 1781353096.7670848,
+    "ast_hash": "d0f412096feded79db9b7ea33c5ab8a9",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_catalog_archive_oserror_d0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240825165234_0001_D.MP4": {
+    "mtime": 1781353092.9898415,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_catalog_ratings_applied_a0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240825165234_0001_D.MP4": {
+    "mtime": 1781353092.9373386,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_catalog_stale_db_applies_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240825165234_0001_D.MP4": {
+    "mtime": 1781353092.9642768,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_codec_stats_written0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0007.MP4": {
+    "mtime": 1781353092.626389,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_committed_mixed_footage_e0/library/_no-gps/2024-03-11/DJI_0002.MP4": {
+    "mtime": 1781353093.3529859,
+    "ast_hash": "c606f136fe553d9f618a6068c345f4a0",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_counts_dji_capture_and_fi0/inbox/DJI_0001.MP4": {
+    "mtime": 1781353090.8518193,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_group_atomic_companion_fa0/inbox/DJI_0003.MP4": {
+    "mtime": 1781353092.6706822,
+    "ast_hash": "421b47ffd946ca083b65cd668c6b17e6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_group_atomic_companion_fa0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0003.MP4": {
+    "mtime": 1781353092.6776876,
+    "ast_hash": "421b47ffd946ca083b65cd668c6b17e6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_group_modern_video_with_s0/DJI_20240825165234_0001_D.MP4": {
+    "mtime": 2000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_group_video_with_srt_and_0/DJI_0002.MP4": {
+    "mtime": 2000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_borrows_frame_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1781353092.8598795,
+    "ast_hash": "449be53aed9f0bf98822282a9c9aaf4a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_render_and_fra0/inbox/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1100.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_hyperlapse_retain_false_f0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1781353092.8868234,
+    "ast_hash": "449be53aed9f0bf98822282a9c9aaf4a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_groups_with_co0/inbox/DCIM/100MEDIA/DJI_0001.MP4": {
+    "mtime": 1781353090.8685083,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_list_inbox_hyperlapse_is_0/inbox/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1100.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_modern_lens_suffixes_are_0/DJI_20240825165234_0001_D.MP4": {
+    "mtime": 2000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_modern_lens_suffixes_are_0/DJI_20240825165234_0001_W.MP4": {
+    "mtime": 2000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_modern_split_video_contin0/DJI_20240825165234_0001_D.MP4": {
+    "mtime": 3000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_modern_split_video_contin0/DJI_20240825165234_0001_D_001.MP4": {
+    "mtime": 3600.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_partial_companion_warns_w0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0001.MP4": {
+    "mtime": 1781353095.0412552,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_partial_delete_recovers0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_0003.MP4": {
+    "mtime": 1781353092.8128107,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_partial_import_preserves_0/inbox/DCIM/DJI_001/DJI_20240825165234_0002_D.MP4": {
+    "mtime": 1781353093.0573466,
+    "ast_hash": "1efcc35af3c2aefcd58a18fa30561ece",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_partial_import_preserves_0/library/Boulder, Colorado, United States/2024-07-04/2024-07-04_09-15-00_DJI_20240825165234_0001_D.MP4": {
+    "mtime": 1781353093.0684154,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_flat_only_matches0/card/DCIM/DJI_001/DJI_20240825165234_0001_D.MP4": {
+    "mtime": 2000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_frames_sorted_by_0/card/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1100.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_links_hyperlapse_0/card/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1100.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_misc_is_unclaimed0/card/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1100.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_mtime_guard_rejec0/card/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 8200.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_prescan_orphan_frame_dir_0/card/DCIM/DJI_001/DJI_20240829183426_0007_D.MP4": {
+    "mtime": 1100.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_real_dji_footage_e2e0/library/_unknown/2024-03-10/2024-03-10_18-11-55_DJI_0002.MP4": {
+    "mtime": 1781353094.3555298,
+    "ast_hash": "ccbc9be4fcc3e558d6085c94df928772",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_real_dji_footage_e2e0/library/_unknown/2024-08-26/2024-08-26_18-06-42_DJI_0003.MP4": {
+    "mtime": 1781353094.648535,
+    "ast_hash": "111c8bc2e9031d7dfa896d670a999844",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_sidecar_outside_mtime_win0/DJI_0004.MP4": {
+    "mtime": 4000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_split_video_continuation_0/DJI_0003.MP4": {
+    "mtime": 3000.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_split_video_continuation_0/DJI_0003_001.MP4": {
+    "mtime": 3600.0,
+    "ast_hash": "9dd4e461268c8034f5c8564e155c67a6",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_hyperlapse_300_compa0/inbox/DCIM/DJI_001/DJI_20240829183426_0021_D.MP4": {
+    "mtime": 1781353096.3446257,
+    "ast_hash": "449be53aed9f0bf98822282a9c9aaf4a",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_archived_ca0/inbox/DCIM/DJI_001/DJI_20240825165234_0001_D.MP4": {
+    "mtime": 1781353095.4476807,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_undo_restores_companions0/inbox/DJI_0001.MP4": {
+    "mtime": 1781353095.4166925,
+    "ast_hash": "a48430af7aa4e5de44c140e595ae2a9c",
+    "semantic_hash": ""
+  },
+  "pytmp-geosorter/test_warm_library_generates_th0/library/A/v.mp4": {
+    "mtime": 1781353096.69576,
+    "ast_hash": "47344e2be0d7cf3a6c14441158d51e4f",
     "semantic_hash": ""
   }
 }

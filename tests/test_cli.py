@@ -226,6 +226,45 @@ def test_rescan_dry_run_writes_nothing_cli(tmp_path):
     assert "would prune: 1" in r2.output
 
 
+def test_restitch_verb_renders_report(tmp_path, monkeypatch):
+    from geosorter.restitch import RestitchReport
+
+    cfg = _write_cfg(tmp_path)
+    captured = {}
+
+    def fake(cfg_obj, *, force_all, dry_run, progress=None):
+        captured["force_all"] = force_all
+        captured["dry_run"] = dry_run
+        return RestitchReport(targets=2, restitched=1, projections={"flat": 1})
+
+    monkeypatch.setattr("geosorter.cli.run_restitch", fake)
+    result = CliRunner().invoke(cli, ["restitch", "--yes", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert captured == {"force_all": False, "dry_run": False}
+    assert "Re-stitch complete." in result.output
+    assert "restitched: 1" in result.output
+    assert "flat: 1" in result.output
+
+
+def test_restitch_all_dry_run_flags(tmp_path, monkeypatch):
+    from geosorter.restitch import RestitchReport
+
+    cfg = _write_cfg(tmp_path)
+    captured = {}
+
+    def fake(cfg_obj, *, force_all, dry_run, progress=None):
+        captured["force_all"] = force_all
+        captured["dry_run"] = dry_run
+        return RestitchReport(targets=3, dry_run=True)
+
+    monkeypatch.setattr("geosorter.cli.run_restitch", fake)
+    # --dry-run skips the confirmation prompt entirely.
+    result = CliRunner().invoke(cli, ["restitch", "--all", "--dry-run", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert captured == {"force_all": True, "dry_run": True}
+    assert "3 panorama(s) would be re-stitched" in result.output
+
+
 def _feature_src(tmp_path: Path) -> Path:
     """A GeoNames source dir = committed fixtures + an allCountries.txt sample."""
     import shutil

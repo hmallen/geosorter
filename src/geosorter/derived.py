@@ -574,6 +574,7 @@ def panorama_stitch(
     canvas: str = STITCH_CANVAS,
     celeste: bool = True,
     optimise_lens: bool = True,
+    force: bool = False,
     on_step: Callable[[int, int, str], None] | None = None,
 ) -> StitchResult:
     """Return a cached JPEG hero stitched from a panorama's tiles + its projection.
@@ -598,6 +599,14 @@ def panorama_stitch(
     step runs — so the background job and the map UI can show which of the six steps
     is currently executing during the multi-minute run.
 
+    ``force`` (default False) skips ONLY the freshness early-return, so a hero baked
+    at the old hard-coded projection can be re-stitched cold through the now
+    auto-detecting pipeline (the ``restitch`` verb's path). It is safe: ``_stitch_gate``
+    and any Hugin step raise BEFORE the final ``_atomic_write``, so a forced re-stitch
+    that fails leaves the existing cached hero untouched; a successful one atomically
+    replaces it and re-pins the mtime. A forced cold run always returns a non-empty
+    ``StitchResult.projection`` (never the cache-hit ``''``).
+
     Raises :class:`HuginNotFound` when Hugin is absent (caller keeps the gallery) and
     :class:`StitchFailed` on any step failure, timeout, or degenerate output.
     """
@@ -605,7 +614,7 @@ def panorama_stitch(
     tiles = [primary_source, *(Path(f) for f in frame_sources)]
     out = stitch_cache_path(cache_root, rel_key)
     newest = max(t.stat().st_mtime for t in tiles)
-    if out.exists() and out.stat().st_mtime >= newest:
+    if not force and out.exists() and out.stat().st_mtime >= newest:
         return StitchResult(out, "")  # cache hit: caller keeps the recorded projection
 
     tools = find_hugin(hugin_bin_dir)
