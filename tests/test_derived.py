@@ -590,6 +590,34 @@ def test_panorama_stitch_equirect_projection_for_full_sphere(tmp_path, monkeypat
     assert "--projection=2" in pano_modify
 
 
+def test_panorama_stitch_wide_360_reclassifies_to_flat(tmp_path, monkeypatch):
+    # A single-row 360 sweep: HFOV 360 makes _choose_projection pick equirectangular,
+    # but --crop=AUTO yields a wide ~8:1 strip. That is a legitimate flat panning image,
+    # not a 2:1 sphere — panorama_stitch must reclassify it to 'flat' (reusing the
+    # rendered output) instead of rejecting it as out-of-range equirectangular.
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, _ = _fake_run_factory(size=(4000, 490), hfov=360.0)  # aspect ~8.16
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    result = derived.panorama_stitch(tmp_path / "c", "pano/PANO_0001.JPG", primary, frames)
+    assert result.projection == "flat"
+    assert result.path.exists()
+
+
+def test_panorama_stitch_wide_black_output_still_fails(tmp_path, monkeypatch):
+    # The reclassification only relaxes the ASPECT envelope; a wide but mostly-black
+    # (degenerate) output is still rejected by the projection-independent black-void guard.
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, _ = _fake_run_factory(fill="black", size=(4000, 490), hfov=360.0)
+    monkeypatch.setattr(derived, "_run_hugin", run)
+    with pytest.raises(derived.StitchFailed):
+        derived.panorama_stitch(tmp_path / "c", "pano/PANO_0001.JPG", primary, frames)
+
+
 # --- Instant raw-tile collage (m-frontend-pano-ux) ------------------------- #
 
 

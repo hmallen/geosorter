@@ -134,6 +134,11 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
                               ▦ ×{f.properties.frame_count}
                             </span>
                           )}
+                          {f.properties.capture_kind === 'panorama' && f.properties.stitch_status === 'failed' && (
+                            <span className="badge badge--stitch-failed" title="Panorama stitch failed">
+                              ⚠ stitch
+                            </span>
+                          )}
                           {f.properties.star_rating !== null && (
                             <span
                               className="badge badge--stars"

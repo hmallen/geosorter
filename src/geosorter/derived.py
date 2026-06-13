@@ -89,11 +89,14 @@ _PROJ_RECTILINEAR = 0
 _PROJ_CYLINDRICAL = 1
 _PROJ_EQUIRECTANGULAR = 2
 # A non-equirectangular ("flat") hero is validated against a far wider aspect envelope
-# than the equirectangular [1.3, 3.0] — a 180/wide pano is legitimately up to ~6:1 and
-# a vertical pano is tall (< 1) — so it is no longer wrongly rejected as "not
-# equirectangular-like". The long-edge range + black-void guard still apply to both.
+# than the equirectangular [1.3, 3.0] — a 180/wide pano is legitimately up to ~6:1, a
+# single-row 360 sweep is a wide thin strip (a 360x22 deg sweep is ~16:1), and a vertical
+# pano is tall (< 1) — so it is no longer wrongly rejected as "not equirectangular-like".
+# The max was raised 8.0 -> 16.0 to admit a single-row 360 strip down to ~22 deg vertical
+# FOV (which panorama_stitch reclassifies from equirectangular to flat); the long-edge
+# range + black-void guard remain the real degenerate protection for both kinds.
 STITCH_FLAT_MIN_ASPECT = 0.2
-STITCH_FLAT_MAX_ASPECT = 8.0
+STITCH_FLAT_MAX_ASPECT = 16.0
 # Per-step subprocess ceiling. The spike's slowest step (cpfind) was ~188 s; the
 # generous 20 min bound only fires on a genuinely stuck process.
 STITCH_STEP_TIMEOUT_S = 1200
@@ -537,7 +540,8 @@ def _stitch_gate(path: Path, kind: str = "equirectangular") -> None:
     The cv2 failure mode the spike rejected was a warped partial with a ~45% black
     void. The gate verifies a sane size, an aspect within the envelope for the chosen
     projection (equirectangular is the original ``[1.3, 3.0]``; a non-360 ``'flat'``
-    pano uses the far wider ``[0.2, 8.0]`` so a 180/wide/vertical result is accepted),
+    pano uses the far wider ``[0.2, 16.0]`` so a 180/wide/single-row-360/vertical result
+    is accepted),
     and a near-black-pixel fraction under :data:`STITCH_MAX_BLACK_FRAC`, so a
     degenerate or failed stitch is never cached or served. The long-edge range and the
     black-void guard are projection-independent and apply to both kinds.
@@ -683,6 +687,26 @@ def panorama_stitch(
         if not tifs:
             raise StitchFailed("hugin_executor produced no output TIFF")
         tif = tifs[0]
+        # A single-row 360 sweep is chosen equirectangular by HFOV, but --crop=AUTO
+        # yields a wide thin strip whose aspect is well outside the equirectangular
+        # envelope. It is a legitimate FLAT panning image, not a 2:1 sphere — reclassify
+        # so it passes the (wider) flat gate and routes to the flat hero instead of being
+        # rejected. Reuses the already-rendered output (no second Hugin pass). The
+        # reclassification is ONE-WAY (equirectangular -> flat only): a true full sphere
+        # renders within [1.3, 3.0] so the guard below is false and it stays
+        # equirectangular; a flat is never promoted to equirectangular.
+        if kind == "equirectangular":
+            with Image.open(tif) as _im:
+                _w, _h = _im.size
+            _aspect = _w / _h if _h else 0.0
+            if (not (STITCH_MIN_ASPECT <= _aspect <= STITCH_MAX_ASPECT)
+                    and STITCH_FLAT_MIN_ASPECT <= _aspect <= STITCH_FLAT_MAX_ASPECT):
+                logger.info(
+                    "panorama stitch %s: equirectangular output aspect %.2f outside "
+                    "[%.1f, %.1f] -> reclassifying as flat",
+                    primary_source.name, _aspect, STITCH_MIN_ASPECT, STITCH_MAX_ASPECT,
+                )
+                kind = "flat"
         _stitch_gate(tif, kind)  # projection-aware; raises before anything is cached
 
         def _produce(dest: Path) -> None:
