@@ -244,7 +244,11 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchone()
             max_id, count, max_created = (ver[0] or 0), ver[1], ver[2]
-            etag = f'W/"lib-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}"'
+            # The `lib2-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
+            # `properties` shape changes (here: `capture_ts_local` was added) so a client
+            # holding a `no-cache`-revalidated response from the previous build gets a
+            # one-time 200 with the new field instead of a 304 serving the old body.
+            etag = f'W/"lib2-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}"'
             inm = request.headers.get("if-none-match")
             if inm is not None and _etag_matches(inm, etag):
                 return Response(
@@ -256,7 +260,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                     },
                 )
             rows = conn.execute(
-                "SELECT id, filename, place_string, local_date, media_type, codec, "
+                "SELECT id, filename, place_string, local_date, capture_ts_local, "
+                "media_type, codec, "
                 "gps_source, capture_kind, frame_count, star_rating, stitch_status, "
                 "stitch_projection, dest_path, lat, lon "
                 "FROM files WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
@@ -272,6 +277,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                     "filename": r["filename"],
                     "place_string": r["place_string"],
                     "local_date": r["local_date"],
+                    "capture_ts_local": r["capture_ts_local"],
                     "media_type": r["media_type"],
                     "codec": r["codec"],
                     "gps_source": r["gps_source"],

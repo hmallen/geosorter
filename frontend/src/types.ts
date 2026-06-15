@@ -5,6 +5,9 @@ export interface FeatureProps {
   filename: string
   place_string: string | null
   local_date: string | null
+  // ISO 8601 with local offset (e.g. '2026-06-13T14:34:22-06:00'); the lightbox
+  // caption reads its wall-clock fields directly (timezone-stable). null when unknown.
+  capture_ts_local: string | null
   media_type: 'photo' | 'video'
   codec: string | null
   gps_source: 'exif' | 'srt' | 'srt_partial' | 'inferred' | 'manual' | 'hyperlapse_frame' | 'none' | null

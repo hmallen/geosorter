@@ -368,16 +368,48 @@
 }
 
 .lightbox-body {
+  position: relative; /* containing block for the absolutely-positioned caption */
+  /* DEFINITE width — a fixed stage, NOT shrink-to-fit. Without it the body width
+     collapsed to its widest in-flow child, which for a panorama hero (an absolutely-
+     positioned FlatHero <img>, or a PanoSphere canvas) is just the text controls
+     (caption / "view frames" / filename ~340px); the real, wider hero then overflowed
+     and `overflow:hidden` clipped it to a tall narrow slice. A definite 92vw stage lets
+     every media kind fit via object-fit:contain instead. */
+  width: 92vw;
   max-width: 92vw;
   /* Definite height (not just max-height) so the media's `max-height: 100%`
      resolves — against an indefinite-height ancestor it is treated as `none`,
      letting a tall video/image overflow its flex box onto the controls below. */
   height: 92vh;
   max-height: 92vh;
+  /* Reserve the caption band; the absolute .lightbox-caption fills it (kept out of flow
+     so it never participates in sizing). */
+  padding-top: 26px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow: hidden; /* the media area shrinks instead of overflowing the viewport */
+}
+
+/* Capture caption bar: location · date · time, left-aligned above the media.
+   position:absolute (out of flow) so the nowrap text can NEVER drive the shrink-to-fit
+   .lightbox-body width — the image stays the sole width driver (its full-size, stable
+   pre-caption behaviour) and the caption spans exactly the body/image width, ellipsising
+   a long place string. It sits in the body's reserved padding-top band (top:0), so it
+   never overlaps the media. */
+.lightbox-caption {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
+  line-height: 26px;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Primary media area: flexes to fill the remaining height and, crucially, can
