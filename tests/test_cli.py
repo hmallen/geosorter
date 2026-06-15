@@ -112,6 +112,19 @@ def test_help_lists_organize_verbs():
     assert "organize" in result.output
     assert "verify-library" in result.output
     assert "rescan" in result.output
+    assert "recover-collisions" in result.output
+
+
+def test_recover_collisions_dry_run_no_collisions_cli(tmp_path):
+    # On a clean organized library (no collisions) the verb runs and reports zero.
+    cfg, inbox, _library = _write_cfg_organize(tmp_path)
+    import shutil
+
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")
+    CliRunner().invoke(cli, ["organize", "--yes", "--config", str(cfg)])
+    r = CliRunner().invoke(cli, ["recover-collisions", "--dry-run", "--config", str(cfg)])
+    assert r.exit_code == 0, r.output
+    assert "collisions found:    0" in r.output
 
 
 def test_organize_requires_inbox_and_library(tmp_path):

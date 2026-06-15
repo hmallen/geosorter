@@ -24,6 +24,7 @@ from . import __version__, api, config, db, derived, geocoder, geonames_loader, 
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
+from .recover import RecoveryReport, run_recovery
 from .rescan import RescanReport, run_rescan
 from .restitch import RestitchReport, run_restitch
 from .undo import UndoReport, latest_batch_id, run_undo
@@ -372,6 +373,54 @@ def _render_rescan_report(report: RescanReport) -> None:
         )
         for o in report.orphaned:
             click.echo(f"    ! {o}")
+
+
+@cli.command(name="recover-collisions")
+@_CONFIG_OPTION
+@click.option("--dry-run", is_flag=True, help="Preview the recovery; change nothing.")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
+def recover_collisions(config_path: str | None, dry_run: bool, yes: bool) -> None:
+    """Recover files damaged by the recycled-DJI-filename destination collision.
+
+    For each destination two unrelated files were filed onto, the surviving (mislabeled)
+    file is re-filed to its correct home from its OWN metadata via the fixed pipeline
+    (a GPS-less survivor lands in ``_no-gps/<capture-date>/``), the wrong index rows are
+    dropped, and the captures whose bytes were destroyed are listed in a recovery report
+    next to the index DB. Touches the index DB + the surviving library files only.
+    """
+    cfg = config.load(config_path)
+    if not dry_run and not yes and not click.confirm(
+        "Recover collision survivors: re-file the mislabeled files and drop their wrong "
+        "index rows?",
+        default=False,
+    ):
+        click.echo("Aborted. Nothing was recovered.")
+        return
+    try:
+        report = run_recovery(cfg, dry_run=dry_run, progress=lambda msg: click.echo(f"  {msg}"))
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_recovery_report(report)
+
+
+def _render_recovery_report(report: RecoveryReport) -> None:
+    suffix = " (dry run — no changes written)" if report.dry_run else ""
+    click.echo("Recovery complete." + suffix)
+    click.echo(f"  collisions found:    {report.collisions_found}")
+    verb = "would recover" if report.dry_run else "recovered"
+    click.echo(f"  {verb}: {report.recovered}")
+    if report.lost:
+        click.echo(
+            f"  unrecoverable (bytes destroyed by the collision): {len(report.lost)}"
+        )
+        for lc in report.lost:
+            click.echo(f"    - {lc.local_date}  {lc.place_string}")
+    if report.failures:
+        click.echo(f"  failures: {len(report.failures)}")
+        for f in report.failures:
+            click.echo(f"    ! {f}")
+    if report.report_path:
+        click.echo(f"  report written: {report.report_path}")
 
 
 @cli.command()

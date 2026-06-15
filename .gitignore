@@ -48,3 +48,6 @@ pytmp-geosorter/
 # snapshot dirs are regenerated and need not be committed.
 graphify-out/cache/ast/
 graphify-out/20*/
+
+# pytest scratch basetemps (never commit — may hold large real media)
+pytmp-*/
