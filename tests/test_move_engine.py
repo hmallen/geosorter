@@ -356,6 +356,105 @@ def test_record_pending_inserts_and_is_idempotent(tmp_path):
     assert rows == [("pending", sha)]  # exactly one pending row carrying the hash
 
 
+def test_copy_refuses_occupied_dest_from_other_source(tmp_path):
+    # SAFETY NET (recycled-filename collision): a DIFFERENT source must never be filed
+    # onto a destination already claimed by another source. The second copy fails
+    # loudly and the first capture's bytes stay byte-for-byte intact (no silent loss).
+    conn = _index(tmp_path)
+    a = _src(tmp_path, name="cardA/DJI_0001.MP4", data=b"AAAA-real-2024")
+    b = _src(tmp_path, name="cardB/DJI_0001.MP4", data=b"BBBB-stray-2023")
+    dest = str(tmp_path / "library" / "Place" / "2024-07-04" / "out.MP4")
+    try:
+        first = move_engine.copy_and_verify(conn, BATCH, a, dest)
+        assert first.status == "copy_verified"
+        second = move_engine.copy_and_verify(conn, BATCH, b, dest)
+        row_b = _moves_row(conn, b)
+    finally:
+        conn.close()
+    assert second.status == "failed"
+    assert "different source" in (second.error or "")
+    assert (tmp_path / "library" / "Place" / "2024-07-04" / "out.MP4").read_bytes() == b"AAAA-real-2024"
+    assert b.exists()  # stray source NOT consumed
+    assert row_b is None  # no spurious moves row for the rejected source
+
+
+def test_rename_refuses_occupied_dest_from_other_source(tmp_path):
+    # Same safety net on the same-volume rename path: a different source must not
+    # os.replace over a destination another source already filed.
+    conn = _index(tmp_path)
+    a = _src(tmp_path, name="cardA/DJI_0001.MP4", data=b"AAAA-real-2024")
+    b = _src(tmp_path, name="cardB/DJI_0001.MP4", data=b"BBBB-stray-2023")
+    dest = str(tmp_path / "library" / "out.MP4")
+    try:
+        first = move_engine.rename_in_place(conn, BATCH, a, dest)
+        assert first.status == "source_deleted"
+        second = move_engine.rename_in_place(conn, BATCH, b, dest)
+        row_b = _moves_row(conn, b)
+    finally:
+        conn.close()
+    assert second.status == "failed"
+    assert "different source" in (second.error or "")
+    assert (tmp_path / "library" / "out.MP4").read_bytes() == b"AAAA-real-2024"
+    assert b.exists()  # stray source NOT renamed away
+    assert row_b is None
+
+
+def test_copy_guard_fires_on_stale_row_retry(tmp_path):
+    # The occupied-dest guard must fire even when THIS source has a stale 'pending'/
+    # 'failed' row (the retry/resume path), not only on a fresh source — otherwise a
+    # retry after a DIFFERENT source filed the dest would overwrite it (the gap the
+    # code-review found). The guard is hoisted above the same-source resume branch.
+    conn = _index(tmp_path)
+    a = _src(tmp_path, name="cardA/DJI_0001.MP4", data=b"AAAA-real")
+    b = _src(tmp_path, name="cardB/DJI_0001.MP4", data=b"BBBB-stray")
+    dest = str(tmp_path / "library" / "out.MP4")
+    try:
+        first = move_engine.copy_and_verify(conn, BATCH, a, dest)
+        assert first.status == "copy_verified"
+        # Seed a stale 'pending' row for B at the same dest (a crashed earlier attempt).
+        b_sha = move_engine.sha256_file(b)
+        conn.execute(
+            "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status) "
+            "VALUES (?,?,?,?, 'pending')",
+            (BATCH, str(b), dest, b_sha),
+        )
+        conn.commit()
+        second = move_engine.copy_and_verify(conn, BATCH, b, dest)
+    finally:
+        conn.close()
+    assert second.status == "failed"
+    assert "different source" in (second.error or "")
+    assert (tmp_path / "library" / "out.MP4").read_bytes() == b"AAAA-real"  # not overwritten
+    assert b.exists()
+
+
+def test_rename_guard_fires_on_stale_row_retry(tmp_path):
+    # Same hoisted-guard coverage on the rename path: a stale pending row for B (as the
+    # same-volume organize flow's record_pending leaves) must not let a retry os.replace
+    # over a destination another source already filed.
+    conn = _index(tmp_path)
+    a = _src(tmp_path, name="cardA/DJI_0001.MP4", data=b"AAAA-real")
+    b = _src(tmp_path, name="cardB/DJI_0001.MP4", data=b"BBBB-stray")
+    dest = str(tmp_path / "library" / "out.MP4")
+    try:
+        first = move_engine.rename_in_place(conn, BATCH, a, dest)
+        assert first.status == "source_deleted"
+        b_sha = move_engine.sha256_file(b)
+        conn.execute(
+            "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status) "
+            "VALUES (?,?,?,?, 'pending')",
+            (BATCH, str(b), dest, b_sha),
+        )
+        conn.commit()
+        second = move_engine.rename_in_place(conn, BATCH, b, dest)
+    finally:
+        conn.close()
+    assert second.status == "failed"
+    assert "different source" in (second.error or "")
+    assert (tmp_path / "library" / "out.MP4").read_bytes() == b"AAAA-real"  # not overwritten
+    assert b.exists()
+
+
 def test_rename_in_place_moves_and_records(tmp_path):
     # Same-volume fast move: os.replace the source into place, record the move as
     # source_deleted with dest_sha256 == source_sha256 (identical bytes, no re-read).

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS moves (
 );
 CREATE INDEX IF NOT EXISTS idx_moves_batch ON moves(batch_id);
 CREATE INDEX IF NOT EXISTS idx_moves_sha_status ON moves(source_sha256, status);
+CREATE INDEX IF NOT EXISTS idx_moves_dest_path ON moves(dest_path);
 
 CREATE TABLE IF NOT EXISTS geocode_cache (
     lat_key            REAL NOT NULL,

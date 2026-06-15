@@ -78,13 +78,17 @@ def group_companions(
     Non-DJI filenames are ignored. A base with no primary-extension file (an
     orphaned sidecar) yields no group.
     """
-    buckets: dict[str, list[tuple[Path, int]]] = {}
+    # Bucket by (source directory, base): DJI counters recycle across SD cards, so the
+    # SAME stem in DIFFERENT directories is two unrelated captures, never one group.
+    # A capture's real companions (.DNG/.LRF/.SRT, `_N` continuation segments) always
+    # live in the primary's own directory, so keying on the parent keeps them grouped.
+    buckets: dict[tuple[Path, str], list[tuple[Path, int]]] = {}
     for path in paths:
         parsed = _parse(path)
         if parsed is None:
             continue
         base, seg = parsed
-        buckets.setdefault(base, []).append((path, seg))
+        buckets.setdefault((path.parent, base), []).append((path, seg))
 
     groups: list[CaptureGroup] = []
     for items in buckets.values():

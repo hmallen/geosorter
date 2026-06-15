@@ -115,6 +115,49 @@ def test_organize_photo_end_to_end(tmp_path):
     assert mrow[0] == "source_deleted"
 
 
+def test_recycled_name_across_dirs_files_both(tmp_path):
+    # Regression for the recycled-DJI-filename data-loss bug: two UNRELATED files with
+    # the SAME stem in DIFFERENT inbox subdirs (DJI counters recycle per SD card) must
+    # BOTH be filed to distinct destinations, both indexed, and neither overwritten.
+    # Pre-fix they merged into one capture group → one filed, one filed as an 'other'
+    # companion onto the SAME dest → overwrite + both sources deleted = silent loss.
+    cfg, inbox, _library = _setup(tmp_path)
+    _add(inbox, "cardA/DJI_0001.JPG", data=b"AAAA-real-2024")
+    _add(inbox, "cardB/DJI_0001.JPG", data=b"BBBB-stray-2023")
+
+    md_a = _md(capture_ts_raw="2024:07:04 09:15:00")
+    md_b = _md(capture_ts_raw="2023:07:07 18:14:33")
+
+    class _PathExtractor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract(self, path):
+            return md_a if Path(path).parent.name == "cardA" else md_b
+
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=lambda: _PathExtractor())
+
+    assert report.organized == 2
+    assert report.duplicates_skipped == 0
+    conn = _index(cfg)
+    try:
+        dests = [r[0] for r in conn.execute("SELECT dest_path FROM files").fetchall()]
+        companions = conn.execute("SELECT count(*) FROM file_companions").fetchone()[0]
+    finally:
+        conn.close()
+    assert len(dests) == 2
+    assert len(set(dests)) == 2  # two DISTINCT destinations, not one
+    assert companions == 0  # neither file became the other's (self-colliding) companion
+    for d in dests:
+        assert os.path.exists(organize._strip(d))
+    # Both capture's bytes survive on disk — nothing overwritten.
+    on_disk = {Path(organize._strip(d)).read_bytes() for d in dests}
+    assert on_disk == {b"AAAA-real-2024", b"BBBB-stray-2023"}
+
+
 def test_byte_progress_forwarded(tmp_path, monkeypatch):
     # Byte-level copy progress is a copy-path feature; force cross-volume so the copy
     # path (not the same-volume rename, which moves no bytes) runs.

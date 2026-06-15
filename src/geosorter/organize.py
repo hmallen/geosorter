@@ -712,6 +712,19 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         )
         files_to_move.append((cpath, cdest))
 
+    # SAFETY (recycled-filename collision): a capture group must never resolve two of
+    # its own files to one destination. Per-directory grouping makes this impossible,
+    # but guard it so any future regression skips the group loudly instead of letting
+    # the move engine overwrite one file with another.
+    dests = [dp for _sp, dp in files_to_move]
+    if len(set(dests)) != len(dests):
+        dupes = sorted({d for d in dests if dests.count(d) > 1})
+        report.failures.append(
+            f"{primary.name}: capture group resolved to duplicate destination(s) "
+            f"{dupes}; skipped to avoid overwrite"
+        )
+        return
+
     if same_volume:
         # Same-volume fast path: atomic server-side rename (no copy, no verify read-back,
         # no separate delete — os.replace moves zero bytes and removes the source
