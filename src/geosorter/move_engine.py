@@ -75,7 +75,7 @@ def _copy_file(
 class MoveOutcome:
     """Result of one :func:`copy_and_verify` call."""
 
-    status: str  # 'copy_verified' | 'failed' | 'skipped'
+    status: str  # 'copy_verified' | 'source_deleted' | 'failed' | 'skipped'
     source_sha256: str | None
     dest_sha256: str | None
     dest_path: str
@@ -216,6 +216,156 @@ def copy_and_verify(
     )
     conn.commit()
     return MoveOutcome("copy_verified", src_sha, dest_sha, dest_path)
+
+
+def record_pending(
+    conn: sqlite3.Connection,
+    batch_id: str,
+    source_path: str | Path,
+    dest_path: str,
+    source_sha256: str,
+) -> None:
+    """Insert a ``pending`` ``moves`` row for a same-volume rename WITHOUT moving.
+
+    Lets the rename path record the whole group in the move log — and persist its
+    ``files``/``file_companions`` rows — while every source is still in the inbox, so a
+    source is never removed before the index durably knows its destination. This is the
+    rename path's equivalent of the copy path's Phase A preceding the `_persist`/delete:
+    a crash can never leave the primary's ``source_deleted`` sentinel without a durable
+    ``files`` row (which would orphan an unindexed file in the library). Idempotent: a
+    no-op if a row for ``(source_path, source_sha256)`` already exists.
+    """
+    existing = conn.execute(
+        "SELECT 1 FROM moves WHERE source_path=? AND source_sha256=?",
+        (str(source_path), source_sha256),
+    ).fetchone()
+    if existing is None:
+        conn.execute(
+            "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, "
+            "status, started_at) VALUES (?,?,?,?, 'pending', datetime('now'))",
+            (batch_id, str(source_path), dest_path, source_sha256),
+        )
+        conn.commit()
+
+
+def rename_in_place(
+    conn: sqlite3.Connection,
+    batch_id: str,
+    source_path: str | Path,
+    dest_path: str,
+    *,
+    source_sha256: str | None = None,
+    progress: Callable[[str, int, int], None] | None = None,
+) -> MoveOutcome:
+    r"""Move ``source_path`` → ``dest_path`` with an atomic same-volume rename.
+
+    The same-volume counterpart to :func:`copy_and_verify` + :func:`commit_delete`:
+    when the inbox and library share a volume an ``os.replace`` is a server-side
+    rename that moves **zero bytes** and is atomic, so there is nothing in transit to
+    corrupt and no read-back verify is needed. The single ``moves`` row goes straight
+    to ``source_deleted`` (the source no longer lives at ``source_path``), with
+    ``dest_sha256`` set equal to the source hash since the bytes are unchanged — so
+    ``undo`` and ``verify-library`` keep working exactly as for a copied file. The
+    caller must only invoke this when the two paths are genuinely on one volume
+    (``organize._same_volume``); a wrong guess surfaces as an ``EXDEV`` ``OSError``
+    which is caught and returned as a ``failed`` outcome with the source left in place
+    (no data loss).
+
+    ``source_sha256``, if given (the caller's dedup hash for the primary), is used
+    verbatim and the source is **not** re-read. When ``None`` the source is hashed
+    here (one read — the only network read on this path), except on crash recovery
+    where the source is already gone: the hash is then recovered from the existing
+    ``pending`` ``moves`` row (or, last resort, the destination).
+
+    Idempotent by disk state + the ``moves`` log:
+
+    * source present, no row → INSERT ``pending`` (carrying the hash, committed
+      *before* the rename so a crash mid-finalize can recover), ``os.replace``, then
+      flip to ``source_deleted``;
+    * source present, row already ``source_deleted`` → ``skipped``;
+    * source gone + dest present → a prior run already renamed it: finalize the row to
+      ``source_deleted`` (``skipped`` if it already was) without touching disk;
+    * source gone + dest gone → ``failed`` (nothing to move).
+    """
+    src = Path(source_path)
+    final = _strip_prefix(dest_path)
+
+    def _emit(phase: str, total: int) -> Callable[[int], None] | None:
+        return (lambda done: progress(phase, done, total)) if progress is not None else None
+
+    # --- Crash-recovery / resume: the source is already gone. ---
+    if not src.exists():
+        if not os.path.exists(final):
+            return MoveOutcome("failed", None, None, dest_path, "source and dest both missing")
+        row = conn.execute(
+            "SELECT status, source_sha256, dest_sha256 FROM moves WHERE source_path=? "
+            "ORDER BY id DESC LIMIT 1",
+            (str(src),),
+        ).fetchone()
+        if row is not None and row[0] == "source_deleted":
+            return MoveOutcome("skipped", row[1], row[2], dest_path)
+        # The rename already happened (crash before the row was flipped). Recover the
+        # hash from the row, the caller, or the destination — never the absent source.
+        sha = source_sha256 or (row[1] if row is not None else None) or sha256_file(final)
+        if row is not None:
+            conn.execute(
+                "UPDATE moves SET status='source_deleted', source_sha256=?, dest_sha256=?, "
+                "completed_at=datetime('now') WHERE source_path=? AND source_sha256=?",
+                (sha, sha, str(src), row[1]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, "
+                "dest_sha256, status, started_at, completed_at) "
+                "VALUES (?,?,?,?,?, 'source_deleted', datetime('now'), datetime('now'))",
+                (batch_id, str(src), dest_path, sha, sha),
+            )
+        conn.commit()
+        return MoveOutcome("source_deleted", sha, sha, dest_path)
+
+    # --- Normal path: the source is present. ---
+    total = src.stat().st_size
+    src_sha = (
+        source_sha256
+        if source_sha256 is not None
+        else sha256_file(src, on_bytes=_emit("hashing", total))
+    )
+
+    existing = conn.execute(
+        "SELECT status FROM moves WHERE source_path=? AND source_sha256=?",
+        (str(src), src_sha),
+    ).fetchone()
+    if existing is not None:
+        if existing[0] == "source_deleted":
+            return MoveOutcome("skipped", src_sha, src_sha, dest_path)
+        # 'pending'/'failed'/'copy_verified' → redo the rename (source is still here).
+    else:
+        conn.execute(
+            "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, "
+            "status, started_at) VALUES (?,?,?,?, 'pending', datetime('now'))",
+            (batch_id, str(src), dest_path, src_sha),
+        )
+        conn.commit()
+
+    try:
+        os.makedirs(os.path.dirname(final), exist_ok=True)
+        os.replace(src, final)
+    except OSError as err:
+        conn.execute(
+            "UPDATE moves SET status='failed', completed_at=datetime('now') "
+            "WHERE source_path=? AND source_sha256=?",
+            (str(src), src_sha),
+        )
+        conn.commit()
+        return MoveOutcome("failed", src_sha, None, dest_path, str(err))
+
+    conn.execute(
+        "UPDATE moves SET status='source_deleted', dest_sha256=?, completed_at=datetime('now') "
+        "WHERE source_path=? AND source_sha256=?",
+        (src_sha, str(src), src_sha),
+    )
+    conn.commit()
+    return MoveOutcome("source_deleted", src_sha, src_sha, dest_path)
 
 
 def commit_delete(

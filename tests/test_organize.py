@@ -115,7 +115,10 @@ def test_organize_photo_end_to_end(tmp_path):
     assert mrow[0] == "source_deleted"
 
 
-def test_byte_progress_forwarded(tmp_path):
+def test_byte_progress_forwarded(tmp_path, monkeypatch):
+    # Byte-level copy progress is a copy-path feature; force cross-volume so the copy
+    # path (not the same-volume rename, which moves no bytes) runs.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: False)
     cfg, inbox, library = _setup(tmp_path)
     _add(inbox, "DJI_0001.JPG", data=b"capture-bytes" * 1000)
     ticks: list[tuple[str, str, int, int]] = []
@@ -294,6 +297,9 @@ def test_first_run_gate_declined(tmp_path):
 
 
 def test_group_atomic_companion_failure_keeps_primary(tmp_path, monkeypatch):
+    # Group-atomic copy semantics (verify all, then delete) are copy-path only; force
+    # cross-volume so copy_and_verify is the move primitive being failed here.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: False)
     cfg, inbox, library = _setup(tmp_path)
     primary = _add(inbox, "DJI_0003.MP4", b"video")
     companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
@@ -318,6 +324,9 @@ def test_group_atomic_companion_failure_keeps_primary(tmp_path, monkeypatch):
 
 
 def test_disk_preflight_raises(tmp_path, monkeypatch):
+    # The disk preflight only runs on the copy path (a rename adds no net bytes);
+    # force cross-volume so the preflight is exercised.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: False)
     cfg, inbox, library = _setup(tmp_path)
     _add(inbox, "DJI_0001.JPG")
     monkeypatch.setattr(
@@ -333,6 +342,8 @@ def test_freespace_abort_before_share_fills(tmp_path, monkeypatch):
     # Mid-run the share drops below the margin: organize aborts cleanly BETWEEN
     # groups (the in-flight group already filed atomically), leaving the rest in the
     # inbox rather than half-writing files until the disk is full.
+    # The mid-run free-space recheck only runs on the copy path; force cross-volume.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: False)
     cfg, inbox, library = _setup(tmp_path)
     _add(inbox, "DJI_0001.JPG", b"first-capture")
     second = _add(inbox, "DJI_0002.JPG", b"second-capture")  # distinct bytes (no dedup)
@@ -484,6 +495,9 @@ def test_partial_delete_recovers(tmp_path, monkeypatch):
     # Crash in Phase B *after* the companion source is deleted but *before* the
     # primary's — the primary stays the group-done sentinel and a re-run finishes
     # cleanly with no double-copy and no orphaned companion.
+    # Phase B (verify-all-then-delete) is copy-path only; the rename path has no
+    # separate commit_delete to crash in. Force cross-volume for this scenario.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: False)
     cfg, inbox, library = _setup(tmp_path)
     primary = _add(inbox, "DJI_0003.MP4", b"video-bytes")
     companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
@@ -517,6 +531,295 @@ def test_partial_delete_recovers(tmp_path, monkeypatch):
         conn.close()
     assert deleted == 2  # primary + companion, exactly once each
     assert organize.verify_library(cfg).ok == 2
+
+
+def test_same_volume_uses_rename(tmp_path, monkeypatch):
+    # On one volume, organize moves each file by atomic rename: copy_and_verify is
+    # never called, no `.partial` is ever staged, and the move records source_deleted
+    # with the source hash stored (so undo / dedup / verify-library still work).
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    primary = _add(inbox, "DJI_0003.MP4", b"video-bytes")
+    companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
+    os.utime(companion, (primary.stat().st_atime, primary.stat().st_mtime))
+
+    def _no_copy(*a, **k):
+        raise AssertionError("copy_and_verify must not run on the same-volume path")
+
+    monkeypatch.setattr(organize.move_engine, "copy_and_verify", _no_copy)
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0003.MP4": _md(media_type="video", codec="h264")}),
+    )
+    assert report.organized == 1
+    assert report.companions == 1
+    assert not primary.exists() and not companion.exists()  # renamed away, no copy
+    assert not list(library.rglob("*.partial"))  # nothing staged
+    conn = _index(cfg)
+    try:
+        frow = conn.execute("SELECT dest_path, status FROM files").fetchone()
+        statuses = [r[0] for r in conn.execute("SELECT status FROM moves").fetchall()]
+        shas = conn.execute(
+            "SELECT source_sha256, dest_sha256 FROM moves WHERE source_path=?",
+            (str(primary),),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert frow[1] == "organized"
+    assert os.path.exists(organize._strip(frow[0]))  # file present at dest
+    assert statuses == ["source_deleted", "source_deleted"]  # primary + companion
+    assert shas[0] is not None and shas[0] == shas[1]  # source hash stored, dest == source
+
+
+def test_cross_volume_uses_copy(tmp_path, monkeypatch):
+    # Different volumes → the copy+verify path is used (rename would raise EXDEV).
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: False)
+    cfg, inbox, library = _setup(tmp_path)
+    primary = _add(inbox, "DJI_0001.JPG", b"capture-bytes")
+    calls = {"n": 0}
+    real = move_engine.copy_and_verify
+
+    def _spy(*a, **k):
+        calls["n"] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(organize.move_engine, "copy_and_verify", _spy)
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert report.organized == 1
+    assert calls["n"] >= 1  # the copy path was exercised
+    assert not primary.exists()
+    conn = _index(cfg)
+    try:
+        mrow = conn.execute("SELECT status FROM moves").fetchone()
+    finally:
+        conn.close()
+    assert mrow[0] == "source_deleted"
+
+
+def test_same_volume_partial_group_resume(tmp_path, monkeypatch):
+    # A crash after a companion is renamed but before the primary: the companion is at
+    # the dest, the primary still in the inbox. A re-run completes the group with no
+    # double-move and no FileNotFoundError (the primary is moved last, so it is still
+    # present to be re-read for its dedup hash on resume).
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    primary = _add(inbox, "DJI_0003.MP4", b"video-bytes")
+    companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
+    os.utime(companion, (primary.stat().st_atime, primary.stat().st_mtime))
+    mapping = {"DJI_0003.MP4": _md(media_type="video", codec="h264")}
+
+    real_rename = move_engine.rename_in_place
+    state = {"fail_primary": True}
+
+    def _flaky(conn, batch, sp, dp, **k):
+        if state["fail_primary"] and str(sp).endswith(".MP4"):
+            return move_engine.MoveOutcome("failed", None, None, dp, "simulated crash")
+        return real_rename(conn, batch, sp, dp, **k)
+
+    monkeypatch.setattr(organize.move_engine, "rename_in_place", _flaky)
+    r1 = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+    assert r1.aborted is True
+    assert not companion.exists()  # companion renamed first (away)
+    assert primary.exists()  # primary not yet moved
+
+    state["fail_primary"] = False
+    r2 = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory(mapping))
+    assert r2.aborted is False and r2.failures == []
+    assert r2.organized == 1
+    assert not primary.exists() and not companion.exists()
+    conn = _index(cfg)
+    try:
+        nfiles = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        ndel = conn.execute(
+            "SELECT COUNT(*) FROM moves WHERE status='source_deleted'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert nfiles == 1  # one primary files row, not duplicated
+    assert ndel == 2  # primary + companion, each exactly once
+    assert organize.verify_library(cfg).ok == 2  # both files hash-verify at dest
+
+
+def test_same_volume_persists_before_primary_rename(tmp_path, monkeypatch):
+    # Crash-safety invariant (fixes the orphan window): the `files` row must be durable
+    # BEFORE the primary's source is renamed away, because the primary's source_deleted
+    # is the group-done sentinel Pass 1 skips on. If the rename happened first, a crash
+    # between it and the index write would leave a file in the library that no
+    # map/undo/rescan knows about. Assert a `files` row already exists at the moment the
+    # primary is renamed.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    primary = _add(inbox, "DJI_0003.MP4", b"video-bytes")
+    companion = _add(inbox, "DJI_0003.SRT", b"telemetry")
+    os.utime(companion, (primary.stat().st_atime, primary.stat().st_mtime))
+
+    real_rename = move_engine.rename_in_place
+    seen: dict[str, int] = {}
+
+    def _checking(conn, batch, sp, dp, **k):
+        if str(sp).endswith(".MP4"):  # the primary, moved last
+            seen["files_rows"] = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        return real_rename(conn, batch, sp, dp, **k)
+
+    monkeypatch.setattr(organize.move_engine, "rename_in_place", _checking)
+    report = organize.run_organize(
+        cfg,
+        assume_yes=True,
+        extractor_factory=_factory({"DJI_0003.MP4": _md(media_type="video", codec="h264")}),
+    )
+    assert report.organized == 1
+    assert seen.get("files_rows") == 1  # the files row existed BEFORE the primary moved
+
+
+def test_finalize_renamed_pending_reconciles_orphan(tmp_path, monkeypatch):
+    # Simulate a crash INSIDE the primary's rename (os.replace done, status commit not):
+    # a 'pending' moves row whose source is gone + dest present, plus a durable files row
+    # (persisted before the crash). The inbox-driven regroup can't reconcile it (source
+    # gone), so a subsequent organize run must finalize it from the move log to
+    # source_deleted — otherwise undo would later mishandle the pending row.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    dest_dir = library / "Boulder, Colorado, United States" / "2024-07-04"
+    dest_dir.mkdir(parents=True)
+    dest = dest_dir / "2024-07-04_09-15-00_DJI_0001.JPG"
+    dest.write_bytes(b"capture-bytes")
+    sha = move_engine.sha256_file(dest)
+    gone_src = inbox / "DJI_0001.JPG"  # never on disk = renamed away pre-crash
+    conn = _index(cfg)
+    db.init_index_schema(conn)
+    conn.execute(
+        "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status, started_at) "
+        "VALUES ('B', ?, ?, ?, 'pending', datetime('now'))",
+        (str(gone_src), str(dest), sha),
+    )
+    conn.commit()
+    conn.close()
+
+    organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({}))
+    conn = _index(cfg)
+    try:
+        row = conn.execute(
+            "SELECT status, dest_sha256 FROM moves WHERE source_path=?", (str(gone_src),)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == "source_deleted"  # reconciled from the move log
+    assert row[1] == sha  # dest hash recorded (bytes identical to the renamed source)
+
+
+def test_same_volume_rehashes_present_source_ignoring_stale_row(tmp_path, monkeypatch):
+    # A prior crashed run left a 'pending' row with a WRONG hash for an inbox path, and
+    # the file now present there has different bytes. The re-run must hash the CURRENT
+    # bytes and persist files.sha256 = the real hash (not the stale row's), since the
+    # source is present and re-hashable.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0001.JPG", b"new-bytes")
+    real_sha = move_engine.sha256_file(src)
+    conn = _index(cfg)
+    db.init_index_schema(conn)
+    conn.execute(
+        "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status, started_at) "
+        "VALUES ('OLD', ?, ?, ?, 'pending', datetime('now'))",
+        (str(src), str(library / "old" / "x.JPG"), "00" * 32),  # stale, wrong hash
+    )
+    conn.commit()
+    conn.close()
+
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert report.organized == 1
+    conn = _index(cfg)
+    try:
+        fsha = conn.execute("SELECT sha256 FROM files").fetchone()[0]
+    finally:
+        conn.close()
+    assert fsha == real_sha  # fresh hash of the current bytes, not the stale "00…" row
+
+
+def test_same_volume_failed_rename_resumes_not_duplicate(tmp_path, monkeypatch):
+    # If a same-volume rename FAILS after the files row is persisted (e.g. EXDEV from a
+    # wrong volume guess, or a locked dest), the source stays in the inbox. A re-run must
+    # RE-ATTEMPT it — its own `failed` moves row makes it "mine", not a foreign duplicate
+    # — and complete, rather than skip it as a duplicate and leave a phantom files row.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0001.JPG", b"capture-bytes")
+    real_rename = move_engine.rename_in_place
+    state = {"fail": True}
+
+    def _flaky(conn, batch, sp, dp, **k):
+        if state["fail"]:  # mimic rename_in_place's failure bookkeeping (row->failed, no move)
+            conn.execute(
+                "UPDATE moves SET status='failed' WHERE source_path=? AND source_sha256=?",
+                (str(sp), k.get("source_sha256")),
+            )
+            conn.commit()
+            return move_engine.MoveOutcome("failed", k.get("source_sha256"), None, dp, "simulated EXDEV")
+        return real_rename(conn, batch, sp, dp, **k)
+
+    monkeypatch.setattr(organize.move_engine, "rename_in_place", _flaky)
+    r1 = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()}))
+    assert r1.aborted is True
+    assert src.exists()  # source stranded in the inbox by the failed rename
+
+    state["fail"] = False
+    r2 = organize.run_organize(cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()}))
+    assert r2.organized == 1
+    assert r2.duplicates_skipped == 0  # NOT skipped as a foreign duplicate
+    assert not src.exists()
+    conn = _index(cfg)
+    try:
+        nfiles = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        statuses = [s for (s,) in conn.execute(
+            "SELECT status FROM moves WHERE source_path=?", (str(src),)
+        ).fetchall()]
+    finally:
+        conn.close()
+    assert nfiles == 1  # the phantom files row became real, not duplicated
+    assert "source_deleted" in statuses  # the move completed on resume
+
+
+def test_same_volume_foreign_duplicate_with_stale_row_is_skipped(tmp_path, monkeypatch):
+    # A genuine duplicate (same content as an already-organized file, at a DIFFERENT inbox
+    # path) must still be skipped even if that path carries a STALE move-log row from an
+    # older, different-bytes attempt. The "mine" exemption is keyed on (source_path,
+    # current hash), so a stale row with a different hash does not falsely exempt it.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"dup-content")  # Q
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    # Path P: a stale pending row (old, wrong hash), then the SAME content dropped at P.
+    p = _add(inbox, "DJI_0002.JPG", b"dup-content")
+    conn = _index(cfg)
+    conn.execute(
+        "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status, started_at) "
+        "VALUES ('OLD', ?, ?, ?, 'pending', datetime('now'))",
+        (str(p), str(library / "old" / "p.JPG"), "11" * 32),
+    )
+    conn.commit()
+    conn.close()
+
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert report.duplicates_skipped == 1  # P recognized as a foreign duplicate of Q
+    assert report.organized == 0
+    assert p.exists()  # dedup policy: skipped + left in the inbox
+    conn = _index(cfg)
+    try:
+        nfiles = conn.execute(
+            "SELECT COUNT(*) FROM files WHERE status='organized'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert nfiles == 1  # only Q filed — the duplicate was not filed a second time
 
 
 def test_cancel_between_groups_leaves_remaining(tmp_path):

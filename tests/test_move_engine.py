@@ -337,6 +337,131 @@ def test_retry_exhausts_then_fails(tmp_path, monkeypatch):
     assert row[0] == "failed"
 
 
+def test_record_pending_inserts_and_is_idempotent(tmp_path):
+    # record_pending logs a 'pending' row without moving the file (so the index can be
+    # made durable before a same-volume rename removes the source); a repeat is a no-op.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    sha = move_engine.sha256_file(src)
+    try:
+        move_engine.record_pending(conn, BATCH, src, dest, sha)
+        move_engine.record_pending(conn, BATCH, src, dest, sha)  # idempotent
+        rows = conn.execute(
+            "SELECT status, source_sha256 FROM moves WHERE source_path=?", (str(src),)
+        ).fetchall()
+    finally:
+        conn.close()
+    assert src.exists()  # the file was NOT moved
+    assert rows == [("pending", sha)]  # exactly one pending row carrying the hash
+
+
+def test_rename_in_place_moves_and_records(tmp_path):
+    # Same-volume fast move: os.replace the source into place, record the move as
+    # source_deleted with dest_sha256 == source_sha256 (identical bytes, no re-read).
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "Place" / "2024-07-04" / "out.JPG")
+    try:
+        outcome = move_engine.rename_in_place(conn, BATCH, src, dest)
+        row = _moves_row(conn, src)
+        moved = move_engine.is_already_moved(conn, src)
+    finally:
+        conn.close()
+    final = tmp_path / "library" / "Place" / "2024-07-04" / "out.JPG"
+    assert outcome.status == "source_deleted"
+    assert final.read_bytes() == b"hello-capture"
+    assert not src.exists()  # source renamed away (no copy)
+    assert moved is True
+    assert row[0] == "source_deleted"
+    assert row[1] == row[2]  # source_sha256 == dest_sha256
+    assert row[1] == move_engine.sha256_file(final)
+
+
+def test_rename_in_place_no_partial_created(tmp_path, monkeypatch):
+    # A rename never stages a `.partial` and never reads bytes back: copy/hash helpers
+    # are not called at all (the dedup hash is the caller's job, not the engine's here).
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    monkeypatch.setattr(
+        move_engine, "_copy_file", lambda *a, **k: pytest.fail("copy must not run")
+    )
+    try:
+        outcome = move_engine.rename_in_place(conn, BATCH, src, dest, source_sha256=move_engine.sha256_file(src))
+    finally:
+        conn.close()
+    assert outcome.status == "source_deleted"
+    assert not (tmp_path / "library" / "out.JPG.partial").exists()
+
+
+def test_rename_in_place_idempotent_skips(tmp_path):
+    # A second call after the source is gone + the row is source_deleted is a no-op.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    try:
+        first = move_engine.rename_in_place(conn, BATCH, src, dest)
+        second = move_engine.rename_in_place(conn, BATCH, src, dest)
+    finally:
+        conn.close()
+    assert first.status == "source_deleted"
+    assert second.status == "skipped"
+    assert (tmp_path / "library" / "out.JPG").read_bytes() == b"hello-capture"
+
+
+def test_rename_in_place_crash_finalizes_from_pending(tmp_path):
+    # Crash AFTER os.replace but BEFORE the row flipped to source_deleted: a 'pending'
+    # row carrying the hash, the file already at dest, the source gone. A re-run must
+    # finalize from the row's stored hash WITHOUT re-reading the (now-absent) source —
+    # even when the caller passes no source_sha256.
+    import os as _os
+
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+    sha = move_engine.sha256_file(src)
+    conn.execute(
+        "INSERT INTO moves(batch_id, source_path, dest_path, source_sha256, status) "
+        "VALUES (?,?,?,?, 'pending')",
+        (BATCH, str(src), dest, sha),
+    )
+    conn.commit()
+    (tmp_path / "library").mkdir(parents=True, exist_ok=True)
+    _os.replace(src, tmp_path / "library" / "out.JPG")  # the rename that happened pre-crash
+    assert not src.exists()
+    try:
+        outcome = move_engine.rename_in_place(conn, BATCH, src, dest)  # no source_sha256
+        row = _moves_row(conn, src)
+    finally:
+        conn.close()
+    assert outcome.status == "source_deleted"
+    assert row[0] == "source_deleted"
+    assert row[1] == row[2] == sha
+
+
+def test_rename_in_place_cross_device_fails_safely(tmp_path, monkeypatch):
+    # If same-volume detection were wrong, os.replace raises EXDEV. The move is marked
+    # failed and the source is left untouched (no data loss) — fail-safe abort.
+    conn = _index(tmp_path)
+    src = _src(tmp_path)
+    dest = str(tmp_path / "library" / "out.JPG")
+
+    def _exdev(s, d):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(move_engine.os, "replace", _exdev)
+    try:
+        outcome = move_engine.rename_in_place(conn, BATCH, src, dest)
+        row = _moves_row(conn, src)
+    finally:
+        conn.close()
+    assert outcome.status == "failed"
+    assert src.exists()  # source left in place
+    assert not (tmp_path / "library" / "out.JPG").exists()
+    assert row[0] == "failed"
+
+
 def test_pending_recovery_recopies(tmp_path):
     # A 'pending' row (crashed mid-copy, partial untrusted) recovers by re-copying
     # since the source is still present.

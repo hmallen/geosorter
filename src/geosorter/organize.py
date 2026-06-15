@@ -150,12 +150,23 @@ def _borrow_frame_gps(group, md, extractor):
 
 
 def _is_duplicate(conn, primary: Path, src_sha: str) -> bool:
-    """True if identical content was already organized from a *different* source."""
+    """True if identical content was already organized from a *different* source.
+
+    Gated first on a ``files.sha256`` match. The "mine" check is then: does THIS
+    ``(source_path, src_sha)`` pair have a ``moves`` row of any status? Such a row — be
+    it ``pending``/``failed`` (an in-flight or failed attempt on the same-volume rename
+    path, where the ``files`` + ``moves`` rows are written before the source is renamed,
+    keyed on the current hash) or ``copy_verified``/``source_deleted`` — is our own move
+    of this exact source+content, not a foreign re-import. So a resumed/retried run never
+    skips its own source as a duplicate. The match is keyed on the **current** hash, so a
+    genuine duplicate (a different ``source_path``, hence no row) AND a path carrying only
+    a STALE row from an older, different-bytes attempt are both still correctly skipped.
+    """
     if conn.execute("SELECT 1 FROM files WHERE sha256=? LIMIT 1", (src_sha,)).fetchone() is None:
         return False
     mine = conn.execute(
-        "SELECT 1 FROM moves WHERE source_path=? AND status IN ('copy_verified','source_deleted') LIMIT 1",
-        (str(primary),),
+        "SELECT 1 FROM moves WHERE source_path=? AND source_sha256=? LIMIT 1",
+        (str(primary), src_sha),
     ).fetchone()
     return mine is None
 
@@ -181,6 +192,26 @@ def _resolve_collision(conn, primary: Path, dest_path: str) -> str:
         if taken_in_db is None and not os.path.exists(f"{stem}_{n}{ext}"):
             return candidate
         n += 1
+
+
+def _same_volume(a: Path, b: Path) -> bool:
+    """True when ``a`` and ``b`` live on the same filesystem volume.
+
+    Compares ``os.stat().st_dev`` (on Windows the volume serial), so an inbox and a
+    library that are two folders on one SMB share / one local disk are recognized as
+    same-volume. A move within one volume can be an atomic, server-side ``os.replace``
+    rename (zero bytes over the wire) instead of a copy+verify+delete. Mis-detection
+    is always safe: a false negative just keeps the (correct, slower) copy path, and a
+    false positive surfaces as an ``EXDEV`` failure in ``move_engine.rename_in_place``
+    with the source left in place. Both paths must already exist (callers stat the
+    inbox and the just-created library root). Any ``OSError`` -> ``False`` (fall back
+    to copy). ``st_dev == 0`` (unknown) is treated as not-same-volume.
+    """
+    try:
+        dev_a = a.stat().st_dev
+        return dev_a != 0 and dev_a == b.stat().st_dev
+    except OSError:
+        return False
 
 
 def _disk_preflight(total_bytes: int, library: Path, margin_bytes: int) -> None:
@@ -213,6 +244,33 @@ def _sweep_stale_partials(index) -> None:
         "SELECT dest_path FROM moves WHERE status='pending'"
     ).fetchall():
         move_engine._cleanup(_strip(dest_path) + ".partial")
+
+
+def _finalize_renamed_pending(index) -> None:
+    """Finalize ``pending`` rows left by a same-volume rename that crashed mid-flip.
+
+    On the rename path the source is removed atomically by ``os.replace``; if the
+    process dies in the sub-millisecond window between that and the
+    ``status='source_deleted'`` commit, the row is left ``pending`` with the source
+    gone and the destination present. Because resume rebuilds capture groups from the
+    *inbox* (where the source no longer is), that row would never be reconciled — so the
+    file, though already filed (its ``files`` row was persisted first), would keep a
+    ``pending`` move row that ``undo`` mishandles. This sweep reconciles such rows from
+    the move log directly (mirroring :func:`_sweep_stale_partials`): a ``pending`` row
+    whose source is GONE and whose destination EXISTS is flipped to ``source_deleted``
+    with ``dest_sha256`` = the stored source hash (the bytes are identical — a rename
+    copied nothing). It never touches a pending COPY row, whose source is still present.
+    """
+    for source_path, dest_path, sha in index.execute(
+        "SELECT source_path, dest_path, source_sha256 FROM moves WHERE status='pending'"
+    ).fetchall():
+        if not os.path.exists(source_path) and os.path.exists(_strip(dest_path)):
+            index.execute(
+                "UPDATE moves SET status='source_deleted', dest_sha256=?, "
+                "completed_at=datetime('now') WHERE source_path=? AND source_sha256=?",
+                (sha, source_path, sha),
+            )
+    index.commit()
 
 
 def _unextractable_md(path: Path) -> MediaMetadata:
@@ -383,9 +441,19 @@ def run_organize(
                 report.confirmed = False
                 return report
 
+        # When the inbox and library share a volume, each capture moves by an atomic
+        # server-side rename (no bytes over the wire) — see `_same_volume` /
+        # `move_engine.rename_in_place`. A rename adds zero net bytes to the volume, so
+        # the disk preflight and the mid-run free-space recheck are both skipped on this
+        # path (they cost SMB round trips and can never trip — nothing fills up).
+        same_volume = False
         if not dry_run:
             _sweep_stale_partials(index)  # reclaim a crashed prior run's .partial files
-            _disk_preflight(total_bytes, library, margin_bytes)
+            _finalize_renamed_pending(index)  # reconcile rename rows orphaned mid-flip
+            library.mkdir(parents=True, exist_ok=True)  # so `_same_volume` can stat it
+            same_volume = _same_volume(inbox, library)
+            if not same_volume:
+                _disk_preflight(total_bytes, library, margin_bytes)
             report.batch_id = make_batch_id(datetime.now(), secrets.token_hex(3))
 
         # Pass 1 — extract every group's metadata up front (skipping groups a prior
@@ -429,7 +497,7 @@ def run_organize(
             # configured headroom between rechecks. Checking before (not after) the move
             # means a run that just fits is never falsely aborted on its last group, and
             # an abort leaves this group + the rest in the inbox.
-            if not dry_run and bytes_since_check >= _FREESPACE_RECHECK_BYTES:
+            if not dry_run and not same_volume and bytes_since_check >= _FREESPACE_RECHECK_BYTES:
                 bytes_since_check = 0
                 if shutil.disk_usage(library).free < grp_bytes + margin_bytes:
                     report.aborted = True
@@ -441,7 +509,8 @@ def run_organize(
             _process_group(group, md, inferred_map.get(idx), index, geonames,
                            library, report, dry_run, progress, cfg.feature_proximity_km,
                            byte_progress, cfg.retain_hyperlapse_frames,
-                           cfg.copy_retry_attempts, cfg.copy_retry_backoff_s)
+                           cfg.copy_retry_attempts, cfg.copy_retry_backoff_s,
+                           same_volume=same_volume)
             bytes_since_check += grp_bytes
 
         if not dry_run:
@@ -566,7 +635,7 @@ def _apply_catalog_ratings(index, report, unclaimed, cfg, *, archive=True) -> No
 def _process_group(group, md, inferred, index, geonames, library, report, dry_run,
                    progress, feature_proximity_km=5.0, byte_progress=None,
                    retain_hyperlapse_frames=True, copy_retry_attempts=1,
-                   copy_retry_backoff_s=0.0) -> None:
+                   copy_retry_backoff_s=0.0, same_volume=False) -> None:
     primary = group.primary
 
     # Effective companion set: a hyperlapse group with retention off files the render
@@ -621,10 +690,17 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         _tally(report, companions, geo, quarantine, local, was_inferred, frame_bytes)
         return
 
-    src_sha = move_engine.sha256_file(primary)
-    if _is_duplicate(index, primary, src_sha):
-        report.duplicates_skipped += 1
-        return
+    # Dedup hash for the primary. The primary is moved LAST on the rename path, so it
+    # is normally present here; it is absent only on crash recovery (already renamed but
+    # the moves row never reached source_deleted), where it is already filed — skip the
+    # dedup check (rename_in_place recovers its hash from the pending row).
+    if primary.exists():
+        src_sha = move_engine.sha256_file(primary)
+        if _is_duplicate(index, primary, src_sha):
+            report.duplicates_skipped += 1
+            return
+    else:
+        src_sha = None
     primary_dest = _resolve_collision(index, primary, primary_dest)
 
     files_to_move = [(primary, primary_dest)]
@@ -635,6 +711,49 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
             else _companion_dest(primary_dest, primary, cpath)
         )
         files_to_move.append((cpath, cdest))
+
+    if same_volume:
+        # Same-volume fast path: atomic server-side rename (no copy, no verify read-back,
+        # no separate delete — os.replace moves zero bytes and removes the source
+        # atomically). It stays GROUP-ATOMIC the same way the copy path is: the whole
+        # group is recorded in the move log and its files/file_companions rows are
+        # persisted while every source is STILL in the inbox (steps 1-2), and only THEN
+        # is each file renamed (step 3, companions first, primary LAST). So the primary's
+        # source_deleted (the group-done sentinel Pass 1's `is_already_moved` skip relies
+        # on) can never exist without a durable files row — a crash never orphans an
+        # unindexed file in the library; it leaves a recoverable partial group.
+
+        # 1. Record a pending moves row for every file whose source is still present
+        #    (so we always hash the CURRENT bytes — never trust a stale prior-run row's
+        #    hash for a file the user may have swapped). A source that is already gone was
+        #    renamed by a prior crashed run; it is left for step 3's rename_in_place to
+        #    finalize from its existing row. record_pending keeps every present source in
+        #    the inbox at this point.
+        shas: dict[Path, str] = {}
+        for sp, dp in files_to_move:
+            if not sp.exists():
+                continue
+            sha = src_sha if (sp == primary and src_sha is not None) else move_engine.sha256_file(sp)
+            move_engine.record_pending(index, report.batch_id, sp, dp, sha)
+            shas[sp] = sha
+        # 2. Persist files/file_companions/moves-link BEFORE any source leaves the inbox.
+        primary_sha = shas.get(primary) or _row_sha(index, primary)
+        _persist(index, report, md, geo, local, quarantine, primary, primary_dest,
+                 companions, files_to_move, primary_sha, group.capture_kind, frame_count)
+        # 3. Finalize each move with an atomic rename — companions first, primary LAST.
+        #    rename_in_place handles a source already gone (resume) via its recovery path.
+        for sp, dp in reversed(files_to_move):
+            if move_engine.is_already_moved(index, sp):
+                continue
+            outcome = move_engine.rename_in_place(
+                index, report.batch_id, sp, dp, source_sha256=shas.get(sp),
+            )
+            if outcome.status == "failed":
+                report.aborted = True
+                report.failures.append(f"{sp}: {outcome.error}")
+                return  # files row already durable; re-run completes the renames
+        _tally(report, companions, geo, quarantine, local, was_inferred, frame_bytes)
+        return
 
     # Phase A: copy + verify every file in the group (no deletes yet). Record each
     # file's verified source hash so Phase B's delete keys on the exact moves row.
@@ -739,6 +858,21 @@ def _stored_sha(index, primary: Path) -> str:
         (str(primary),),
     ).fetchone()
     return row[0] if row else move_engine.sha256_file(primary)
+
+
+def _row_sha(index, source: Path) -> str:
+    """Source hash from this source's most recent ``moves`` row (any status).
+
+    Used on the same-volume path where a file may already be recorded (a prior crashed
+    run's ``pending`` row) or even already renamed away — so its hash must come from the
+    row, not from re-reading a possibly-absent source. Falls back to hashing the live
+    file only when no row exists (which implies the source is still present).
+    """
+    row = index.execute(
+        "SELECT source_sha256 FROM moves WHERE source_path=? ORDER BY id DESC LIMIT 1",
+        (str(source),),
+    ).fetchone()
+    return row[0] if row else move_engine.sha256_file(source)
 
 
 def _tally(report, companions, geo, quarantine, local, was_inferred=False,

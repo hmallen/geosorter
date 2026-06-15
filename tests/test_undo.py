@@ -333,3 +333,25 @@ def test_undo_hyperlapse_300_companions(tmp_path):
     assert render.exists() and all(f.exists() for f in frames)
     assert not any(p.is_file() for p in library.rglob("*"))  # library copies gone
     assert _counts(cfg, report.batch_id) == (0, 0, 0)
+
+
+def test_undo_after_same_volume_organize(tmp_path, monkeypatch):
+    # Organize via the same-volume rename path, then undo must still restore the source
+    # to the inbox and drop the batch rows. Rename moves record source_sha256 ==
+    # dest_sha256 and status='source_deleted', which undo's content-conflict check and
+    # row cleanup rely on — so undo is unchanged and keeps working.
+    monkeypatch.setattr(organize, "_same_volume", lambda a, b: True)
+    cfg, inbox, library = _setup(tmp_path)
+    src = _add(inbox, "DJI_0001.JPG", b"capture-bytes")
+    org = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert org.organized == 1
+    assert not src.exists()  # renamed into the library
+
+    report = undo.run_undo(cfg)
+    assert report.restored == 1
+    assert report.conflicts == [] and report.failures == []
+    assert src.exists() and src.read_bytes() == b"capture-bytes"  # restored to inbox
+    assert not any(p.is_file() for p in library.rglob("*"))  # library copy gone
+    assert _counts(cfg, org.batch_id) == (0, 0, 0)
