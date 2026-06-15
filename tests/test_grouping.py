@@ -59,6 +59,23 @@ def test_sidecar_outside_mtime_window_excluded(tmp_path):
     assert groups[0].companions == []
 
 
+def test_same_stem_different_dirs_do_not_merge(tmp_path):
+    # Recycled DJI counters across SD cards: the SAME stem in DIFFERENT source dirs
+    # are unrelated captures and must NOT merge into one group (merging filed both to
+    # one destination, overwriting one with the other — the data-loss bug).
+    (tmp_path / "cardA").mkdir()
+    (tmp_path / "cardB").mkdir()
+    a = _touch(tmp_path / "cardA" / "DJI_0001.MP4", 1000.0)
+    b = _touch(tmp_path / "cardB" / "DJI_0001.MP4", 9000.0)
+    groups = grouping.group_companions([a, b])
+    assert len(groups) == 2
+    primaries = {g.primary for g in groups}
+    assert primaries == {a, b}
+    # Neither file appears as the other's companion.
+    for g in groups:
+        assert g.companions == []
+
+
 def test_distinct_captures_form_distinct_groups(tmp_path):
     a = _touch(tmp_path / "DJI_0005.JPG", 5000.0)
     b = _touch(tmp_path / "DJI_0006.JPG", 6000.0)

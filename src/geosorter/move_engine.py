@@ -154,6 +154,22 @@ def copy_and_verify(
         else sha256_file(source_path, on_bytes=_emit("hashing"))
     )
 
+    # SAFETY (recycled-filename collision): refuse to file onto a destination already
+    # claimed by a DIFFERENT source — checked on EVERY path (a fresh source AND a
+    # stale-row 'pending'/'failed' retry), BEFORE the resume branch below, so a redo can
+    # never os.replace over another capture's bytes. A same-source resume matches its OWN
+    # row and is excluded by source_path<>?, so legitimate resumes are never blocked.
+    occupied = conn.execute(
+        "SELECT source_path FROM moves WHERE dest_path=? AND source_path<>? "
+        "AND status IN ('copy_verified','source_deleted') LIMIT 1",
+        (dest_path, str(source_path)),
+    ).fetchone()
+    if occupied is not None:
+        return MoveOutcome(
+            "failed", src_sha, None, dest_path,
+            f"destination already filed from a different source: {occupied[0]}",
+        )
+
     existing = conn.execute(
         "SELECT status, dest_sha256 FROM moves WHERE source_path=? AND source_sha256=?",
         (str(source_path), src_sha),
@@ -330,6 +346,22 @@ def rename_in_place(
         if source_sha256 is not None
         else sha256_file(src, on_bytes=_emit("hashing", total))
     )
+
+    # SAFETY (recycled-filename collision): refuse to rename onto a destination already
+    # claimed by a DIFFERENT source — checked on EVERY path (a fresh source AND a
+    # stale-row retry, incl. the same-volume organize flow that record_pending-s the row
+    # before this call), BEFORE the resume branch, so a redo can never os.replace over
+    # another capture's bytes. A same-source resume is excluded via source_path<>?.
+    occupied = conn.execute(
+        "SELECT source_path FROM moves WHERE dest_path=? AND source_path<>? "
+        "AND status IN ('copy_verified','source_deleted') LIMIT 1",
+        (dest_path, str(src)),
+    ).fetchone()
+    if occupied is not None:
+        return MoveOutcome(
+            "failed", src_sha, None, dest_path,
+            f"destination already filed from a different source: {occupied[0]}",
+        )
 
     existing = conn.execute(
         "SELECT status FROM moves WHERE source_path=? AND source_sha256=?",
