@@ -32,3 +32,27 @@ export interface LibraryFC {
   type: 'FeatureCollection'
   features: LibraryFeature[]
 }
+
+// One no-GPS (quarantined) capture awaiting a manual location (GET /api/quarantine).
+// These are excluded from /api/library (no coordinate to plot), so the No-GPS panel
+// lists them here and assigns a location to promote them to organized.
+export interface QuarantineItem {
+  id: number
+  filename: string
+  media_type: 'photo' | 'video'
+  date: string | null // local_date, else the _no-gps/<date>/ folder name, else null
+  capture_kind: 'hyperlapse' | 'panorama' | null
+  frame_count: number | null
+  path: string // library-relative POSIX path (still under _no-gps/)
+}
+
+// One offline forward place-name search match (GET /api/place-search): the user
+// picks one to assign its coordinate to the selected no-GPS captures.
+export interface PlaceResult {
+  geonameid: number
+  name: string
+  place_string: string | null
+  lat: number
+  lon: number
+  feature_class: string | null
+}

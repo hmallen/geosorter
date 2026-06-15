@@ -61,6 +61,24 @@ class GeocodeResult:
 
 
 @dataclass(frozen=True)
+class PlaceMatch:
+    """One forward-search (name -> coordinate) hit over the GeoNames DB.
+
+    Surfaced by :func:`forward_search` to let the map UI assign a location to a
+    no-GPS capture by place name instead of a map click. ``place_string`` is the
+    same ``"City, Region, Country"`` display string used elsewhere; ``lat``/``lon``
+    are the GeoNames point centroid the caller assigns.
+    """
+
+    geonameid: int
+    name: str
+    place_string: str | None
+    lat: float
+    lon: float
+    feature_class: str | None
+
+
+@dataclass(frozen=True)
 class Candidate:
     """One nearby GeoNames place considered during reverse geocoding.
 
@@ -154,6 +172,70 @@ def candidates(
         for r in rows
     ]
     out.sort(key=lambda c: c.dist_km)
+    return out
+
+
+def _like_escape(text: str) -> str:
+    r"""Escape SQL ``LIKE`` wildcards so a query of ``50%`` matches literally.
+
+    Backslash-escapes ``\``, ``%`` and ``_`` for use with an ``ESCAPE '\'`` clause.
+    """
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def forward_search(
+    geonames_conn: sqlite3.Connection,
+    query: str,
+    *,
+    limit: int = 10,
+) -> list[PlaceMatch]:
+    """Search GeoNames by place/feature name, nearest-to-exact first.
+
+    Offline forward geocoding: matches ``name``/``ascii_name`` containing ``query``
+    (case-insensitive), ranked exact match first, then prefix match, then any
+    substring, breaking ties by ``population`` descending. A ``"<name>, <region>"``
+    query narrows the matches to those whose resolved ``place_string`` carries every
+    comma-separated trailing token (e.g. ``"Denver, Colorado"``). Returns ``[]`` for
+    a blank/whitespace query. This resolves named places and features only, never
+    arbitrary street addresses.
+    """
+    name_part, _, rest = query.partition(",")
+    name_part = name_part.strip()
+    if not name_part:
+        return []
+    tokens = [t.strip().lower() for t in rest.split(",") if t.strip()]
+
+    like = f"%{_like_escape(name_part)}%"
+    rows = geonames_conn.execute(
+        "SELECT geonameid, name, ascii_name, lat, lon, feature_class, population "
+        "FROM geonames "
+        "WHERE name LIKE :like ESCAPE '\\' OR ascii_name LIKE :like ESCAPE '\\' "
+        "ORDER BY CASE "
+        "  WHEN lower(name)=:q OR lower(ascii_name)=:q THEN 0 "
+        "  WHEN lower(name) LIKE :prefix ESCAPE '\\' "
+        "    OR lower(ascii_name) LIKE :prefix ESCAPE '\\' THEN 1 "
+        "  ELSE 2 END ASC, population DESC, geonameid ASC "
+        "LIMIT :scan",
+        {
+            "like": like,
+            "q": name_part.lower(),
+            "prefix": f"{_like_escape(name_part.lower())}%",
+            # When narrowing, over-scan before the place-string filter so a region
+            # match further down the ranking is not cut off by the final limit.
+            "scan": limit if not tokens else max(limit * 10, 50),
+        },
+    ).fetchall()
+
+    out: list[PlaceMatch] = []
+    for gid, name, _ascii, lat, lon, fclass, _pop in rows:
+        _an, place_string, _fc = _resolve_place(geonames_conn, gid)
+        if tokens:
+            haystack = (place_string or "").lower()
+            if not all(tok in haystack for tok in tokens):
+                continue
+        out.append(PlaceMatch(gid, name, place_string, lat, lon, fclass))
+        if len(out) >= limit:
+            break
     return out
 
 

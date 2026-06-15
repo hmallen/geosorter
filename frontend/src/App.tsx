@@ -3,8 +3,11 @@ import MapView from './components/MapView'
 import FileListPanel from './components/FileListPanel'
 import Lightbox from './components/Lightbox'
 import Toolbar from './components/Toolbar'
+import QuarantinePanel from './components/QuarantinePanel'
 import { useLibrary } from './useLibrary'
 import { useRetagJob } from './useRetagJob'
+import { useAssignLocation } from './useAssignLocation'
+import { useQuarantine } from './useQuarantine'
 import { useStitch } from './useStitch'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
@@ -48,14 +51,37 @@ export default function App() {
     if (f) setLightbox({ files: [f], index: 0 })
   }
 
-  // After a re-organize / re-tag, close any open lightbox before reloading so it
-  // can't keep rendering now-moved files (stale paths → broken media).
+  // No-GPS (quarantined) captures: the count badges the toolbar button and the list
+  // feeds the No-GPS panel. Reloaded by handleChanged after an assign/organize/undo.
+  const { items: quarantineItems, count: quarantineCount, reload: reloadQuarantine } =
+    useQuarantine()
+  const [showNoGps, setShowNoGps] = useState(false)
+
+  // After a re-organize / re-tag / assign, close any open lightbox before reloading so
+  // it can't keep rendering now-moved files (stale paths → broken media); also refresh
+  // the no-GPS list (an assign removes items; an organize may add some).
   function handleChanged() {
     setLightbox(null)
     reload()
+    reloadQuarantine()
   }
 
-  const { retagging, placing, beginRetag, cancelRetag, pickLocation } = useRetagJob(handleChanged)
+  const { retagging, placing: retagPlacing, beginRetag, cancelRetag, pickLocation: retagPick } =
+    useRetagJob(handleChanged)
+  // Bulk assign-location for no-GPS captures: placement mode (a map click sets the
+  // location for the selected captures) coexists with re-tag placement.
+  const {
+    assigning,
+    placing: assignPlacing,
+    count: assignCount,
+    beginAssign,
+    cancelAssign,
+    pickLocation: assignPick,
+    assignToCoord,
+  } = useAssignLocation(handleChanged)
+  const placing = retagPlacing || assignPlacing
+  // One map-click handler routed to whichever placement is active (only one can be).
+  const onMapClick = retagPlacing ? retagPick : assignPlacing ? assignPick : undefined
 
   // Panoramas that still want a 360 stitch: a panorama with tiles whose stitch
   // hasn't succeeded yet. The toolbar's optional "Stitch all" button targets these.
@@ -76,20 +102,49 @@ export default function App() {
 
   return (
     <div className="app">
-      <Toolbar onDone={handleChanged} stitchTargets={panoramaTargets} onReload={reload} />
+      <Toolbar
+        onDone={handleChanged}
+        stitchTargets={panoramaTargets}
+        onReload={reload}
+        onOpenNoGps={() => setShowNoGps(true)}
+        noGpsCount={quarantineCount}
+      />
       <MapView
         features={features}
         onMarkerClick={placing ? undefined : openInLightbox}
-        onMapClick={placing ? pickLocation : undefined}
+        onMapClick={onMapClick}
         onBoundsChange={setBounds}
       />
-      {placing && (
+      {retagPlacing && (
         <div className="placement-banner">
           Click the map to set the new location
           <button onClick={cancelRetag}>Cancel</button>
         </div>
       )}
+      {assignPlacing && (
+        <div className="placement-banner">
+          Click the map to set the location for {assignCount} no-GPS capture
+          {assignCount === 1 ? '' : 's'}
+          <button onClick={cancelAssign}>Cancel</button>
+        </div>
+      )}
       {retagging && <div className="placement-banner">Re-filing…</div>}
+      {assigning && <div className="placement-banner">Assigning location…</div>}
+      {showNoGps && (
+        <QuarantinePanel
+          items={quarantineItems}
+          busy={assigning}
+          onClose={() => setShowNoGps(false)}
+          onPickOnMap={(ids) => {
+            // The two placement modes are mutually exclusive: cancel a pending re-tag
+            // so the next map click can't be routed to it (onMapClick prefers re-tag).
+            cancelRetag()
+            beginAssign(ids)
+            setShowNoGps(false)
+          }}
+          onAssignToPlace={(ids, lat, lon) => assignToCoord(ids, lat, lon)}
+        />
+      )}
       <FileListPanel
         files={panelFiles}
         onOpen={(i) => setLightbox({ files: panelFiles, index: i })}
@@ -97,7 +152,11 @@ export default function App() {
           // panelFiles is volatile (viewport-driven); guard the deref in case a
           // click races a list shrink between paints.
           const file = panelFiles[i]
-          if (file) beginRetag(file.properties.id)
+          // Mutually exclusive with No-GPS assign placement (see onPickOnMap).
+          if (file) {
+            cancelAssign()
+            beginRetag(file.properties.id)
+          }
         }}
       />
       {lightbox && (

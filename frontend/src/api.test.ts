@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -92,6 +92,50 @@ describe('fetchLibrary (ETag conditional GET)', () => {
       ok: false, status: 500, headers: { get: () => null },
     })) as unknown as typeof fetch
     await expect(fetchLibrary(fetchFn)).rejects.toThrow(/library fetch failed: 500/)
+  })
+})
+
+describe('fetchQuarantine', () => {
+  it('returns the parsed no-GPS feature list', async () => {
+    const item = {
+      id: 5, filename: 'q.JPG', media_type: 'photo', date: '2024-07-04',
+      capture_kind: null, frame_count: null, path: '_no-gps/q.JPG',
+    }
+    const fetchFn = (async () => ({
+      ok: true, status: 200, json: async () => ({ features: [item] }),
+    })) as unknown as typeof fetch
+    expect(await fetchQuarantine(fetchFn)).toEqual([item])
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
+    await expect(fetchQuarantine(fetchFn)).rejects.toThrow(/quarantine fetch failed: 500/)
+  })
+})
+
+describe('placeSearch', () => {
+  it('short-circuits a blank query to [] without fetching', async () => {
+    const fetchFn = (async () => { throw new Error('must not fetch') }) as unknown as typeof fetch
+    expect(await placeSearch('   ', fetchFn)).toEqual([])
+  })
+
+  it('encodes the query and returns the ranked matches', async () => {
+    const match = {
+      geonameid: 5419384, name: 'Denver', place_string: 'Denver, Colorado, United States',
+      lat: 39.739, lon: -104.985, feature_class: 'P',
+    }
+    let calledUrl: string | undefined
+    const fetchFn = (async (url: string) => {
+      calledUrl = url
+      return { ok: true, status: 200, json: async () => ({ results: [match] }) } as Response
+    }) as unknown as typeof fetch
+    expect(await placeSearch('Denver, CO', fetchFn)).toEqual([match])
+    expect(calledUrl).toBe('/api/place-search?q=Denver%2C%20CO')
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
+    await expect(placeSearch('Moab', fetchFn)).rejects.toThrow(/place search failed: 500/)
   })
 })
 
