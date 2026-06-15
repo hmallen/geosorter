@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { collageUrl, fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
+import { captionInfo } from '../captionInfo'
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature } from '../types'
@@ -106,6 +107,7 @@ export default function Lightbox({
     <div className="lightbox" onClick={onClose}>
       <button className="lightbox-close" onClick={onClose} aria-label="Close">×</button>
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
+        <div className="lightbox-caption">{captionInfo(f.properties)}</div>
         <div className="lightbox-media">
           {frameZoom ? (
             <LoadingImage key={frameZoom} src={previewUrl(frameZoom)} alt="source frame" />

@@ -32,15 +32,17 @@ def _probe_codec(path: Path) -> str:
 
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
           gps_source="exif", capture_kind=None, frame_count=None, star_rating=None,
-          stitch_status=None, stitch_projection=None):
+          stitch_status=None, stitch_projection=None,
+          capture_ts_local="2024-07-04T13:05:00-06:00"):
     cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
-        "local_date, lat, lon, codec, gps_source, sha256, status, capture_kind, "
-        "frame_count, star_rating, stitch_status, stitch_projection) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "local_date, capture_ts_local, lat, lon, codec, gps_source, sha256, status, "
+        "capture_kind, frame_count, star_rating, stitch_status, stitch_projection) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
-         "2024-07-04", lat, lon, codec, gps_source, "deadbeef", status,
-         capture_kind, frame_count, star_rating, stitch_status, stitch_projection),
+         "2024-07-04", capture_ts_local, lat, lon, codec, gps_source, "deadbeef",
+         status, capture_kind, frame_count, star_rating, stitch_status,
+         stitch_projection),
     )
     return cur.lastrowid
 
@@ -179,6 +181,15 @@ def test_library_exposes_gps_source(client_and_lib):
     by_name = {f["properties"]["filename"]: f["properties"] for f in fc["features"]}
     assert by_name["a.JPG"]["gps_source"] == "exif"
     assert by_name["b.JPG"]["gps_source"] == "inferred"
+
+
+def test_library_exposes_capture_ts_local(client_and_lib):
+    # The lightbox caption needs the local capture timestamp (date + time); the
+    # feed forwards the stored ISO-8601-with-offset string verbatim.
+    client, _ = client_and_lib
+    fc = client.get("/api/library").json()
+    feat = next(f for f in fc["features"] if f["properties"]["filename"] == "a.JPG")
+    assert feat["properties"]["capture_ts_local"] == "2024-07-04T13:05:00-06:00"
 
 
 def test_library_is_gzipped_for_accepting_client(client_and_lib):
