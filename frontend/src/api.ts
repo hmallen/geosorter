@@ -1,5 +1,5 @@
 // Typed helpers for the B6 HTTP API: media-URL builders + the library fetch.
-import type { LibraryFC } from './types'
+import type { LibraryFC, PlaceResult, QuarantineItem } from './types'
 import type { InboxGroup } from './inboxTree'
 
 // Encode each path segment but preserve the separators, so a library-relative
@@ -81,4 +81,25 @@ export async function fetchInboxList(fetchFn: typeof fetch = fetch): Promise<Inb
   const resp = await fetchFn('/api/inbox/list')
   if (!resp.ok) throw new Error(`inbox list fetch failed: ${resp.status}`)
   return ((await resp.json()) as { groups: InboxGroup[] }).groups
+}
+
+// No-GPS (quarantined) captures awaiting a manual location (for the No-GPS panel).
+export async function fetchQuarantine(
+  fetchFn: typeof fetch = fetch,
+): Promise<QuarantineItem[]> {
+  const resp = await fetchFn('/api/quarantine')
+  if (!resp.ok) throw new Error(`quarantine fetch failed: ${resp.status}`)
+  return ((await resp.json()) as { features: QuarantineItem[] }).features
+}
+
+// Offline forward place-name search: resolve a place/feature name to ranked
+// coordinate matches. A blank query short-circuits to [] (no request).
+export async function placeSearch(
+  query: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<PlaceResult[]> {
+  if (!query.trim()) return []
+  const resp = await fetchFn(`/api/place-search?q=${encodeURIComponent(query)}`)
+  if (!resp.ok) throw new Error(`place search failed: ${resp.status}`)
+  return ((await resp.json()) as { results: PlaceResult[] }).results
 }

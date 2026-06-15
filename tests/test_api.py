@@ -17,6 +17,7 @@ from geosorter import api, db, derived, pathing
 from geosorter.config import Config
 from geosorter.jobs import JobManager
 from geosorter.organize import BatchReport
+from geosorter.setloc import AssignReport
 
 MEDIA = Path(__file__).parent / "fixtures" / "media"
 
@@ -124,6 +125,56 @@ def test_inbox_list(tmp_path):
             }
         ]
     }
+
+
+def test_quarantine_lists_only_quarantined(client_and_lib):
+    # The fixture seeds three organized rows and one quarantined (_no-gps/q.JPG).
+    client, _ = client_and_lib
+    resp = client.get("/api/quarantine")
+    assert resp.status_code == 200
+    feats = resp.json()["features"]
+    assert len(feats) == 1
+    only = feats[0]
+    assert only["filename"] == "q.JPG"
+    assert only["media_type"] == "photo"
+    assert only["path"] == "_no-gps/q.JPG"
+    assert only["date"] == "2024-07-04"  # local_date present in the seed
+
+
+def _geonames_app(tmp_path):
+    from geosorter import geonames_loader
+
+    gn = tmp_path / "geonames.db"
+    geonames_loader.load(gn, Path(__file__).parent / "fixtures" / "geonames",
+                         spatial_index="rtree")
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=tmp_path / "library",
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=gn,
+        spatial_index="rtree",
+    )
+    (tmp_path / "library").mkdir()
+    return TestClient(api.create_app(cfg))
+
+
+def test_place_search_returns_matches(tmp_path):
+    client = _geonames_app(tmp_path)
+    resp = client.get("/api/place-search", params={"q": "Denver"})
+    assert resp.status_code == 200
+    results = resp.json()["results"]
+    assert results
+    top = results[0]
+    assert top["geonameid"] == 5419384
+    assert top["name"] == "Denver"
+    assert top["place_string"] == "Denver, Colorado, United States"
+    assert round(top["lat"], 3) == 39.739
+    assert round(top["lon"], 3) == -104.985
+
+
+def test_place_search_blank_empty(client_and_lib):
+    client, _ = client_and_lib
+    assert client.get("/api/place-search", params={"q": "   "}).json() == {"results": []}
 
 
 def test_organize_forwards_primaries(tmp_path, monkeypatch):
@@ -838,6 +889,48 @@ def test_rescan_job_lifecycle(client_and_lib):
     assert client.get("/api/rescan/status/does-not-exist").status_code == 404
 
 
+def test_assign_location_job_lifecycle(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+
+    def fake_assign(cfg, file_ids, lat, lon, *, progress):
+        progress("  q.JPG")
+        return AssignReport(assigned=len(file_ids), skipped=0,
+                            place_string="Boulder, Colorado, United States")
+
+    jm = JobManager(cfg, assign_fn=fake_assign)
+    client = TestClient(api.create_app(cfg, job_manager=jm))
+    resp = client.post(
+        "/api/assign-location", json={"file_ids": [1, 2], "lat": 40.0, "lon": -105.0}
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    st = None
+    for _ in range(300):
+        st = client.get(f"/api/assign-location/status/{job_id}").json()
+        if st["state"] in ("done", "error"):
+            break
+        time.sleep(0.02)
+    assert st["state"] == "done"
+    assert st["assigned"] == 2
+    assert st["place_string"] == "Boulder, Colorado, United States"
+
+    # Out-of-range latitude is rejected by the pydantic model (422), not deep in the job.
+    bad = client.post(
+        "/api/assign-location", json={"file_ids": [1], "lat": 999.0, "lon": 0.0}
+    )
+    assert bad.status_code == 422
+    assert client.get("/api/assign-location/status/does-not-exist").status_code == 404
+
+
 def test_undo_retag_rescan_return_409_while_organize_running(tmp_path):
     # The single destructive worker is shared; submitting undo/retag/rescan while a
     # multi-hour organize holds it returns 409 + the blocking job id (no silent queue).
@@ -866,6 +959,9 @@ def test_undo_retag_rescan_return_409_while_organize_running(tmp_path):
         assert undo.json()["detail"]["blocking_job_id"] == org_id
         assert client.post(
             "/api/retag", json={"file_id": 1, "lat": 0.0, "lon": 0.0}
+        ).status_code == 409
+        assert client.post(
+            "/api/assign-location", json={"file_ids": [1], "lat": 0.0, "lon": 0.0}
         ).status_code == 409
         assert client.post("/api/rescan").status_code == 409
     finally:

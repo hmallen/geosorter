@@ -30,6 +30,7 @@ from .derived import (
 from .organize import run_organize
 from .rescan import run_rescan
 from .retag import retag_file
+from .setloc import assign_locations
 from .undo import run_undo
 from .warm import warm_library
 
@@ -123,6 +124,26 @@ class RetagJobState:
 
 
 @dataclass
+class AssignJobState:
+    """Serializable snapshot of one bulk assign-location job's progress.
+
+    Promotes one or more no-GPS (quarantined) captures to organized by assigning a
+    user-picked coordinate (see :mod:`geosorter.setloc`). Shares the destructive
+    worker with organize/undo/retag/rescan; no cancel (an atomic bulk re-file).
+    """
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    assigned: int = 0       # captures promoted quarantine -> organized
+    skipped: int = 0        # unknown / already-organized ids
+    place_string: str | None = None
+    processed: int = 0      # files seen so far (progress callback ticks)
+    current: str | None = None  # most recent file being relocated
+    error: str | None = None
+    failures: list[str] = field(default_factory=list)
+
+
+@dataclass
 class RescanJobState:
     """Serializable snapshot of one rescan job's progress."""
 
@@ -188,7 +209,7 @@ class JobManager:
 
     def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
                  retag_fn=retag_file, rescan_fn=run_rescan, stitch_fn=panorama_stitch,
-                 warm_fn=warm_library):
+                 warm_fn=warm_library, assign_fn=assign_locations):
         self._cfg = cfg
         self._organize_fn = organize_fn
         self._undo_fn = undo_fn
@@ -196,6 +217,7 @@ class JobManager:
         self._rescan_fn = rescan_fn
         self._stitch_fn = stitch_fn
         self._warm_fn = warm_fn
+        self._assign_fn = assign_fn
         self._executor = ThreadPoolExecutor(max_workers=1)
         # A panorama stitch is read-only (~7 min) and strictly off the crash-safe
         # move path, so it gets its OWN single worker: stitches serialize among
@@ -208,6 +230,7 @@ class JobManager:
         self._jobs: dict[str, JobState] = {}
         self._undo_jobs: dict[str, UndoJobState] = {}
         self._retag_jobs: dict[str, RetagJobState] = {}
+        self._assign_jobs: dict[str, AssignJobState] = {}
         self._rescan_jobs: dict[str, RescanJobState] = {}
         self._stitch_jobs: dict[str, StitchJobState] = {}
         self._warm_jobs: dict[str, WarmJobState] = {}
@@ -276,7 +299,8 @@ class JobManager:
         is independent and deliberately excluded. ``_jobs`` (organize) is scanned first
         so a long bulk import is reported as the blocker.
         """
-        for table in (self._jobs, self._undo_jobs, self._retag_jobs, self._rescan_jobs):
+        for table in (self._jobs, self._undo_jobs, self._retag_jobs,
+                      self._assign_jobs, self._rescan_jobs):
             for jid, st in table.items():
                 if st.state in ("pending", "running"):
                     return jid
@@ -442,6 +466,49 @@ class JobManager:
             state.error = report.error
         else:
             state.state = "done"
+
+    # ----- assign-location jobs (share the executor with organize/undo/retag) - #
+
+    def submit_assign(self, file_ids, lat: float, lon: float) -> str:
+        """Queue a bulk assign of ``file_ids`` to ``(lat, lon)`` and return its id.
+
+        Raises :class:`WorkerBusy` if another destructive job already holds the worker.
+        """
+        job_id = uuid.uuid4().hex
+        with self._lock:
+            busy = self._active_destructive_job()
+            if busy is not None:
+                raise WorkerBusy(busy)
+            self._assign_jobs[job_id] = AssignJobState(job_id=job_id)
+        self._executor.submit(self._run_assign, job_id, list(file_ids), lat, lon)
+        return job_id
+
+    def assign_status(self, job_id: str) -> AssignJobState | None:
+        """Consistent point-in-time snapshot of an assign job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._assign_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def _run_assign(self, job_id: str, file_ids, lat: float, lon: float) -> None:
+        state = self._assign_jobs[job_id]
+        state.state = "running"
+
+        def progress(msg: str) -> None:
+            state.processed += 1
+            state.current = msg.strip()
+
+        try:
+            report = self._assign_fn(self._cfg, file_ids, lat, lon, progress=progress)
+        except Exception as exc:  # surface any failure as a job error
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        state.assigned = report.assigned
+        state.skipped = report.skipped
+        state.place_string = report.place_string
+        state.failures = list(report.failures)
+        state.state = "done"
 
     # ----- rescan jobs (share the executor with organize/undo/retag) --------- #
 

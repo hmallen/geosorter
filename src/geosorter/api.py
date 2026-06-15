@@ -47,7 +47,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
-from . import config, db, derived, inbox, pathing
+from . import config, db, derived, geocoder, inbox, pathing
 from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
@@ -108,6 +108,20 @@ class RetagRequest(BaseModel):
     """
 
     file_id: int
+    lat: float = Field(ge=-90.0, le=90.0)
+    lon: float = Field(ge=-180.0, le=180.0)
+
+
+class AssignRequest(BaseModel):
+    """Body of ``POST /api/assign-location``: assign one coordinate to N no-GPS captures.
+
+    ``file_ids`` are quarantined ``files`` row ids; ``lat``/``lon`` are WGS84-bounded
+    so an out-of-range pick is rejected with a clean 422 rather than failing deep in
+    the job. Each capture keeps its own date, so one coordinate fans out to one date
+    folder per capture.
+    """
+
+    file_ids: list[int]
     lat: float = Field(ge=-90.0, le=90.0)
     lon: float = Field(ge=-180.0, le=180.0)
 
@@ -342,6 +356,57 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     def inbox_list() -> dict:
         return {"groups": [asdict(g) for g in inbox.list_inbox(cfg.inbox_path)]}
 
+    @app.get("/api/quarantine")
+    def quarantine() -> dict:
+        """List no-GPS (quarantined) captures so the map UI can set their location.
+
+        These rows are excluded from ``/api/library`` (no coordinate to plot), so the
+        No-GPS panel fetches them here. ``date`` is the stored ``local_date`` when
+        present, else the ``_no-gps/<date>/`` quarantine folder name.
+        """
+        conn = _index()
+        try:
+            rows = conn.execute(
+                "SELECT id, filename, media_type, local_date, dest_path, "
+                "capture_kind, frame_count "
+                "FROM files WHERE status='quarantined' ORDER BY id"
+            ).fetchall()
+        finally:
+            conn.close()
+        features = []
+        for r in rows:
+            date = r["local_date"]
+            if date is None:
+                parent = Path(_strip(r["dest_path"])).parent.name
+                date = parent if parent != "_no-gps" else None
+            features.append({
+                "id": r["id"],
+                "filename": r["filename"],
+                "media_type": r["media_type"],
+                "date": date,
+                "capture_kind": r["capture_kind"],
+                "frame_count": r["frame_count"],
+                "path": _relpath(r["dest_path"], url_root, library_root),
+            })
+        return {"features": features}
+
+    @app.get("/api/place-search")
+    def place_search(q: str = "") -> dict:
+        """Offline forward geocoding: resolve a place/feature name to coordinates.
+
+        Returns ranked ``{geonameid, name, place_string, lat, lon, feature_class}``
+        matches from the GeoNames DB so the user can assign a no-GPS capture by name
+        instead of a map click. Blank query or an absent GeoNames DB -> ``[]``.
+        """
+        if not q.strip() or not Path(cfg.geonames_db_path).is_file():
+            return {"results": []}
+        conn = db.connect(cfg.geonames_db_path, integrity_check=False)
+        try:
+            matches = geocoder.forward_search(conn, q)
+        finally:
+            conn.close()
+        return {"results": [asdict(m) for m in matches]}
+
     @app.post("/api/organize")
     def organize_start(req: OrganizeRequest = OrganizeRequest()) -> dict:
         selected = set(req.primaries) if req.primaries is not None else None
@@ -384,6 +449,19 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     @app.get("/api/retag/status/{job_id}")
     def retag_status(job_id: str) -> dict:
         state = jobs.retag_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
+
+    @app.post("/api/assign-location")
+    def assign_location_start(req: AssignRequest) -> dict:
+        return _submit_or_409(
+            lambda: jobs.submit_assign(req.file_ids, req.lat, req.lon)
+        )
+
+    @app.get("/api/assign-location/status/{job_id}")
+    def assign_location_status(job_id: str) -> dict:
+        state = jobs.assign_status(job_id)
         if state is None:
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)

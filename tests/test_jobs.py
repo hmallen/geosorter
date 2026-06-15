@@ -17,6 +17,7 @@ from geosorter.jobs import JobManager, WorkerBusy, _compute_eta
 from geosorter.organize import BatchReport
 from geosorter.rescan import RescanReport
 from geosorter.retag import RetagReport
+from geosorter.setloc import AssignReport
 from geosorter.undo import UndoReport
 
 
@@ -248,11 +249,12 @@ def test_destructive_submits_raise_workerbusy_during_organize():
     mgr = JobManager(None, organize_fn=slow_organize,
                      undo_fn=lambda *a, **k: UndoReport(),
                      retag_fn=lambda *a, **k: RetagReport(),
-                     rescan_fn=lambda *a, **k: RescanReport())
+                     rescan_fn=lambda *a, **k: RescanReport(),
+                     assign_fn=lambda *a, **k: AssignReport())
     org_id = mgr.submit()
     try:
         for call in (mgr.submit_undo, lambda: mgr.submit_retag(1, 0.0, 0.0),
-                     mgr.submit_rescan):
+                     lambda: mgr.submit_assign([1], 0.0, 0.0), mgr.submit_rescan):
             with pytest.raises(WorkerBusy) as ei:
                 call()
             assert ei.value.blocking_job_id == org_id
@@ -374,6 +376,49 @@ def test_retag_exception_becomes_error_state():
     st = _wait_retag(mgr, job_id)
     assert st.state == "error"
     assert "retag-boom" in st.error
+
+
+# --------------------------------------------------------------------------- #
+def _wait_assign(mgr, job_id, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = mgr.assign_status(job_id)
+        if st is not None and st.state in ("done", "error"):
+            return st
+        time.sleep(0.01)
+    raise AssertionError(f"assign job {job_id} did not finish: {mgr.assign_status(job_id)}")
+
+
+def test_submit_assign_runs_and_completes():
+    def fake_assign(cfg, file_ids, lat, lon, *, progress):
+        progress("  q.JPG")
+        return AssignReport(assigned=len(file_ids), skipped=1,
+                            place_string="Boulder, Colorado, United States")
+
+    mgr = JobManager(None, assign_fn=fake_assign)
+    job_id = mgr.submit_assign([1, 2, 3], 39.7, -104.9)
+    st = _wait_assign(mgr, job_id)
+    assert st.state == "done"
+    assert st.assigned == 3
+    assert st.skipped == 1
+    assert st.place_string == "Boulder, Colorado, United States"
+    assert st.processed == 1
+
+
+def test_assign_status_unknown_returns_none():
+    mgr = JobManager(None, assign_fn=lambda *a, **k: AssignReport())
+    assert mgr.assign_status("does-not-exist") is None
+
+
+def test_assign_exception_becomes_error_state():
+    def boom(cfg, file_ids, lat, lon, *, progress):
+        raise RuntimeError("assign-boom")
+
+    mgr = JobManager(None, assign_fn=boom)
+    job_id = mgr.submit_assign([1], 0.0, 0.0)
+    st = _wait_assign(mgr, job_id)
+    assert st.state == "error"
+    assert "assign-boom" in st.error
 
 
 # --------------------------------------------------------------------------- #

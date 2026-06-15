@@ -16,9 +16,19 @@ interface ToolbarProps {
   // Reload just the library feed after a stitch-all completes (so finished
   // panoramas drop out of stitchTargets) without clearing the open selection.
   onReload: () => void
+  // Open the No-GPS panel (owned by App, which holds the assign hook + map
+  // placement). `noGpsCount` labels the button so the user sees the backlog.
+  onOpenNoGps: () => void
+  noGpsCount: number
 }
 
-export default function Toolbar({ onDone, stitchTargets, onReload }: ToolbarProps) {
+export default function Toolbar({
+  onDone,
+  stitchTargets,
+  onReload,
+  onOpenNoGps,
+  noGpsCount,
+}: ToolbarProps) {
   // Suspend the inbox-badge poll while a destructive job runs (synced to `busy` in the
   // effect below). Stable ref -> the useInboxCount interval is established once, not
   // reset each render; the interval reads pausedRef.current freshly at each tick.
@@ -82,6 +92,9 @@ export default function Toolbar({ onDone, stitchTargets, onReload }: ToolbarProp
       <button onClick={startRescan} disabled={busy}>
         {rescanning ? 'Rescanning…' : 'Rescan Library'}
       </button>
+      {noGpsCount > 0 && (
+        <button onClick={onOpenNoGps}>No-GPS ({noGpsCount})</button>
+      )}
       {stitchAll.running ? (
         <span className="job job--progress">
           <button onClick={stitchAll.cancel}>Cancel stitch-all</button>

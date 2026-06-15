@@ -701,6 +701,149 @@
   height: 78vh;
 }
 
+/* No-GPS (quarantine) panel: anchored top-left under the toolbar, mirrors the
+   inbox panel's surface styling. */
+.quarantine-panel {
+  position: absolute;
+  top: 56px;
+  left: 8px;
+  width: 380px;
+  max-width: 92vw;
+  max-height: 80vh;
+  z-index: 30;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.quarantine-grid {
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.quarantine-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  font-size: 12px;
+}
+
+/* The select checkbox floats over the top-left corner of the thumbnail. */
+.quarantine-item > input[type='checkbox'] {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+}
+
+.quarantine-thumb {
+  display: block;
+  aspect-ratio: 1;
+  width: 100%;
+  background: var(--placeholder);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.quarantine-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.quarantine-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quarantine-date {
+  color: var(--text-muted);
+}
+
+.quarantine-actions {
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.quarantine-actions button {
+  width: 100%;
+  padding: 8px;
+  cursor: pointer;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  border-radius: 4px;
+}
+
+.quarantine-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.quarantine-search {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.quarantine-search input {
+  flex: 1;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.quarantine-search button {
+  padding: 6px 10px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.place-results {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+  max-height: 30vh;
+}
+
+.place-results button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.place-results button:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.place-results button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Flat zoomable hero for a non-360 stitched panorama (m-fix-panorama-projection-
    autodetect; transform model in m-flat-pano-zoom-at-click-pan). Continuous pan/zoom: the
    box fills the media area and clips (no scrollbars); FlatHero positions the <img>

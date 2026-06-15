@@ -194,6 +194,67 @@ def test_candidates_lists_city_and_feature(tmp_path):
     assert dists == sorted(dists)
 
 
+def test_forward_search_finds_city(tmp_path):
+    conn = _geonames_db(tmp_path)
+    try:
+        results = geocoder.forward_search(conn, "Denver")
+    finally:
+        conn.close()
+    assert results
+    top = results[0]
+    assert top.geonameid == 5419384
+    assert top.name == "Denver"
+    assert top.place_string == "Denver, Colorado, United States"
+    assert round(top.lat, 3) == 39.739
+    assert round(top.lon, 3) == -104.985
+    assert top.feature_class == "P"
+
+
+def test_forward_search_blank_returns_empty(tmp_path):
+    conn = _geonames_db(tmp_path)
+    try:
+        assert geocoder.forward_search(conn, "") == []
+        assert geocoder.forward_search(conn, "   ") == []
+    finally:
+        conn.close()
+
+
+def test_forward_search_exact_outranks_partial(tmp_path):
+    # A far more populous city whose name merely STARTS WITH the query must not
+    # outrank an exact-name match.
+    conn = _geonames_db(tmp_path)
+    _insert_city(conn, 9100001, 1.0, 1.0, name="Denverville")
+    conn.execute("UPDATE geonames SET population=99999999 WHERE geonameid=9100001")
+    conn.commit()
+    try:
+        results = geocoder.forward_search(conn, "Denver")
+    finally:
+        conn.close()
+    assert results[0].geonameid == 5419384  # exact "Denver" first despite lower pop
+
+
+def test_forward_search_narrows_by_region(tmp_path):
+    # A "<name>, <region>" query keeps only matches whose place string carries the
+    # region token; a non-matching region narrows the result set to empty.
+    conn = _geonames_db(tmp_path)
+    try:
+        hit = geocoder.forward_search(conn, "Denver, Colorado")
+        miss = geocoder.forward_search(conn, "Denver, Texas")
+    finally:
+        conn.close()
+    assert [r.geonameid for r in hit] == [5419384]
+    assert miss == []
+
+
+def test_forward_search_limit_caps_results(tmp_path):
+    conn = _geonames_db(tmp_path)
+    try:
+        results = geocoder.forward_search(conn, "o", limit=1)  # Boulder + London match
+    finally:
+        conn.close()
+    assert len(results) == 1
+
+
 def test_high_latitude_longitude_correction(tmp_path):
     # At 70 deg N, 1 deg of longitude (~38 km) is well within reach of a drone,
     # but a fixed +/-0.5 deg lon bbox would exclude it. The cos(lat)-corrected
