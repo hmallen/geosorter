@@ -11,7 +11,7 @@ export function useStitch(onComplete: () => void) {
   const inflight = useRef<Set<number>>(new Set())
 
   const start = useCallback(
-    (fileId: number) => {
+    (fileId: number, opts?: { force?: boolean; projection?: string }) => {
       if (inflight.current.has(fileId)) return // already pending/running for this file
       inflight.current.add(fileId)
       setByFile((m) => ({
@@ -20,6 +20,7 @@ export function useStitch(onComplete: () => void) {
       }))
       runStitch(fetch, fileId, {
         onProgress: (st) => setByFile((m) => ({ ...m, [fileId]: st })),
+        ...opts,
       })
         .then((st) => {
           setByFile((m) => ({ ...m, [fileId]: st }))

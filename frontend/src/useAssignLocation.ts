@@ -25,7 +25,7 @@ export function useAssignLocation(onDone?: () => void) {
     } catch (e) {
       setAssign({
         state: 'error', assigned: 0, skipped: 0, place_string: null,
-        processed: 0, current: null, error: String(e), failures: [],
+        total: 0, processed: 0, current: null, error: String(e), failures: [],
       })
     } finally {
       setAssigning(false)

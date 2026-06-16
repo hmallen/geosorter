@@ -47,6 +47,39 @@ describe('runStitch', () => {
     expect(final.status).toBe('unavailable')
   })
 
+  it('sends a {force, projection} body for a manual re-stitch', async () => {
+    let postInit: RequestInit | undefined
+    const fetchFn = (async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        postInit = init
+        return ok({ job_id: 'j' })
+      }
+      return ok({ ...base, state: 'done', status: 'ok' })
+    }) as unknown as typeof fetch
+
+    await runStitch(fetchFn, 7, { intervalMs: 1, force: true, projection: 'cylindrical' })
+    expect(JSON.parse(postInit?.body as string)).toEqual({
+      force: true, projection: 'cylindrical',
+    })
+    expect((postInit?.headers as Record<string, string>)['Content-Type']).toBe(
+      'application/json',
+    )
+  })
+
+  it('sends a bare POST (no body) when neither force nor projection is given', async () => {
+    let postInit: RequestInit | undefined
+    const fetchFn = (async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        postInit = init
+        return ok({ job_id: 'j' })
+      }
+      return ok({ ...base, state: 'done', status: 'ok' })
+    }) as unknown as typeof fetch
+
+    await runStitch(fetchFn, 7, { intervalMs: 1 })
+    expect(postInit?.body).toBeUndefined()
+  })
+
   it('throws if the start request fails', async () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(runStitch(fetchFn, 1)).rejects.toThrow(/stitch start failed: 500/)

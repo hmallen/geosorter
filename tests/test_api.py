@@ -616,6 +616,37 @@ def test_stitch_post_starts_job_and_status_polls(tmp_path):
     assert client.get("/api/stitch/status/does-not-exist").status_code == 404
 
 
+def test_stitch_post_accepts_force_and_projection_body(tmp_path):
+    # A manual re-stitch sends {force, projection}; both reach the stitch fn, and an
+    # invalid projection is rejected by the pydantic model (422).
+    cfg, fid, _ = _panorama_stitch_cfg(tmp_path)
+    seen = {}
+
+    def fake(*a, force=False, forced_projection=None, on_step=None, **k):
+        seen["force"] = force
+        seen["forced_projection"] = forced_projection
+        return derived.StitchResult(Path("stitched.jpg"), "flat")
+
+    jm = JobManager(cfg, stitch_fn=fake)
+    client = TestClient(api.create_app(cfg, job_manager=jm))
+
+    resp = client.post(
+        f"/api/stitch/{fid}", json={"force": True, "projection": "cylindrical"}
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+    for _ in range(300):
+        if client.get(f"/api/stitch/status/{job_id}").json()["state"] in ("done", "error"):
+            break
+        time.sleep(0.02)
+    assert seen["force"] is True
+    assert seen["forced_projection"] == "cylindrical"
+
+    # An unknown projection value is rejected before the job is submitted.
+    bad = client.post(f"/api/stitch/{fid}", json={"projection": "fisheye"})
+    assert bad.status_code == 422
+
+
 def test_stitch_status_reports_step_progress(tmp_path):
     # The live Hugin step reported via on_step must reach the HTTP status payload, so
     # the map UI can show "step 3/6: cpclean" mid-run (regression guard for the
@@ -921,6 +952,7 @@ def test_assign_location_job_lifecycle(tmp_path):
         time.sleep(0.02)
     assert st["state"] == "done"
     assert st["assigned"] == 2
+    assert st["total"] == 2  # the selected count, set at submit, drives the progress UI
     assert st["place_string"] == "Boulder, Colorado, United States"
 
     # Out-of-range latitude is rejected by the pydantic model (422), not deep in the job.

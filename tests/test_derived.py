@@ -375,6 +375,41 @@ def test_panorama_stitch_force_failure_preserves_existing_hero(tmp_path, monkeyp
     assert out.read_bytes() == original  # untouched on failure
 
 
+def test_forced_projection_code_maps_each_projection():
+    # The three manual-override projections map to (Hugin code, stored family).
+    assert derived._forced_projection_code("equirectangular") == (
+        derived._PROJ_EQUIRECTANGULAR, "equirectangular"
+    )
+    assert derived._forced_projection_code("cylindrical") == (
+        derived._PROJ_CYLINDRICAL, "flat"
+    )
+    assert derived._forced_projection_code("rectilinear") == (
+        derived._PROJ_RECTILINEAR, "flat"
+    )
+    with pytest.raises(derived.StitchFailed):
+        derived._forced_projection_code("bogus")
+
+
+def test_panorama_stitch_forced_projection_overrides_autodetect(tmp_path, monkeypatch):
+    # forced_projection wins over the HFOV-derived choice: the default fake HFOV 360
+    # would auto-pick equirectangular, but forcing 'cylindrical' records 'flat' and
+    # feeds the cylindrical code (1) to pano_modify --projection= (and the one-way
+    # equirectangular->flat reclassify is skipped, honouring the explicit choice).
+    library_root = tmp_path / "lib"
+    primary, frames = _make_pano_tiles(library_root)
+    cache = tmp_path / "proxytier"
+    monkeypatch.setattr(derived, "find_hugin", _fake_hugin_tools)
+    run, calls = _fake_run_factory()  # hfov 360 -> auto equirectangular
+    monkeypatch.setattr(derived, "_run_hugin", run)
+
+    result = derived.panorama_stitch(
+        cache, "pano/PANO_0001.JPG", primary, frames, forced_projection="cylindrical"
+    )
+    assert result.projection == "flat"
+    pano_modify = next(c for c in calls if Path(c[0]).name == "pano_modify")
+    assert f"--projection={derived._PROJ_CYLINDRICAL}" in pano_modify
+
+
 def test_panorama_stitch_reports_steps(tmp_path, monkeypatch):
     # The on_step callback fires once per Hugin pipeline step, in order, so the
     # background job (and the UI) can show which of the six steps is running.

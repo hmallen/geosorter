@@ -18,7 +18,7 @@ interface Props {
   onClose: () => void
   // App-level stitch tracking (keyed by file_id) so progress survives reopen (B).
   stitchByFile: Record<number, StitchState>
-  onStartStitch: (fileId: number) => void
+  onStartStitch: (fileId: number, opts?: { force?: boolean; projection?: string }) => void
 }
 
 export default function Lightbox({
@@ -35,6 +35,8 @@ export default function Lightbox({
   const [frames, setFrames] = useState<string[] | null>(null)
   const [showFrames, setShowFrames] = useState(false)
   const [frameZoom, setFrameZoom] = useState<string | null>(null)
+  // Manual re-stitch projection override ('' = auto-detect, the default).
+  const [projChoice, setProjChoice] = useState('')
 
   // Offer the gallery only when frames were actually filed: a render with
   // retain_hyperlapse_frames=false (or a single-tile panorama) has frame_count 0 and
@@ -60,13 +62,37 @@ export default function Lightbox({
   // Only offer to stitch when tiles were actually filed — a 0-tile panorama can't be
   // stitched (same gate as the frame gallery), so the button never starts a doomed job.
   const stitchable = isPanorama && (f?.properties.frame_count ?? 0) > 0
-  const stitchBusy = stitch?.state === 'pending' || stitch?.state === 'running'
+  // Busy includes an untracked library-'pending' (a stitch started elsewhere/last
+  // session that the auto-reattach below hasn't picked up yet) so the re-stitch button
+  // stays hidden while a job is in flight — a click then can't be swallowed by the
+  // submit dedup with its override silently dropped.
+  const stitchBusy =
+    stitch?.state === 'pending' ||
+    stitch?.state === 'running' ||
+    // An UNTRACKED library-'pending' (a stitch in flight that the auto-reattach below
+    // hasn't picked up yet) counts as busy so the dedup can't drop an override; the
+    // `!stitch` guard hands control to the live state once tracking starts, so a stale
+    // snapshot 'pending' (the lightbox snapshots its `files`) can't pin the controls
+    // busy after the live job has finished.
+    (isPanorama && f?.properties.stitch_status === 'pending' && !stitch)
+  // Cache-bust the hero ONLY after a re-stitch actually completes 'ok'. stitchUrl is a
+  // stable URL, so a same-projection re-stitch would otherwise show the browser-cached
+  // old JPEG. The job_id is set when the run STARTS (before the new JPEG is written), so
+  // gating on done+ok (not merely job_id present) avoids re-caching the old image mid-run.
+  const heroSrc =
+    fileId !== undefined
+      ? stitchUrl(fileId) +
+        (stitch?.state === 'done' && stitch?.status === 'ok' && stitch?.job_id
+          ? `?j=${stitch.job_id}`
+          : '')
+      : ''
 
-  // Reset the gallery whenever the selected file changes.
+  // Reset the gallery + projection choice whenever the selected file changes.
   useEffect(() => {
     setShowFrames(false)
     setFrameZoom(null)
     setFrames(null)
+    setProjChoice('')
   }, [fileId])
 
   // Re-attach to an in-flight stitch on (re)open: if the library reports this
@@ -84,8 +110,15 @@ export default function Lightbox({
     }
   }, [fileId, isPanorama, f?.properties.stitch_status, stitch, onStartStitch])
 
-  const generateStitch = () => {
-    if (fileId !== undefined) onStartStitch(fileId)
+  // Trigger a stitch with the chosen projection. force when a hero already exists
+  // (a re-stitch must bypass the freshness cache) or when an explicit projection is
+  // picked (so a stale cache doesn't shadow the override).
+  const triggerStitch = () => {
+    if (fileId === undefined) return
+    onStartStitch(fileId, {
+      force: heroReady || projChoice !== '',
+      projection: projChoice || undefined,
+    })
   }
 
   useEffect(() => {
@@ -114,13 +147,15 @@ export default function Lightbox({
           ) : heroReady ? (
             panoViewer === 'flat' ? (
               <FlatHero
-                src={stitchUrl(f.properties.id)}
+                key={heroSrc}
+                src={heroSrc}
                 alt={`${f.properties.filename} (stitched panorama)`}
               />
             ) : (
               <Suspense fallback={<span className="img-spinner" aria-label="loading viewer" />}>
                 <PanoSphere
-                  src={stitchUrl(f.properties.id)}
+                  key={heroSrc}
+                  src={heroSrc}
                   alt={`${f.properties.filename} (stitched 360 panorama)`}
                 />
               </Suspense>
@@ -149,7 +184,7 @@ export default function Lightbox({
           )}
         </div>
 
-        {stitchable && !heroReady && !frameZoom && (
+        {stitchable && !frameZoom && (
           <div className="stitch-controls">
             {stitchBusy ? (
               <span className="stitch-status">
@@ -160,12 +195,26 @@ export default function Lightbox({
               <span className="stitch-status">
                 Panorama stitching unavailable (Hugin not installed).
               </span>
-            ) : stitch?.status === 'failed' || stitch?.state === 'error' ? (
-              <span className="stitch-status">Stitch failed — showing the tile gallery.</span>
             ) : (
-              <button className="stitch-button" onClick={generateStitch}>
-                ⊕ Generate stitched panorama
-              </button>
+              <>
+                {(stitch?.status === 'failed' || stitch?.state === 'error') && (
+                  <span className="stitch-status">
+                    Stitch failed — adjust the projection and retry.
+                  </span>
+                )}
+                <label className="stitch-projection">
+                  Projection:
+                  <select value={projChoice} onChange={(e) => setProjChoice(e.target.value)}>
+                    <option value="">Auto-detect</option>
+                    <option value="equirectangular">Equirectangular (360°)</option>
+                    <option value="cylindrical">Cylindrical (wide)</option>
+                    <option value="rectilinear">Rectilinear (flat)</option>
+                  </select>
+                </label>
+                <button className="stitch-button" onClick={triggerStitch}>
+                  {heroReady ? '⟳ Re-stitch' : '⊕ Generate stitched panorama'}
+                </button>
+              </>
             )}
           </div>
         )}

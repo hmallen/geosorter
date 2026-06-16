@@ -516,6 +516,27 @@ def _choose_projection(hfov: float) -> tuple[int, str]:
     return (_PROJ_RECTILINEAR, "flat")
 
 
+# Manual projection overrides offered by the map UI's re-stitch control. The three
+# real Hugin projections map to their (pano_modify code, stored viewer family) pair;
+# cylindrical and rectilinear both store as the non-360 'flat' family.
+_FORCED_PROJECTIONS: dict[str, tuple[int, str]] = {
+    "equirectangular": (_PROJ_EQUIRECTANGULAR, "equirectangular"),
+    "cylindrical": (_PROJ_CYLINDRICAL, "flat"),
+    "rectilinear": (_PROJ_RECTILINEAR, "flat"),
+}
+
+
+def _forced_projection_code(name: str) -> tuple[int, str]:
+    """Map a manual projection override name to its ``(Hugin code, family)`` pair.
+
+    Raises :class:`StitchFailed` for an unknown name (a bad override is a stitch
+    failure, surfaced like any other so the existing hero/row is preserved)."""
+    try:
+        return _FORCED_PROJECTIONS[name]
+    except KeyError as exc:
+        raise StitchFailed(f"unknown forced projection {name!r}") from exc
+
+
 def classify_stitched_projection(path: Path) -> str:
     """Best-effort projection kind of an ALREADY-stitched hero, from its aspect.
 
@@ -579,6 +600,7 @@ def panorama_stitch(
     celeste: bool = True,
     optimise_lens: bool = True,
     force: bool = False,
+    forced_projection: str | None = None,
     on_step: Callable[[int, int, str], None] | None = None,
 ) -> StitchResult:
     """Return a cached JPEG hero stitched from a panorama's tiles + its projection.
@@ -602,6 +624,12 @@ def panorama_stitch(
     given, reported as ``on_step(step_index, step_total, step_name)`` *before* the
     step runs — so the background job and the map UI can show which of the six steps
     is currently executing during the multi-minute run.
+
+    ``forced_projection`` (default None) overrides the HFOV-derived projection with a
+    user-chosen one (``'equirectangular'``/``'cylindrical'``/``'rectilinear'`` via
+    :func:`_forced_projection_code`) — the map UI's manual re-stitch control. When set,
+    the one-way equirectangular->flat reclassification below is skipped so the explicit
+    choice is honoured verbatim.
 
     ``force`` (default False) skips ONLY the freshness early-return, so a hero baked
     at the old hard-coded projection can be re-stitched cold through the now
@@ -673,10 +701,19 @@ def panorama_stitch(
 
         hfov = _parse_pto_hfov(Path(pto).read_text())
         proj_code, kind = _choose_projection(hfov)
-        logger.info(
-            "panorama stitch %s: HFOV %.1f deg -> projection %d (%s)",
-            primary_source.name, hfov, proj_code, kind,
-        )
+        if forced_projection is not None:
+            # Manual override (map UI re-stitch): honour the user's explicit choice
+            # instead of the HFOV-derived projection.
+            proj_code, kind = _forced_projection_code(forced_projection)
+            logger.info(
+                "panorama stitch %s: forced projection %d (%s) [HFOV %.1f deg]",
+                primary_source.name, proj_code, kind, hfov,
+            )
+        else:
+            logger.info(
+                "panorama stitch %s: HFOV %.1f deg -> projection %d (%s)",
+                primary_source.name, hfov, proj_code, kind,
+            )
 
         _do(5, "pano_modify", [tools["pano_modify"], f"--projection={proj_code}",
                                f"--canvas={canvas}", "--crop=AUTO", "-o", pto, pto])
@@ -695,7 +732,7 @@ def panorama_stitch(
         # reclassification is ONE-WAY (equirectangular -> flat only): a true full sphere
         # renders within [1.3, 3.0] so the guard below is false and it stays
         # equirectangular; a flat is never promoted to equirectangular.
-        if kind == "equirectangular":
+        if kind == "equirectangular" and forced_projection is None:
             with Image.open(tif) as _im:
                 _w, _h = _im.size
             _aspect = _w / _h if _h else 0.0

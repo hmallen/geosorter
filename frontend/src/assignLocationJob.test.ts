@@ -6,15 +6,15 @@ function ok(body: unknown): Response {
 }
 
 const base = {
-  assigned: 0, skipped: 0, place_string: null, processed: 0, current: null,
+  assigned: 0, skipped: 0, place_string: null, total: 0, processed: 0, current: null,
   error: null, failures: [] as string[],
 }
 
 describe('runAssignLocation', () => {
   it('posts the ids + coordinate then polls to a terminal state, reporting progress', async () => {
     const statuses: AssignState[] = [
-      { ...base, state: 'running', processed: 1, current: 'q.JPG' },
-      { ...base, state: 'done', assigned: 2, skipped: 1, place_string: 'Moab, Utah, United States', processed: 2 },
+      { ...base, state: 'running', total: 2, processed: 1, current: 'q.JPG' },
+      { ...base, state: 'done', total: 2, assigned: 2, skipped: 1, place_string: 'Moab, Utah, United States', processed: 2 },
     ]
     let poll = 0
     let postedBody: string | undefined
@@ -38,6 +38,7 @@ describe('runAssignLocation', () => {
     expect(final.state).toBe('done')
     expect(final.assigned).toBe(2)
     expect(final.skipped).toBe(1)
+    expect(final.total).toBe(2)
     expect(seen).toEqual(['running', 'done'])
   })
 

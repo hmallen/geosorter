@@ -9,6 +9,7 @@ export interface AssignState {
   assigned: number
   skipped: number
   place_string: string | null
+  total: number // selected captures (set at submit) — the progress denominator
   processed: number
   current: string | null
   error: string | null

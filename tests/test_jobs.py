@@ -403,6 +403,7 @@ def test_submit_assign_runs_and_completes():
     assert st.skipped == 1
     assert st.place_string == "Boulder, Colorado, United States"
     assert st.processed == 1
+    assert st.total == 3  # the selected-capture count, set at submit, for the progress UI
 
 
 def test_assign_status_unknown_returns_none():
@@ -562,6 +563,25 @@ def test_submit_stitch_success_writes_ok(tmp_path):
     assert seen["rel_key"] == "pano/PANO_0001.JPG"  # collision-free, generator==reader
 
 
+def test_submit_stitch_threads_force_and_projection(tmp_path):
+    # A manual re-stitch (force=True) with a chosen projection threads both through
+    # submit_stitch -> _run_stitch -> the stitch fn (m-implement-ui-...-restitch).
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+    seen = {}
+
+    def fake_stitch(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None,
+                    force=False, forced_projection=None, **_):
+        seen["force"] = force
+        seen["forced_projection"] = forced_projection
+        return StitchResult(Path("stitched.jpg"), "flat")
+
+    mgr = JobManager(cfg, stitch_fn=fake_stitch)
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id, force=True, projection="cylindrical"))
+    assert st.state == "done"
+    assert seen["force"] is True
+    assert seen["forced_projection"] == "cylindrical"
+
+
 def test_submit_stitch_reports_step_progress(tmp_path):
     # The job snapshot reflects the live Hugin step reported via on_step, so the
     # map UI can show "step 3/6: cpclean" during the multi-minute run.
@@ -604,6 +624,49 @@ def test_submit_stitch_unavailable_when_hugin_missing(tmp_path):
     assert st.status == "unavailable"
     # Hugin absent -> the row keeps NULL (no hero), not 'failed'
     assert _read_stitch_status(cfg, file_id) is None
+
+
+def test_forced_restitch_failure_preserves_existing_ok_row(tmp_path):
+    # A forced re-stitch of an already-'ok' panorama that FAILS must NOT downgrade the
+    # row: the cached hero JPEG still exists on disk, so the lightbox keeps showing it.
+    # (Mirrors restitch.py's preserve-on-failure discipline; the default non-forced path
+    # still records 'failed' — see test_submit_stitch_failed_writes_failed.)
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    conn.execute(
+        "UPDATE files SET stitch_status='ok', stitch_projection='equirectangular' "
+        "WHERE id=?", (file_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    def boom(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
+        raise StitchFailed("retry lost the sky")
+
+    mgr = JobManager(cfg, stitch_fn=boom)
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id, force=True))
+    assert st.state == "done"
+    assert st.status == "failed"  # the job reports the failure to the UI
+    # ...but the existing 'ok' row + projection are untouched (the hero survives)
+    assert _read_stitch_status(cfg, file_id) == "ok"
+    assert _read_stitch_projection(cfg, file_id) == "equirectangular"
+
+
+def test_forced_first_time_stitch_failure_still_records_failed(tmp_path):
+    # force=True is ALSO sent for a first-time stitch with a projection override (no
+    # existing hero). With no 'ok' row to preserve, a failure must still record 'failed'
+    # so the persistent failed badge + reload UI reflect it — the preserve discipline
+    # keys on an actual 'ok' row, not on the force flag (review finding).
+    cfg, file_id, _, _ = _build_index_with_panorama(tmp_path)  # row starts stitch NULL
+
+    def boom(cache_root, rel_key, prim, frms, *, hugin_bin_dir, on_step=None, **_):
+        raise StitchFailed("first attempt failed")
+
+    mgr = JobManager(cfg, stitch_fn=boom)
+    st = _wait_stitch(mgr, mgr.submit_stitch(file_id, force=True, projection="cylindrical"))
+    assert st.state == "done"
+    assert st.status == "failed"
+    assert _read_stitch_status(cfg, file_id) == "failed"  # recorded; no hero to preserve
 
 
 def test_stitch_status_unknown_returns_none(tmp_path):
