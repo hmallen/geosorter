@@ -7,6 +7,8 @@ interface Props {
   items: QuarantineItem[]
   busy: boolean // a destructive job is running -> disable the assign actions
   onClose: () => void
+  // Preview one capture's media in the lightbox (browse mode thumbnail click).
+  onView: (item: QuarantineItem) => void
   // Enter map placement mode for the selected captures (the next map click assigns).
   onPickOnMap: (ids: number[]) => void
   // Assign the selected captures to an explicit coordinate (from place search).
@@ -20,10 +22,15 @@ export default function QuarantinePanel({
   items,
   busy,
   onClose,
+  onView,
   onPickOnMap,
   onAssignToPlace,
 }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  // Multi-select mode: when on, a thumbnail click toggles selection (fast bulk
+  // picking) instead of previewing the media. The top-left checkbox selects in
+  // either mode; this just changes what the thumbnail itself does.
+  const [multiSelect, setMultiSelect] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<PlaceResult[]>([])
   const [searching, setSearching] = useState(false)
@@ -74,6 +81,20 @@ export default function QuarantinePanel({
         <p className="inbox-note">No no-GPS captures to place.</p>
       ) : (
         <>
+          <div className="quarantine-modebar">
+            <button
+              type="button"
+              className={`quarantine-modebtn${multiSelect ? ' quarantine-modebtn--active' : ''}`}
+              onClick={() => setMultiSelect((m) => !m)}
+              aria-pressed={multiSelect}
+            >
+              {multiSelect ? '✓ Multi-select on' : 'Multi-select'}
+            </button>
+            <span className="quarantine-modehint">
+              {multiSelect ? 'Click thumbnails to select' : 'Click a thumbnail to view'}
+            </span>
+          </div>
+
           <label className="inbox-selectall">
             <input
               type="checkbox"
@@ -87,20 +108,35 @@ export default function QuarantinePanel({
 
           <div className="quarantine-grid">
             {items.map((it) => (
-              <label key={it.id} className="quarantine-item">
+              <div
+                key={it.id}
+                className={`quarantine-item${
+                  selected.has(it.id) ? ' quarantine-item--selected' : ''
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={selected.has(it.id)}
                   onChange={(e) => toggle(it.id, e.target.checked)}
+                  aria-label={`Select ${it.filename}`}
                 />
-                <LoadingImage
-                  className="quarantine-thumb"
-                  src={listThumb(it.media_type, it.path)}
-                  alt={it.filename}
-                />
+                <button
+                  type="button"
+                  className="quarantine-thumb-btn"
+                  onClick={() =>
+                    multiSelect ? toggle(it.id, !selected.has(it.id)) : onView(it)
+                  }
+                  title={multiSelect ? 'Click to select' : 'Click to view'}
+                >
+                  <LoadingImage
+                    className="quarantine-thumb"
+                    src={listThumb(it.media_type, it.path)}
+                    alt={it.filename}
+                  />
+                </button>
                 <span className="quarantine-name">{it.filename}</span>
                 {it.date && <span className="quarantine-date">{it.date}</span>}
-              </label>
+              </div>
             ))}
           </div>
 

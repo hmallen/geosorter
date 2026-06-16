@@ -137,6 +137,7 @@ class AssignJobState:
     assigned: int = 0       # captures promoted quarantine -> organized
     skipped: int = 0        # unknown / already-organized ids
     place_string: str | None = None
+    total: int = 0          # selected captures (set at submit) — the progress denominator
     processed: int = 0      # files seen so far (progress callback ticks)
     current: str | None = None  # most recent file being relocated
     error: str | None = None
@@ -475,12 +476,13 @@ class JobManager:
         Raises :class:`WorkerBusy` if another destructive job already holds the worker.
         """
         job_id = uuid.uuid4().hex
+        ids = list(file_ids)
         with self._lock:
             busy = self._active_destructive_job()
             if busy is not None:
                 raise WorkerBusy(busy)
-            self._assign_jobs[job_id] = AssignJobState(job_id=job_id)
-        self._executor.submit(self._run_assign, job_id, list(file_ids), lat, lon)
+            self._assign_jobs[job_id] = AssignJobState(job_id=job_id, total=len(ids))
+        self._executor.submit(self._run_assign, job_id, ids, lat, lon)
         return job_id
 
     def assign_status(self, job_id: str) -> AssignJobState | None:
@@ -556,12 +558,18 @@ class JobManager:
 
     # ----- stitch jobs (dedicated pool — independent of the destructive one) -- #
 
-    def submit_stitch(self, file_id: int) -> str:
+    def submit_stitch(
+        self, file_id: int, *, force: bool = False, projection: str | None = None
+    ) -> str:
         """Queue a panorama stitch for ``file_id`` and return its id.
 
         Dedups: if a stitch for the same ``file_id`` is already pending/running its
         id is returned instead of starting a second ~7-min pass. A fresh job marks
         ``files.stitch_status='pending'`` so a concurrently-loaded GeoJSON reflects it.
+
+        ``force`` re-runs the pipeline cold even when a fresh cached hero exists (the
+        map UI's manual re-stitch); ``projection`` overrides the auto-detected Hugin
+        projection (``'equirectangular'``/``'cylindrical'``/``'rectilinear'``).
         """
         with self._lock:
             for jid, st in self._stitch_jobs.items():
@@ -569,8 +577,20 @@ class JobManager:
                     return jid
             job_id = uuid.uuid4().hex
             self._stitch_jobs[job_id] = StitchJobState(job_id=job_id, file_id=file_id)
-        self._mark_stitch_status(file_id, "pending")
-        self._stitch_pool.submit(self._run_stitch, job_id, file_id)
+        # Preserve an EXISTING good hero across a re-stitch: when the row is already 'ok'
+        # we skip the 'pending' mark (a concurrent reload keeps showing the current hero)
+        # and, on failure, leave the 'ok' row intact — the cached JPEG survives (same
+        # preserve-on-failure discipline as restitch.py). This is keyed on the row being
+        # 'ok', NOT on `force`: a first-time stitch (even with a projection override, which
+        # also sets force) has no hero to protect, so it still marks 'pending' and records
+        # 'failed' on failure.
+        preserve = self._read_stitch_status(file_id) == "ok"
+        if not preserve:
+            self._mark_stitch_status(file_id, "pending")
+        self._stitch_pool.submit(
+            self._run_stitch, job_id, file_id,
+            force=force, projection=projection, preserve=preserve,
+        )
         return job_id
 
     def stitch_status(self, job_id: str) -> StitchJobState | None:
@@ -578,6 +598,22 @@ class JobManager:
         with self._lock:
             state = self._stitch_jobs.get(job_id)
             return replace(state) if state is not None else None
+
+    def _read_stitch_status(self, file_id: int) -> str | None:
+        """Current ``files.stitch_status`` for a panorama row (None if absent/cleared).
+
+        Lets ``submit_stitch`` decide whether a re-stitch is protecting an existing 'ok'
+        hero (preserve its row on failure) or is a first-time stitch (mark pending /
+        record failed normally) — independent of the ``force`` cache-bypass flag."""
+        conn = db.connect(self._cfg.index_db_path, integrity_check=False)
+        try:
+            row = conn.execute(
+                "SELECT stitch_status FROM files WHERE id=? AND capture_kind='panorama'",
+                (file_id,),
+            ).fetchone()
+            return row[0] if row is not None else None
+        finally:
+            conn.close()
 
     def _mark_stitch_status(
         self, file_id: int, status: str | None, projection: str | None = None
@@ -638,7 +674,10 @@ class JobManager:
         finally:
             conn.close()
 
-    def _run_stitch(self, job_id: str, file_id: int) -> None:
+    def _run_stitch(
+        self, job_id: str, file_id: int, *, force: bool = False,
+        projection: str | None = None, preserve: bool = False,
+    ) -> None:
         state = self._stitch_jobs[job_id]
         state.state = "running"
 
@@ -683,26 +722,36 @@ class JobManager:
                 canvas=self._cfg.stitch_canvas,
                 celeste=self._cfg.stitch_celeste,
                 optimise_lens=self._cfg.stitch_optimise_lens,
+                force=force,
+                forced_projection=projection,
                 on_step=_on_step,
             )
         except HuginNotFound:
             # Hugin absent: not a failure — clear back to NULL, keep the gallery.
+            # When preserving an existing 'ok' hero (a re-stitch), leave the row untouched
+            # so a retry that finds Hugin gone doesn't drop a still-valid hero.
             logger.warning(
                 "panorama stitch for file_id=%s unavailable: Hugin not found "
                 "(hugin_bin_dir=%s)", file_id, self._cfg.hugin_bin_dir,
             )
-            self._mark_stitch_status(file_id, None)
+            if not preserve:
+                self._mark_stitch_status(file_id, None)
             state.status = "unavailable"
             state.state = "done"
             return
         except StitchFailed as exc:
-            self._mark_stitch_status(file_id, "failed")
+            # Preserve an existing hero on a re-stitch failure (the cached JPEG survives —
+            # _stitch_gate/Hugin raise before _atomic_write); a first-time stitch records
+            # 'failed' so the persistent failed badge + reload UI reflect it.
+            if not preserve:
+                self._mark_stitch_status(file_id, "failed")
             state.status = "failed"
             state.error = str(exc)
             state.state = "done"
             return
         except Exception as exc:  # unexpected — record failed + surface the error
-            self._mark_stitch_status(file_id, "failed")
+            if not preserve:
+                self._mark_stitch_status(file_id, "failed")
             state.state = "error"
             state.error = str(exc)
             return

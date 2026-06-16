@@ -31,7 +31,8 @@ geosorter.toml
 tests/fixtures/media/local/
 
 # Frontend (B7): node deps + the on-demand SPA build output served by the backend
-frontend/node_modules/
+# Ignore node_modules anywhere (a stray root-level .vite vitest cache can appear).
+node_modules/
 src/geosorter/webui/
 
 # Stray local lockfile backups (e.g. created before a manual uv.lock edit)

@@ -26,10 +26,27 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 export async function runStitch(
   fetchFn: typeof fetch,
   fileId: number,
-  opts: { onProgress?: (s: StitchState) => void; intervalMs?: number } = {},
+  opts: {
+    onProgress?: (s: StitchState) => void
+    intervalMs?: number
+    // Manual re-stitch (m-implement-ui-...-restitch): force a cold re-run and/or
+    // override the auto-detected projection. Omitted -> a bare POST (first stitch).
+    force?: boolean
+    projection?: string
+  } = {},
 ): Promise<StitchState> {
-  const { onProgress, intervalMs = 2000 } = opts
-  const started = await fetchFn(`/api/stitch/${fileId}`, { method: 'POST' })
+  const { onProgress, intervalMs = 2000, force, projection } = opts
+  // Only attach a JSON body when an override is requested, so the first-time stitch
+  // stays a bare POST (the backend defaults force=false / auto-detect).
+  const post: RequestInit =
+    force !== undefined || projection !== undefined
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force, projection }),
+        }
+      : { method: 'POST' }
+  const started = await fetchFn(`/api/stitch/${fileId}`, post)
   if (!started.ok) throw new Error(`stitch start failed: ${started.status}`)
   const { job_id } = (await started.json()) as { job_id: string }
 

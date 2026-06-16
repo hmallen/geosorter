@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Map, { Layer, Marker, NavigationControl, Source } from 'react-map-gl/maplibre'
 import type { MapEvent, MapLayerMouseEvent, ViewStateChangeEvent } from 'react-map-gl/maplibre'
 import type { Map as MapLibreMap } from 'maplibre-gl'
@@ -22,10 +22,22 @@ interface Props {
   // side panel can list only captures on screen. Fired on the same
   // onLoad/onMoveEnd cadence as the internal cluster bbox (already debounced).
   onBoundsChange?: (bounds: BBox) => void
+  // Location-filter panel: imperatively fit the camera to a place's bounding box.
+  // `nonce` makes each pick a distinct value so re-picking the same place re-fires.
+  // Done via map.fitBounds (a ref), NOT by lifting the controlled `view` state, so
+  // the per-pan re-render stays inside MapView.
+  flyTo?: { bbox: BBox; nonce: number }
 }
 
-export default function MapView({ features, onMarkerClick, onMapClick, onBoundsChange }: Props) {
+export default function MapView({
+  features,
+  onMarkerClick,
+  onMapClick,
+  onBoundsChange,
+  flyTo,
+}: Props) {
   const index = useMemo(() => buildIndex(features), [features])
+  const mapRef = useRef<MapLibreMap | null>(null)
   const [view, setView] = useState({ longitude: -98, latitude: 39, zoom: 3 })
   const [bbox, setBbox] = useState<BBox>(WORLD)
   const [satellite, setSatellite] = useState(false)
@@ -39,6 +51,21 @@ export default function MapView({ features, onMarkerClick, onMapClick, onBoundsC
     setBbox(next)
     onBoundsChange?.(next)
   }, [onBoundsChange])
+
+  // Fly to a picked place's bounding box. fitBounds drives onMove -> the direct
+  // `moveend` listener (wired in onLoad) -> syncBounds, so the panel + clusters
+  // refresh for the new viewport. maxZoom caps a single-pin (degenerate) bbox.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !flyTo) return
+    map.fitBounds(
+      [
+        [flyTo.bbox[0], flyTo.bbox[1]],
+        [flyTo.bbox[2], flyTo.bbox[3]],
+      ],
+      { padding: 60, maxZoom: 15, duration: 800 },
+    )
+  }, [flyTo])
 
   return (
     <Map
@@ -61,6 +88,7 @@ export default function MapView({ features, onMarkerClick, onMapClick, onBoundsC
         // BOTH user gestures and programmatic moves — and `getBounds()` is already
         // current because the move has finished. This replaces the `onMoveEnd` prop.
         const map = e.target
+        mapRef.current = map
         syncBounds(map)
         map.on('moveend', () => syncBounds(map))
       }}

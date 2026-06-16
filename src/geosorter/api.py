@@ -41,6 +41,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -124,6 +125,19 @@ class AssignRequest(BaseModel):
     file_ids: list[int]
     lat: float = Field(ge=-90.0, le=90.0)
     lon: float = Field(ge=-180.0, le=180.0)
+
+
+class StitchRequest(BaseModel):
+    """Optional body of ``POST /api/stitch/{file_id}`` (manual re-stitch).
+
+    A bare POST (no body) keeps the original first-time behaviour. ``force`` re-runs
+    the Hugin pipeline cold even when a fresh hero is cached; ``projection`` overrides
+    the auto-detected projection — constrained to the three real Hugin projections so
+    an unknown value is rejected with a clean 422.
+    """
+
+    force: bool = False
+    projection: Literal["equirectangular", "cylindrical", "rectilinear"] | None = None
 
 
 def _strip(dest_path: str) -> str:
@@ -491,10 +505,18 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         return row
 
     @app.post("/api/stitch/{file_id}")
-    def stitch_start(file_id: int) -> dict:
-        """Kick off the (lazy, ~7-min, dedicated-pool) Hugin stitch for a panorama."""
+    def stitch_start(file_id: int, req: StitchRequest = StitchRequest()) -> dict:
+        """Kick off the (lazy, ~7-min, dedicated-pool) Hugin stitch for a panorama.
+
+        An optional body ``{force, projection}`` drives a manual re-stitch (the map UI's
+        re-stitch control): ``force`` re-runs cold, ``projection`` overrides auto-detect.
+        """
         _panorama_row(file_id)
-        return {"job_id": jobs.submit_stitch(file_id)}
+        return {
+            "job_id": jobs.submit_stitch(
+                file_id, force=req.force, projection=req.projection
+            )
+        }
 
     @app.get("/api/stitch/status/{job_id}")
     def stitch_status(job_id: str) -> dict:

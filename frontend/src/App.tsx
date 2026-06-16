@@ -4,6 +4,8 @@ import FileListPanel from './components/FileListPanel'
 import Lightbox from './components/Lightbox'
 import Toolbar from './components/Toolbar'
 import QuarantinePanel from './components/QuarantinePanel'
+import LocationPanel from './components/LocationPanel'
+import { buildPlaces } from './locationFilter'
 import { useLibrary } from './useLibrary'
 import { useRetagJob } from './useRetagJob'
 import { useAssignLocation } from './useAssignLocation'
@@ -11,8 +13,38 @@ import { useQuarantine } from './useQuarantine'
 import { useStitch } from './useStitch'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
-import type { LibraryFeature } from './types'
+import type { LibraryFeature, QuarantineItem } from './types'
 import './App.css'
+
+// Build a minimal LibraryFeature from a no-GPS QuarantineItem so its media can be
+// previewed in the shared Lightbox. Quarantined captures carry no coordinate, so the
+// geometry is a placeholder [0,0] (the Lightbox reads only `properties`, never geometry).
+// capture_kind/frame_count are deliberately nulled: the preview is VIEW-ONLY, so the
+// Lightbox must not surface the panorama stitch / source-frame controls (whose endpoints
+// gate on capture_kind, not status) and let the user start a multi-minute stitch on a
+// still-quarantined capture that an assign is about to relocate.
+function quarantineToFeature(item: QuarantineItem): LibraryFeature {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [0, 0] },
+    properties: {
+      id: item.id,
+      filename: item.filename,
+      place_string: null,
+      local_date: item.date,
+      capture_ts_local: null,
+      media_type: item.media_type,
+      codec: null,
+      gps_source: 'none',
+      capture_kind: null,
+      frame_count: null,
+      star_rating: null,
+      stitch_status: null,
+      stitch_projection: null,
+      path: item.path,
+    },
+  }
+}
 
 export default function App() {
   const { features, reload } = useLibrary()
@@ -23,6 +55,12 @@ export default function App() {
   // (which live-updates panelFiles) can't shift its index onto a different file or
   // out of range while it is open.
   const [lightbox, setLightbox] = useState<{ files: LibraryFeature[]; index: number } | null>(null)
+  // Location-filter panel: the distinct-place list (derived client-side) + the
+  // panel open flag + the imperative map-fit target. `nonce` makes each pick a
+  // distinct value so re-picking the same place re-fires MapView's fitBounds.
+  const [showLocations, setShowLocations] = useState(false)
+  const [flyTo, setFlyTo] = useState<{ bbox: BBox; nonce: number } | null>(null)
+  const places = useMemo(() => buildPlaces(features), [features])
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
   // progress survives the lightbox closing/reopening; reload on success so the hero
   // + stitch_status persist on the map and in the panel.
@@ -71,6 +109,7 @@ export default function App() {
   // Bulk assign-location for no-GPS captures: placement mode (a map click sets the
   // location for the selected captures) coexists with re-tag placement.
   const {
+    assign,
     assigning,
     placing: assignPlacing,
     count: assignCount,
@@ -108,12 +147,14 @@ export default function App() {
         onReload={reload}
         onOpenNoGps={() => setShowNoGps(true)}
         noGpsCount={quarantineCount}
+        onOpenLocations={() => setShowLocations(true)}
       />
       <MapView
         features={features}
         onMarkerClick={placing ? undefined : openInLightbox}
         onMapClick={onMapClick}
         onBoundsChange={setBounds}
+        flyTo={flyTo ?? undefined}
       />
       {retagPlacing && (
         <div className="placement-banner">
@@ -129,12 +170,30 @@ export default function App() {
         </div>
       )}
       {retagging && <div className="placement-banner">Re-filing…</div>}
-      {assigning && <div className="placement-banner">Assigning location…</div>}
+      {assigning && (
+        <div className="placement-banner">
+          {assign && assign.total > 0 ? (
+            <>
+              Assigning location… {assign.processed} of {assign.total}
+              <progress value={Math.min(assign.processed, assign.total)} max={assign.total} />
+            </>
+          ) : (
+            'Assigning location…'
+          )}
+        </div>
+      )}
       {showNoGps && (
         <QuarantinePanel
           items={quarantineItems}
           busy={assigning}
           onClose={() => setShowNoGps(false)}
+          onView={(item) => {
+            // Open the WHOLE no-GPS list (as view-only features) at the clicked item, so
+            // the lightbox prev/next walks every quarantined capture instead of dead-ending.
+            const feats = quarantineItems.map(quarantineToFeature)
+            const idx = quarantineItems.findIndex((q) => q.id === item.id)
+            setLightbox({ files: feats, index: idx < 0 ? 0 : idx })
+          }}
           onPickOnMap={(ids) => {
             // The two placement modes are mutually exclusive: cancel a pending re-tag
             // so the next map click can't be routed to it (onMapClick prefers re-tag).
@@ -143,6 +202,16 @@ export default function App() {
             setShowNoGps(false)
           }}
           onAssignToPlace={(ids, lat, lon) => assignToCoord(ids, lat, lon)}
+        />
+      )}
+      {showLocations && (
+        <LocationPanel
+          places={places}
+          onClose={() => setShowLocations(false)}
+          onPick={(bbox) => {
+            setFlyTo((p) => ({ bbox, nonce: (p?.nonce ?? 0) + 1 }))
+            setShowLocations(false)
+          }}
         />
       )}
       <FileListPanel

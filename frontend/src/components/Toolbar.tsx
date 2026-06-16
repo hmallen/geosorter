@@ -20,6 +20,9 @@ interface ToolbarProps {
   // placement). `noGpsCount` labels the button so the user sees the backlog.
   onOpenNoGps: () => void
   noGpsCount: number
+  // Open the location-filter panel (owned by App, which holds the place list +
+  // map flyTo). Lets the user jump the map to any place in the library by name.
+  onOpenLocations: () => void
 }
 
 export default function Toolbar({
@@ -28,6 +31,7 @@ export default function Toolbar({
   onReload,
   onOpenNoGps,
   noGpsCount,
+  onOpenLocations,
 }: ToolbarProps) {
   // Suspend the inbox-badge poll while a destructive job runs (synced to `busy` in the
   // effect below). Stable ref -> the useInboxCount interval is established once, not
@@ -92,6 +96,7 @@ export default function Toolbar({
       <button onClick={startRescan} disabled={busy}>
         {rescanning ? 'Rescanning…' : 'Rescan Library'}
       </button>
+      <button onClick={onOpenLocations}>Locations</button>
       {noGpsCount > 0 && (
         <button onClick={onOpenNoGps}>No-GPS ({noGpsCount})</button>
       )}
