@@ -34,7 +34,7 @@ def _strip(dest_path: str) -> str:
 class WarmResult:
     """Outcome of one :func:`warm_library` pass."""
 
-    batch_id: str
+    batch_id: str | None  # None when the pass warmed every organized batch (#117)
     warmed: int  # captures whose thumb/poster was generated or already fresh
     eviction: EvictionResult
     # Proxy pre-warm + cap (m-implement-proxy-prewarm-cap): videos whose HEVC→H.264
@@ -46,15 +46,18 @@ class WarmResult:
     proxy_eviction: EvictionResult | None = None
 
 
-def warm_library(cfg, batch_id, *, progress=None, cancel=None) -> WarmResult:
-    """Pre-generate thumbnails (photos) + posters (videos) for one organized batch.
+def warm_library(cfg, batch_id=None, *, progress=None, cancel=None) -> WarmResult:
+    """Pre-generate thumbnails (photos) + posters (videos) for organized media.
 
     Generates ONLY the local-tier browse assets — thumbnails for photos, poster
-    frames for videos — for every ``status='organized'`` row of ``batch_id`` on
+    frames for videos — for the ``status='organized'`` rows of ``batch_id`` on
     ``cfg.cache_dir``, skipping already-fresh assets (so a re-run is a cheap resume).
-    A row whose library file is missing on disk is skipped. Each generation runs
-    through :func:`derived._generate`'s shared cap, so the pass yields to foreground
-    requests. After generation it evicts the local tier to ``cfg.cache_max_gb``.
+    When ``batch_id`` is ``None`` it warms EVERY organized row in the library (#117 —
+    the retroactive whole-library pass driven by the ``warm-proxies`` CLI verb), not
+    just one batch. A row whose library file is missing on disk is skipped. Each
+    generation runs through :func:`derived._generate`'s shared cap, so the pass yields
+    to foreground requests. After generation it evicts the local tier to
+    ``cfg.cache_max_gb``.
 
     ``progress`` (one-arg, the filename) and ``cancel`` (no-arg predicate, polled
     between files) mirror the other background-job entry points. Previews are never
@@ -68,11 +71,17 @@ def warm_library(cfg, batch_id, *, progress=None, cancel=None) -> WarmResult:
     proxy_cache_dir = config.resolve_proxy_cache_dir(cfg)
     conn = db.connect(cfg.index_db_path, integrity_check=False)
     try:
-        rows = conn.execute(
-            "SELECT dest_path, media_type, codec FROM files "
-            "WHERE batch_id=? AND status='organized' ORDER BY id",
-            (batch_id,),
-        ).fetchall()
+        if batch_id is None:  # retroactive whole-library pass (#117)
+            rows = conn.execute(
+                "SELECT dest_path, media_type, codec FROM files "
+                "WHERE status='organized' ORDER BY id"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT dest_path, media_type, codec FROM files "
+                "WHERE batch_id=? AND status='organized' ORDER BY id",
+                (batch_id,),
+            ).fetchall()
     finally:
         conn.close()
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import tempfile
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import click
@@ -28,6 +28,7 @@ from .recover import RecoveryReport, run_recovery
 from .rescan import RescanReport, run_rescan
 from .restitch import RestitchReport, run_restitch
 from .undo import UndoReport, latest_batch_id, run_undo
+from .warm import WarmResult, warm_library
 
 _CONFIG_OPTION = click.option(
     "--config",
@@ -501,6 +502,79 @@ def _render_restitch_report(report: RestitchReport) -> None:
         click.echo(f"  failed:     {report.failed} (existing hero kept):")
         for err in report.errors:
             click.echo(f"    ! {err}")
+
+
+@cli.command(name="warm-proxies")
+@_CONFIG_OPTION
+@click.option("--batch", "batch_id", default=None, help="Warm just this batch id.")
+@click.option(
+    "--all",
+    "all_batches",
+    is_flag=True,
+    help="Warm every organized file in the library (a full HEVC sweep — slow).",
+)
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
+def warm_proxies(
+    config_path: str | None, batch_id: str | None, all_batches: bool, yes: bool
+) -> None:
+    """Pre-generate HEVC->H.264 proxies (and thumbs/posters) for organized media.
+
+    Retroactively warms the derived cache for files filed by past ``organize`` runs,
+    so HEVC footage plays back instantly instead of transcoding lazily on first play.
+    Pass ``--all`` to sweep the whole library or ``--batch ID`` for one batch (exactly
+    one is required). Thumbs/posters are skip-if-fresh, so re-warming is cheap. Unlike
+    the automatic post-organize pass, this verb ALWAYS transcodes proxies regardless of
+    the ``warm_proxies`` config setting; the ``proxy_cache_max_gb`` cap (if set) still
+    applies and the panorama ``stitch`` cache is never evicted.
+    """
+    if all_batches and batch_id:
+        raise click.UsageError("--all and --batch are mutually exclusive.")
+    if not all_batches and not batch_id:
+        raise click.UsageError("pass --all (whole library) or --batch ID.")
+
+    cfg = config.load(config_path)
+    if cfg.library_root is None:
+        # Warming reads library files and resolves the proxy cache tier from
+        # library_root; without it resolve_proxy_cache_dir hits Path(None). Fail
+        # cleanly (the library must have been organized at least once first).
+        raise click.ClickException("library_root is not set in the config.")
+    cfg = replace(cfg, warm_proxies=True)  # the verb's purpose: force proxy warming on
+    # Ensure the index schema exists so a pre-`organize` invocation reports "0 warmed"
+    # instead of crashing on the absent `files` table (mirrors the `undo` verb).
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    db.init_index_schema(conn)
+    conn.close()
+    target = "all organized files" if all_batches else f"batch {batch_id}"
+    if not yes and not click.confirm(
+        f"Warm proxies (and thumbnails/posters) for {target}? "
+        "Transcoding HEVC video can take a long time.",
+        default=False,
+    ):
+        click.echo("Aborted. Nothing was warmed.")
+        return
+    try:
+        report = warm_library(cfg, batch_id=None if all_batches else batch_id)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_warm_report(report)
+
+
+def _render_warm_report(report: WarmResult) -> None:
+    scope = "all organized files" if report.batch_id is None else f"batch {report.batch_id}"
+    click.echo(f"Warm complete ({scope}).")
+    click.echo(f"  warmed:          {report.warmed} thumbnail/poster asset(s)")
+    click.echo(f"  proxies warmed:  {report.proxies_warmed}")
+    ev = report.eviction
+    click.echo(
+        f"  local cache:     {ev.deleted} evicted, now "
+        f"{ev.bytes_after / (1024 * 1024):.1f} MiB"
+    )
+    if report.proxy_eviction is not None:
+        pev = report.proxy_eviction
+        click.echo(
+            f"  proxy cache:     {pev.deleted} evicted, now "
+            f"{pev.bytes_after / (1024 * 1024):.1f} MiB"
+        )
 
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}

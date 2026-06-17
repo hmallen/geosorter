@@ -92,6 +92,26 @@ def test_warm_library_skips_missing_source(tmp_path):
     assert result.warmed == 0
 
 
+def test_warm_library_all_batches(tmp_path):
+    # batch_id=None warms EVERY status='organized' row across all batches (#117).
+    cfg = _cfg(tmp_path)
+    lib = cfg.library_root / "A"
+    lib.mkdir(parents=True)
+    p1 = lib / "p1.jpg"
+    p2 = lib / "p2.jpg"
+    shutil.copy(FIXTURES / "dji_photo.jpg", p1)
+    shutil.copy(FIXTURES / "dji_photo.jpg", p2)
+    _seed_batch(cfg, [(str(p1), "photo")], "b1")
+    _seed_batch(cfg, [(str(p2), "photo")], "b2")
+
+    result = warm.warm_library(cfg)  # no batch_id → all organized rows
+
+    assert result.warmed == 2
+    assert result.batch_id is None
+    thumbs = list((cfg.cache_dir / derived.CACHE_DIRNAME / "thumbs").rglob("*.jpg"))
+    assert len(thumbs) == 2  # one per batch's photo
+
+
 # --- Proxy pre-warm + proxy-tier cap (m-implement-proxy-prewarm-cap) -------- #
 
 

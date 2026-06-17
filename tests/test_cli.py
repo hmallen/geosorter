@@ -278,6 +278,112 @@ def test_restitch_all_dry_run_flags(tmp_path, monkeypatch):
     assert "3 panorama(s) would be re-stitched" in result.output
 
 
+# --- warm-proxies verb (#117) ----------------------------------------------- #
+
+
+def _warm_cfg(tmp_path: Path) -> Path:
+    # Like _write_cfg but also sets library_root, which warm-proxies requires.
+    cfg = tmp_path / "geosorter.toml"
+    cfg.write_text(
+        f"index_db_path = '{tmp_path / 'index.db'}'\n"
+        f"geonames_db_path = '{tmp_path / 'geonames.db'}'\n"
+        f"library_root = '{tmp_path / 'lib'}'\n"
+        "spatial_index = 'rtree'\n",
+        encoding="utf-8",
+    )
+    return cfg
+
+
+def _fake_warm(captured):
+    from geosorter.derived import EvictionResult
+    from geosorter.warm import WarmResult
+
+    def fake(cfg_obj, batch_id=None, **kwargs):
+        captured["batch_id"] = batch_id
+        captured["warm_proxies"] = cfg_obj.warm_proxies
+        return WarmResult(
+            batch_id=batch_id,
+            warmed=3,
+            eviction=EvictionResult(bytes_before=0, bytes_after=0, deleted=0, skipped=0),
+            proxies_warmed=2,
+        )
+
+    return fake
+
+
+def test_warm_proxies_all_flag(tmp_path, monkeypatch):
+    cfg = _warm_cfg(tmp_path)
+    captured = {}
+    monkeypatch.setattr("geosorter.cli.warm_library", _fake_warm(captured))
+
+    result = CliRunner().invoke(cli, ["warm-proxies", "--all", "--yes", "--config", str(cfg)])
+
+    assert result.exit_code == 0, result.output
+    # --all → whole-library pass (batch_id None); the verb forces proxy warming on
+    # regardless of the config's warm_proxies (default False here).
+    assert captured == {"batch_id": None, "warm_proxies": True}
+    assert "Warm complete" in result.output
+    assert "proxies warmed:  2" in result.output
+
+
+def test_warm_proxies_batch_flag(tmp_path, monkeypatch):
+    cfg = _warm_cfg(tmp_path)
+    captured = {}
+    monkeypatch.setattr("geosorter.cli.warm_library", _fake_warm(captured))
+
+    result = CliRunner().invoke(
+        cli, ["warm-proxies", "--batch", "b1", "--yes", "--config", str(cfg)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {"batch_id": "b1", "warm_proxies": True}
+
+
+def test_warm_proxies_requires_selection(tmp_path):
+    cfg = _write_cfg(tmp_path)
+    result = CliRunner().invoke(cli, ["warm-proxies", "--config", str(cfg)])
+    assert result.exit_code != 0
+    assert "--all" in result.output and "--batch" in result.output
+
+
+def test_warm_proxies_mutually_exclusive(tmp_path):
+    cfg = _write_cfg(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["warm-proxies", "--all", "--batch", "b1", "--config", str(cfg)]
+    )
+    assert result.exit_code != 0
+
+
+def test_warm_proxies_fresh_db_no_crash(tmp_path):
+    # The REAL pass (no monkeypatch) on a never-organized library must not traceback
+    # on the absent `files` table — the verb initializes the index schema first.
+    cfg = tmp_path / "geosorter.toml"
+    cfg.write_text(
+        f"index_db_path = '{tmp_path / 'index.db'}'\n"
+        f"geonames_db_path = '{tmp_path / 'geonames.db'}'\n"
+        f"library_root = '{tmp_path / 'lib'}'\n"
+        f"cache_dir = '{tmp_path / 'cache'}'\n"  # keep eviction off the real user cache
+        "spatial_index = 'rtree'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "lib").mkdir()
+    result = CliRunner().invoke(cli, ["warm-proxies", "--all", "--yes", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "Warm complete" in result.output
+    assert "warmed:          0" in result.output
+
+
+def test_warm_proxies_unset_library_root_clean_error(tmp_path):
+    # A starter config with no library_root must fail with a clean ClickException,
+    # not a raw Path(None) TypeError traceback (the proxy tier resolves off
+    # library_root before the files query).
+    cfg = _write_cfg(tmp_path)  # index/geonames/spatial_index only — no library_root
+    result = CliRunner().invoke(cli, ["warm-proxies", "--all", "--yes", "--config", str(cfg)])
+    assert result.exit_code != 0
+    assert "library_root" in result.output
+    assert "Traceback" not in result.output
+
+
 def _feature_src(tmp_path: Path) -> Path:
     """A GeoNames source dir = committed fixtures + an allCountries.txt sample."""
     import shutil
