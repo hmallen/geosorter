@@ -72,7 +72,9 @@ error, so a bad catalog can never abort the crash-safe move path.
 `<index_db_dir>/catalogs/<batch_id>/` outside `library_root` and deletes the inbox
 copy — preserving the originals while decluttering the inbox. The archive is a
 `moves` row with `file_id` NULL, so `undo` reverses it. `.db` files are never served
-via `/api/media`. Ratings surface in the `/api/library` GeoJSON (`star_rating`) and
-a read-only star widget in the frontend file list. See also
+via `/api/media`. Ratings are still carried in the `/api/library` GeoJSON
+(`star_rating`) and stored in the DB, but as of `m-hide-star-rating-ui` they are no
+longer displayed in the frontend (the read-only star widget was removed; the data is
+retained for future use). See also
 [DJI SRT Telemetry Formats](pages/dji-srt-telemetry-formats.md) for the other
 DJI-format reader.
