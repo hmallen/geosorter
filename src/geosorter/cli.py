@@ -552,10 +552,36 @@ def warm_proxies(
     ):
         click.echo("Aborted. Nothing was warmed.")
         return
+    # Live progress: on_plan reports the total once, then progress fires per warmed
+    # file. Rendered as a carriage-return-updated single line so a multi-hour --all
+    # sweep shows how far along it is (a file whose source is missing on disk is
+    # skipped without a tick, so the counter may finish just below the total — the
+    # final report carries the authoritative counts).
+    state = {"total": 0, "done": 0}
+
+    def on_plan(total: int) -> None:
+        state["total"] = total
+        click.echo(f"Warming {total} file(s)...")
+
+    def progress(name: str) -> None:
+        state["done"] += 1
+        width = len(str(state["total"]))
+        click.echo(
+            f"\r[{state['done']:>{width}}/{state['total']}] {name[:60]}",
+            nl=False,
+        )
+
     try:
-        report = warm_library(cfg, batch_id=None if all_batches else batch_id)
+        report = warm_library(
+            cfg,
+            batch_id=None if all_batches else batch_id,
+            on_plan=on_plan,
+            progress=progress,
+        )
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
+    if state["done"]:
+        click.echo()  # terminate the carriage-return progress line
     _render_warm_report(report)
 
 

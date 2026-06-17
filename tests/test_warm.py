@@ -112,6 +112,21 @@ def test_warm_library_all_batches(tmp_path):
     assert len(thumbs) == 2  # one per batch's photo
 
 
+def test_warm_library_calls_on_plan_with_total(tmp_path):
+    # on_plan is invoked once with the number of rows to warm, BEFORE the loop, so a
+    # caller (the warm-proxies CLI) can render "[done/total]" progress. The planned
+    # total is independent of per-file skips, so the sources need not exist on disk.
+    cfg = _cfg(tmp_path)
+    cfg.library_root.mkdir(parents=True)
+    rows = [(str(cfg.library_root / f"p{i}.jpg"), "photo") for i in range(3)]
+    _seed_batch(cfg, rows, "b1")
+
+    seen: list[int] = []
+    warm.warm_library(cfg, "b1", on_plan=seen.append)
+
+    assert seen == [3]
+
+
 # --- Proxy pre-warm + proxy-tier cap (m-implement-proxy-prewarm-cap) -------- #
 
 
