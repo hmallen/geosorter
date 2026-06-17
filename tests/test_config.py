@@ -242,3 +242,42 @@ def test_resolve_proxy_cache_dir_uses_explicit_when_set(tmp_path):
         proxy_cache_dir=tmp_path / "proxies", library_root=tmp_path / "lib"
     )
     assert config.resolve_proxy_cache_dir(cfg) == tmp_path / "proxies"
+
+
+def test_admin_password_hash_default_none(tmp_path):
+    # No config file (and no key) -> auth is unconfigured (open app).
+    assert config.load(tmp_path / "nope.toml").admin_password_hash is None
+
+
+def test_admin_password_hash_loaded(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(
+        "admin_password_hash = 'pbkdf2_sha256$1$00$ff'\n", encoding="utf-8"
+    )
+    assert config.load(cfg_path).admin_password_hash == "pbkdf2_sha256$1$00$ff"
+
+
+def test_admin_password_hash_blank_is_none(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("admin_password_hash = ''\n", encoding="utf-8")
+    assert config.load(cfg_path).admin_password_hash is None
+
+
+def test_set_admin_password_hash_writes_and_loads(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    config.write_starter(cfg_path)
+    assert config.set_admin_password_hash(cfg_path, "pbkdf2_sha256$1$00$ab") is True
+    assert config.load(cfg_path).admin_password_hash == "pbkdf2_sha256$1$00$ab"
+    # Re-setting overwrites the existing key rather than appending a duplicate.
+    assert config.set_admin_password_hash(cfg_path, "pbkdf2_sha256$1$00$cd") is True
+    assert config.load(cfg_path).admin_password_hash == "pbkdf2_sha256$1$00$cd"
+    keys = [
+        ln.split("=", 1)[0].strip()
+        for ln in cfg_path.read_text(encoding="utf-8").splitlines()
+        if ln.split("=", 1)[0].strip() == "admin_password_hash"
+    ]
+    assert keys == ["admin_password_hash"]  # exactly one key line
+
+
+def test_set_admin_password_hash_missing_file_is_noop(tmp_path):
+    assert config.set_admin_password_hash(tmp_path / "nope.toml", "x") is False

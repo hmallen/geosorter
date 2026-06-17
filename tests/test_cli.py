@@ -403,3 +403,30 @@ def test_stitch_bench_errors_for_non_panorama(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ["stitch-bench", "--config", str(cfg), "1"])
     assert result.exit_code != 0
     assert "not an organized panorama" in result.output
+
+
+def test_set_admin_password_writes_hash(tmp_path):
+    from geosorter import auth, config
+
+    runner = CliRunner()
+    cfg = tmp_path / "geosorter.toml"
+    runner.invoke(cli, ["init-config", "--config", str(cfg)])
+    # confirmation_prompt -> the password is entered twice.
+    result = runner.invoke(
+        cli, ["set-admin-password", "--config", str(cfg)], input="hunter2\nhunter2\n"
+    )
+    assert result.exit_code == 0, result.output
+    loaded = config.load(cfg)
+    assert loaded.admin_password_hash is not None
+    assert auth.verify_password("hunter2", loaded.admin_password_hash)
+    assert not auth.verify_password("wrong", loaded.admin_password_hash)
+
+
+def test_set_admin_password_missing_config_errors(tmp_path):
+    result = CliRunner().invoke(
+        cli,
+        ["set-admin-password", "--config", str(tmp_path / "nope.toml")],
+        input="hunter2\nhunter2\n",
+    )
+    assert result.exit_code != 0
+    assert "init-config" in result.output

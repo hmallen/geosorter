@@ -8,7 +8,9 @@ import LoadingImage from './LoadingImage'
 interface Props {
   files: LibraryFeature[]
   onOpen: (index: number) => void
-  onRetag: (index: number) => void
+  // Admin-only re-tag (m-implement-view-only-admin-auth): undefined for a non-admin
+  // (view-only) viewer, in which case the per-file "Re-tag location" button is hidden.
+  onRetag?: (index: number) => void
 }
 
 export default function FileListPanel({ files, onOpen, onRetag }: Props) {
@@ -153,13 +155,15 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
                           {f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}
                         </span>
                       </button>
-                      <button
-                        className="retag"
-                        onClick={() => onRetag(i)}
-                        title="Re-tag this file's location by clicking the map"
-                      >
-                        ⌖ Re-tag location
-                      </button>
+                      {onRetag && (
+                        <button
+                          className="retag"
+                          onClick={() => onRetag(i)}
+                          title="Re-tag this file's location by clicking the map"
+                        >
+                          ⌖ Re-tag location
+                        </button>
+                      )}
                     </div>
                   )
                 })}

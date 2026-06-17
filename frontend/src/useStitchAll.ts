@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { runStitchAll, type StitchAllProgress, type StitchAllSummary } from './stitchAllJob'
+import { useAuthContext } from './useAuth'
 
 // Drives the optional, interruptible "Stitch all panoramas" toolbar action. The
 // stitch pool is independent of the destructive worker, so this can run while the
@@ -7,6 +8,7 @@ import { runStitchAll, type StitchAllProgress, type StitchAllSummary } from './s
 // the in-flight stitch. `onComplete` reloads the library so finished panoramas drop
 // out of the target set. There is NO automatic invocation — only an explicit click.
 export function useStitchAll(onComplete: () => void) {
+  const { authFetch } = useAuthContext()
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<StitchAllProgress | null>(null)
   // The last completed run's summary (incl. failedIds), so the UI can report which
@@ -21,7 +23,7 @@ export function useStitchAll(onComplete: () => void) {
       setRunning(true)
       setResult(null)
       setProgress({ done: 0, total: ids.length, current: ids[0] })
-      runStitchAll(fetch, ids, {
+      runStitchAll(authFetch, ids, {
         shouldContinue: () => !cancelled.current,
         onProgress: setProgress,
       })
@@ -33,7 +35,7 @@ export function useStitchAll(onComplete: () => void) {
           onComplete()
         })
     },
-    [onComplete, running],
+    [onComplete, running, authFetch],
   )
 
   const cancel = useCallback(() => {

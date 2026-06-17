@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { runRetag, type RetagState } from './retagJob'
+import { useAuthContext } from './useAuth'
 
 // React wrapper around the pure runRetag driver. "Placement mode" holds the file
 // id awaiting a map click; pickLocation runs the re-tag for the clicked coordinate
 // (confirm-gated) and fires onDone so the caller can reload the library feed.
 export function useRetagJob(onDone?: () => void) {
+  const { authFetch } = useAuthContext()
   const [targetId, setTargetId] = useState<number | null>(null)
   const [retag, setRetag] = useState<RetagState | null>(null)
   const [retagging, setRetagging] = useState(false)
@@ -19,7 +21,7 @@ export function useRetagJob(onDone?: () => void) {
     setTargetId(null)
     setRetagging(true)
     try {
-      const final = await runRetag(fetch, fileId, lat, lng, { onProgress: setRetag })
+      const final = await runRetag(authFetch, fileId, lat, lng, { onProgress: setRetag })
       setRetag(final)
       onDone?.()
     } catch (e) {

@@ -7,8 +7,13 @@ import { useInboxCount } from '../useInboxCount'
 import { useInboxList } from '../useInboxList'
 import { progressLabel, loadProgressLabel, resultLabel } from '../organizeJob'
 import InboxPanel from './InboxPanel'
+import LoginControl from './LoginControl'
 
 interface ToolbarProps {
+  // Whether the viewer is an admin (m-implement-view-only-admin-auth). When false the
+  // management actions are hidden and only the view-only controls (Locations, the
+  // inbox badge) plus the Log-in control render.
+  admin: boolean
   onDone: () => void
   // file_ids of panoramas that still want a stitch (capture_kind panorama, has
   // tiles, stitch_status !== 'ok'); the "Stitch all" button targets exactly these.
@@ -26,6 +31,7 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({
+  admin,
   onDone,
   stitchTargets,
   onReload,
@@ -71,18 +77,22 @@ export default function Toolbar({
 
   return (
     <div className="toolbar">
-      <button onClick={() => { setPicking(true); loadInbox() }} disabled={busy}>
-        {running ? 'Processing…' : 'Process Inbox'}
-      </button>
-      {picking && (
-        <InboxPanel
-          busy={busy}
-          groups={groups}
-          loading={inboxLoading}
-          error={inboxError}
-          onClose={() => setPicking(false)}
-          onProcess={(primaries, count) => start(primaries, count)}
-        />
+      {admin && (
+        <>
+          <button onClick={() => { setPicking(true); loadInbox() }} disabled={busy}>
+            {running ? 'Processing…' : 'Process Inbox'}
+          </button>
+          {picking && (
+            <InboxPanel
+              busy={busy}
+              groups={groups}
+              loading={inboxLoading}
+              error={inboxError}
+              onClose={() => setPicking(false)}
+              onProcess={(primaries, count) => start(primaries, count)}
+            />
+          )}
+        </>
       )}
       <span className="inbox">
         {count.files > 0
@@ -90,31 +100,36 @@ export default function Toolbar({
             `(${count.files} file${count.files === 1 ? '' : 's'})`
           : 'inbox empty'}
       </span>
-      <button onClick={startUndo} disabled={busy}>
-        {undoing ? 'Undoing…' : 'Undo Last Batch'}
-      </button>
-      <button onClick={startRescan} disabled={busy}>
-        {rescanning ? 'Rescanning…' : 'Rescan Library'}
-      </button>
+      {admin && (
+        <>
+          <button onClick={startUndo} disabled={busy}>
+            {undoing ? 'Undoing…' : 'Undo Last Batch'}
+          </button>
+          <button onClick={startRescan} disabled={busy}>
+            {rescanning ? 'Rescanning…' : 'Rescan Library'}
+          </button>
+        </>
+      )}
       <button onClick={onOpenLocations}>Locations</button>
-      {noGpsCount > 0 && (
+      {admin && noGpsCount > 0 && (
         <button onClick={onOpenNoGps}>No-GPS ({noGpsCount})</button>
       )}
-      {stitchAll.running ? (
-        <span className="job job--progress">
-          <button onClick={stitchAll.cancel}>Cancel stitch-all</button>
-          {stitchAll.progress
-            ? ` stitching ${stitchAll.progress.done}/${stitchAll.progress.total}`
-            : ' stitching…'}
-        </span>
-      ) : (
-        stitchTargets.length > 0 && (
-          <button onClick={() => stitchAll.start(stitchTargets)}>
-            Stitch all panoramas ({stitchTargets.length})
-          </button>
-        )
-      )}
-      {!stitchAll.running && stitchAll.result && stitchAll.result.failed > 0 && (
+      {admin &&
+        (stitchAll.running ? (
+          <span className="job job--progress">
+            <button onClick={stitchAll.cancel}>Cancel stitch-all</button>
+            {stitchAll.progress
+              ? ` stitching ${stitchAll.progress.done}/${stitchAll.progress.total}`
+              : ' stitching…'}
+          </span>
+        ) : (
+          stitchTargets.length > 0 && (
+            <button onClick={() => stitchAll.start(stitchTargets)}>
+              Stitch all panoramas ({stitchTargets.length})
+            </button>
+          )
+        ))}
+      {admin && !stitchAll.running && stitchAll.result && stitchAll.result.failed > 0 && (
         <span className="job" title="See the ⚠ stitch badges in the file list">
           ⚠ {stitchAll.result.failed} stitch(es) failed
         </span>
@@ -159,6 +174,7 @@ export default function Toolbar({
               (rescan.orphaned.length ? `, orphaned ${rescan.orphaned.length}` : '')}
         </span>
       )}
+      <LoginControl />
     </div>
   )
 }

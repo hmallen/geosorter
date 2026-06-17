@@ -26,9 +26,16 @@ Exposes the organized library over HTTP for the B7 frontend:
 * ``GET  /api/video/{relpath}`` — a browser-playable video: H.264 originals served
   directly, HEVC served as a cached H.264 proxy.
 
-The app binds to ``127.0.0.1`` (the ``serve`` CLI verb owns the socket); there is
-no auth, so the GeoJSON — which embeds home GPS coordinates — never leaves the
-loopback interface unless the operator explicitly opts in via ``--host``.
+The app binds to ``127.0.0.1`` (the ``serve`` CLI verb owns the socket); the
+GeoJSON embeds home GPS coordinates, so it never leaves the loopback interface
+unless the operator explicitly opts in via ``--host``.
+
+Admin auth (m-implement-view-only-admin-auth) is OPTIONAL: when an
+``admin_password_hash`` is set in config, the mutating routes (organize / undo /
+rescan / retag / assign-location / stitch) require a bearer token from
+``POST /api/login`` via the ``require_admin`` dependency, and the map UI is
+view-only until login. All reads stay public. With no password configured the
+guard is a no-op and the whole app is open, as before.
 """
 
 from __future__ import annotations
@@ -43,12 +50,12 @@ from email.utils import format_datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
-from . import config, db, derived, geocoder, inbox, pathing
+from . import auth, config, db, derived, geocoder, inbox, pathing
 from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
@@ -140,6 +147,22 @@ class StitchRequest(BaseModel):
     projection: Literal["equirectangular", "cylindrical", "rectilinear"] | None = None
 
 
+class LoginRequest(BaseModel):
+    """Body of ``POST /api/login``: the single shared admin password."""
+
+    password: str
+
+
+def _bearer(authorization: str | None) -> str | None:
+    """Extract the token from an ``Authorization: Bearer <token>`` header, else ``None``."""
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token.strip()
+
+
 def _strip(dest_path: str) -> str:
     """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
     return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
@@ -214,6 +237,29 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     # library_root by default, never .resolve()d; see resolve_proxy_cache_dir).
     proxy_cache_dir = config.resolve_proxy_cache_dir(cfg)
     jobs = job_manager if job_manager is not None else JobManager(cfg)
+
+    # Admin auth (m-implement-view-only-admin-auth): a single shared password gates
+    # the mutating routes. `auth_configured` is False when no password hash is set in
+    # config -> `require_admin` is a no-op and the whole app stays open (today's
+    # loopback-dev behaviour, and what every existing test relies on). `tokens` holds
+    # the live bearer tokens issued by /api/login (in-memory; reset on restart).
+    tokens = auth.TokenStore()
+    auth_configured = bool(cfg.admin_password_hash)
+
+    def require_admin(authorization: str | None = Header(default=None)) -> None:
+        """FastAPI dependency: 401 unless a valid admin token is presented.
+
+        A no-op when no admin password is configured, so an unguarded install behaves
+        exactly as before. Applied to the mutating routes only — all reads stay public.
+        """
+        if not auth_configured:
+            return
+        if not tokens.valid(_bearer(authorization)):
+            raise HTTPException(
+                status_code=401,
+                detail="admin authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     # Run schema creation + migration ONCE at startup on a dedicated connection,
     # not per-request: the v1->v2 ALTER TABLE migration must not race the many
@@ -421,7 +467,27 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             conn.close()
         return {"results": [asdict(m) for m in matches]}
 
-    @app.post("/api/organize")
+    @app.get("/api/auth")
+    def auth_status() -> dict:
+        """Whether admin login is required (a password is configured)."""
+        return {"auth_required": auth_configured}
+
+    @app.post("/api/login")
+    def login(req: LoginRequest) -> dict:
+        """Exchange the admin password for a bearer token."""
+        if not auth_configured:
+            raise HTTPException(status_code=400, detail="admin auth not configured")
+        if not auth.verify_password(req.password, cfg.admin_password_hash):
+            raise HTTPException(status_code=401, detail="invalid password")
+        return {"token": tokens.issue()}
+
+    @app.post("/api/logout")
+    def logout(authorization: str | None = Header(default=None)) -> dict:
+        """Revoke the presented bearer token (idempotent)."""
+        tokens.revoke(_bearer(authorization))
+        return {"ok": True}
+
+    @app.post("/api/organize", dependencies=[Depends(require_admin)])
     def organize_start(req: OrganizeRequest = OrganizeRequest()) -> dict:
         selected = set(req.primaries) if req.primaries is not None else None
         return {"job_id": jobs.submit(selected_primaries=selected)}
@@ -433,13 +499,13 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)
 
-    @app.post("/api/organize/cancel/{job_id}")
+    @app.post("/api/organize/cancel/{job_id}", dependencies=[Depends(require_admin)])
     def organize_cancel(job_id: str) -> dict:
         if jobs.status(job_id) is None or not jobs.cancel(job_id):
             raise HTTPException(status_code=404, detail="unknown job")
         return {"cancelled": True}
 
-    @app.post("/api/undo")
+    @app.post("/api/undo", dependencies=[Depends(require_admin)])
     def undo_start() -> dict:
         return _submit_or_409(jobs.submit_undo)
 
@@ -450,13 +516,13 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)
 
-    @app.post("/api/undo/cancel/{job_id}")
+    @app.post("/api/undo/cancel/{job_id}", dependencies=[Depends(require_admin)])
     def undo_cancel(job_id: str) -> dict:
         if jobs.undo_status(job_id) is None or not jobs.cancel(job_id):
             raise HTTPException(status_code=404, detail="unknown job")
         return {"cancelled": True}
 
-    @app.post("/api/retag")
+    @app.post("/api/retag", dependencies=[Depends(require_admin)])
     def retag_start(req: RetagRequest) -> dict:
         return _submit_or_409(lambda: jobs.submit_retag(req.file_id, req.lat, req.lon))
 
@@ -467,7 +533,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)
 
-    @app.post("/api/assign-location")
+    @app.post("/api/assign-location", dependencies=[Depends(require_admin)])
     def assign_location_start(req: AssignRequest) -> dict:
         return _submit_or_409(
             lambda: jobs.submit_assign(req.file_ids, req.lat, req.lon)
@@ -480,7 +546,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)
 
-    @app.post("/api/rescan")
+    @app.post("/api/rescan", dependencies=[Depends(require_admin)])
     def rescan_start() -> dict:
         return _submit_or_409(jobs.submit_rescan)
 
@@ -504,7 +570,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="not a panorama")
         return row
 
-    @app.post("/api/stitch/{file_id}")
+    @app.post("/api/stitch/{file_id}", dependencies=[Depends(require_admin)])
     def stitch_start(file_id: int, req: StitchRequest = StitchRequest()) -> dict:
         """Kick off the (lazy, ~7-min, dedicated-pool) Hugin stitch for a panorama.
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { runAssignLocation, type AssignState } from './assignLocationJob'
+import { useAuthContext } from './useAuth'
 
 // React wrapper around the pure runAssignLocation driver, for the No-GPS panel.
 // Two ways in: a place-name search hands an explicit coordinate (assignToCoord), or
@@ -7,6 +8,7 @@ import { runAssignLocation, type AssignState } from './assignLocationJob'
 // next map click resolves it (pickLocation, confirm-gated). Both fan one coordinate
 // out to every selected no-GPS capture and fire onDone so the caller can reload.
 export function useAssignLocation(onDone?: () => void) {
+  const { authFetch } = useAuthContext()
   const [targetIds, setTargetIds] = useState<number[] | null>(null)
   const [assign, setAssign] = useState<AssignState | null>(null)
   const [assigning, setAssigning] = useState(false)
@@ -19,7 +21,7 @@ export function useAssignLocation(onDone?: () => void) {
     setTargetIds(null)
     setAssigning(true)
     try {
-      const final = await runAssignLocation(fetch, ids, lat, lon, { onProgress: setAssign })
+      const final = await runAssignLocation(authFetch, ids, lat, lon, { onProgress: setAssign })
       setAssign(final)
       onDone?.()
     } catch (e) {

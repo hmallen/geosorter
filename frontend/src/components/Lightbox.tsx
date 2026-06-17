@@ -18,7 +18,10 @@ interface Props {
   onClose: () => void
   // App-level stitch tracking (keyed by file_id) so progress survives reopen (B).
   stitchByFile: Record<number, StitchState>
-  onStartStitch: (fileId: number, opts?: { force?: boolean; projection?: string }) => void
+  // Admin-only stitch trigger (m-implement-view-only-admin-auth): undefined for a
+  // non-admin viewer, which hides the stitch CONTROLS. A previously-stitched hero is
+  // still VIEWED by everyone; only generating/re-stitching is gated.
+  onStartStitch?: (fileId: number, opts?: { force?: boolean; projection?: string }) => void
 }
 
 export default function Lightbox({
@@ -104,7 +107,7 @@ export default function Lightbox({
   // stable (useStitch.start depends only on the stable `reload`) and useStitch's
   // inflight Set dedups synchronously, so this can never launch a second stitch.
   useEffect(() => {
-    if (fileId === undefined) return
+    if (fileId === undefined || !onStartStitch) return
     if (isPanorama && f?.properties.stitch_status === 'pending' && !stitch) {
       onStartStitch(fileId)
     }
@@ -114,7 +117,7 @@ export default function Lightbox({
   // (a re-stitch must bypass the freshness cache) or when an explicit projection is
   // picked (so a stale cache doesn't shadow the override).
   const triggerStitch = () => {
-    if (fileId === undefined) return
+    if (fileId === undefined || !onStartStitch) return
     onStartStitch(fileId, {
       force: heroReady || projChoice !== '',
       projection: projChoice || undefined,
@@ -184,7 +187,7 @@ export default function Lightbox({
           )}
         </div>
 
-        {stitchable && !frameZoom && (
+        {stitchable && !frameZoom && onStartStitch && (
           <div className="stitch-controls">
             {stitchBusy ? (
               <span className="stitch-status">
