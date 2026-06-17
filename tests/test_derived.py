@@ -828,6 +828,39 @@ def test_evict_local_cache_under_cap_is_noop(tmp_path):
     assert f.exists() and res.deleted == 0 and res.bytes_after == res.bytes_before
 
 
+# --- Proxy-tier cache eviction (m-implement-proxy-prewarm-cap) -------------- #
+
+
+def test_evict_proxy_cache_drops_oldest_and_spares_stitch(tmp_path):
+    # The proxy cap evicts least-recently-accessed PROXIES down to the cap, and never
+    # touches the stitch heroes (costly to regenerate) sharing the same tier root.
+    cache_root = tmp_path / "proxytier"
+    proxies = cache_root / CACHE / "proxies"
+    stitch = cache_root / CACHE / "stitch"
+    proxies.mkdir(parents=True)
+    stitch.mkdir(parents=True)
+    mib = 1 << 20
+    pfiles = [_make_cache_file(proxies, f"p{i}.mp4", mib, atime=1000 + i) for i in range(5)]
+    hero = _make_cache_file(stitch, "hero.jpg", 3 * mib, atime=1)  # oldest of all
+
+    res = derived.evict_proxy_cache(cache_root, max_gb=3 / 1024)  # 3 MiB cap
+
+    assert not pfiles[0].exists() and not pfiles[1].exists()  # 2 oldest proxies dropped
+    assert all(f.exists() for f in pfiles[2:])  # newest 3 proxies kept
+    assert hero.exists()  # stitch hero spared despite the oldest atime
+    assert res.deleted == 2
+    assert res.bytes_after <= 3 * mib
+
+
+def test_evict_proxy_cache_under_cap_is_noop(tmp_path):
+    cache_root = tmp_path / "proxytier"
+    proxies = cache_root / CACHE / "proxies"
+    proxies.mkdir(parents=True)
+    f = _make_cache_file(proxies, "p.mp4", 1 << 20, atime=1000)
+    res = derived.evict_proxy_cache(cache_root, max_gb=10.0)
+    assert f.exists() and res.deleted == 0 and res.bytes_after == res.bytes_before
+
+
 def test_atomic_write_failure_publishes_nothing(tmp_path):
     # A failed generation must never leave a half-written cache file at `out`,
     # nor a leftover temp in the cache dir (concurrent-request corruption guard).

@@ -99,6 +99,15 @@ spatial_index = 'rtree'
 # proxy_cache_dir = 'Z:\\DroneLibrary'
 # Local-tier eviction cap (GB); the sweep that honours it lands in a later task.
 # cache_max_gb = 10.0
+
+# Pre-generate HEVC->H.264 playback proxies during the post-organize warm pass, so
+# the first play of an HEVC clip is instant instead of paying the transcode on demand.
+# Off by default (proxies are large and slow to transcode).
+# warm_proxies = false
+# Cap (GB) on the proxy/stitch tier's HEVC proxies. Unset = uncapped (proxies never
+# evicted). When set, the warm pass evicts least-recently-used proxies down to this
+# cap (panorama stitch heroes are never evicted by it).
+# proxy_cache_max_gb = 50.0
 """
 
 
@@ -135,6 +144,13 @@ class Config:
     cache_dir: Path | None = None  # local-SSD cache for thumbs/posters/previews
     proxy_cache_dir: Path | None = None  # None → library_root (proxies/stitch tier)
     cache_max_gb: float = 10.0  # local-tier eviction cap (consumed by m-derived-at-scale)
+    # Proxy pre-warm + proxy-tier cap (m-implement-proxy-prewarm-cap). When
+    # `warm_proxies` is on, the post-organize warm pass also pre-generates HEVC→H.264
+    # proxies (off by default — they are large and slow to transcode). `proxy_cache_max_gb`
+    # caps the proxy/stitch tier's `proxies` kind; None = uncapped (today's never-evict
+    # behavior), enforced at the warm-pass boundary INDEPENDENT of `warm_proxies`.
+    warm_proxies: bool = False
+    proxy_cache_max_gb: float | None = None
     # Admin-auth (m-implement-view-only-admin-auth): the PBKDF2 hash of the single
     # shared admin password (see auth.hash_password), set via
     # `geosorter set-admin-password`. None = no password configured -> the app and
@@ -253,6 +269,15 @@ def load(path: str | Path | None = None) -> Config:
     if cache_max_gb <= 0:
         raise ValueError(f"cache_max_gb must be > 0: {cache_max_gb!r}")
 
+    warm_proxies = bool(data.get("warm_proxies", False))
+    proxy_cache_max_gb = data.get("proxy_cache_max_gb")
+    if proxy_cache_max_gb is not None:
+        proxy_cache_max_gb = float(proxy_cache_max_gb)
+        if proxy_cache_max_gb <= 0:
+            raise ValueError(
+                f"proxy_cache_max_gb must be > 0: {proxy_cache_max_gb!r}"
+            )
+
     return Config(
         inbox_path=inbox_path,
         library_root=library_root,
@@ -274,6 +299,8 @@ def load(path: str | Path | None = None) -> Config:
         cache_dir=cache_dir,
         proxy_cache_dir=proxy_cache_dir,
         cache_max_gb=cache_max_gb,
+        warm_proxies=warm_proxies,
+        proxy_cache_max_gb=proxy_cache_max_gb,
         admin_password_hash=admin_password_hash,
     )
 

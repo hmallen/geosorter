@@ -168,6 +168,7 @@ class WarmJobState:
     state: str = "pending"  # pending | running | done | error
     batch_id: str | None = None
     warmed: int = 0  # thumbs/posters generated (or already fresh) for the batch
+    proxies_warmed: int = 0  # HEVC→H.264 proxies generated or already cached (m-implement-proxy-prewarm-cap)
     deleted: int = 0  # local-tier cache files evicted at the end
     skipped: int = 0  # eviction skips (open file on Windows)
     processed: int = 0  # files seen so far (progress callback ticks)
@@ -808,6 +809,7 @@ class JobManager:
             return
 
         state.warmed = result.warmed
+        state.proxies_warmed = result.proxies_warmed
         state.deleted = result.eviction.deleted
         state.skipped = result.eviction.skipped
         state.state = "done"

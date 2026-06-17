@@ -218,6 +218,37 @@ def test_cache_max_gb_must_be_positive(tmp_path):
         config.load(cfg_path)
 
 
+# --- Proxy pre-warm + proxy-tier cap (m-implement-proxy-prewarm-cap) -------- #
+def test_warm_proxies_default_false(tmp_path):
+    # No config file → proxy pre-warming is off (HEVC proxies stay lazy).
+    assert config.load(tmp_path / "nope.toml").warm_proxies is False
+
+
+def test_warm_proxies_override_true(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("warm_proxies = true\n", encoding="utf-8")
+    assert config.load(cfg_path).warm_proxies is True
+
+
+def test_proxy_cache_max_gb_default_none(tmp_path):
+    # No config file → the proxy tier is uncapped (today's never-evict behavior).
+    assert config.load(tmp_path / "nope.toml").proxy_cache_max_gb is None
+
+
+def test_proxy_cache_max_gb_override(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("proxy_cache_max_gb = 50\n", encoding="utf-8")
+    assert config.load(cfg_path).proxy_cache_max_gb == 50.0
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "-0.5"])
+def test_proxy_cache_max_gb_non_positive_raises(tmp_path, value):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(f"proxy_cache_max_gb = {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load(cfg_path)
+
+
 def test_resolve_proxy_cache_dir_defaults_to_raw_library_root(tmp_path):
     # Unset proxy_cache_dir -> the RAW library_root, NOT library_root.resolve(): the
     # stitch generator + serve route both call this helper, and on a mapped SMB drive

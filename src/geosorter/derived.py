@@ -382,19 +382,42 @@ class EvictionResult:
 def evict_local_cache(cache_root: Path | str, max_gb: float) -> EvictionResult:
     """Atime-sweep the LOCAL derived tier under ``cache_root`` down to ``max_gb``.
 
-    Walks ``thumbs``/``previews``/``posters`` (the local-SSD tier — proxies/stitch on
-    ``proxy_cache_dir`` are deliberately NOT swept) and, while the total exceeds the
-    cap, deletes files least-recently-accessed first (by ``st_atime``). A file whose
-    ``unlink`` raises ``PermissionError``/``OSError`` (open on Windows) is skipped and
-    the sweep continues — eviction is best-effort, never fatal. Returns the byte totals
-    before/after plus the deleted/skipped counts.
+    Walks ``thumbs``/``previews``/``posters``/``collage`` (the local-SSD tier —
+    proxies/stitch on ``proxy_cache_dir`` are deliberately NOT swept here; the proxy
+    tier has its own :func:`evict_proxy_cache`). Returns the byte totals before/after
+    plus the deleted/skipped counts. See :func:`_evict_cache` for the sweep semantics.
+    """
+    return _evict_cache(cache_root, max_gb, _LOCAL_CACHE_KINDS)
+
+
+def evict_proxy_cache(cache_root: Path | str, max_gb: float) -> EvictionResult:
+    """Atime-sweep the PROXY tier's ``proxies`` kind under ``cache_root`` to ``max_gb``.
+
+    Caps the HEVC→H.264 playback proxies only. The ``stitch`` kind shares this tier but
+    is deliberately NOT swept — a panorama hero costs minutes of Hugin to regenerate,
+    while a proxy is a cheap, automatic ffmpeg transcode. Otherwise identical to
+    :func:`evict_local_cache` (see :func:`_evict_cache`).
+    """
+    return _evict_cache(cache_root, max_gb, ("proxies",))
+
+
+def _evict_cache(
+    cache_root: Path | str, max_gb: float, kinds: tuple[str, ...]
+) -> EvictionResult:
+    """Atime-LRU sweep of the given cache ``kinds`` under ``cache_root`` down to ``max_gb``.
+
+    While the total exceeds the cap, deletes files least-recently-accessed first (by
+    ``st_atime``). A file whose ``unlink`` raises ``PermissionError``/``OSError`` (open
+    on Windows) is skipped and the sweep continues — eviction is best-effort, never
+    fatal. Only ever walks ``<cache_root>/.geosorter-cache/<kind>/``, so it can never
+    touch library media even when ``cache_root`` equals ``library_root``.
 
     Note: on Windows with last-access updates disabled, ``st_atime`` tracks roughly
     creation/write time, so the policy degrades to oldest-first — still sound.
     """
     base = Path(cache_root) / CACHE_DIRNAME
     entries: list[tuple[float, int, Path]] = []
-    for kind in _LOCAL_CACHE_KINDS:
+    for kind in kinds:
         kind_dir = base / kind
         if not kind_dir.is_dir():
             continue
