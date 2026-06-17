@@ -83,3 +83,11 @@ spatial_index = 'rtree'
 
 # Local-tier eviction cap (GB); the sweep that honours it lands in a later task.
 # cache_max_gb = 10.0
+
+# Pre-generate HEVC->H.264 playback proxies during the post-organize warm pass so the
+# first play of an HEVC clip is instant. Off by default (proxies are large/slow).
+# warm_proxies = false
+
+# Cap (GB) on the proxy tier's HEVC proxies. Unset = uncapped (never evicted). When
+# set, the warm pass LRU-evicts proxies down to it (stitch heroes are never evicted).
+# proxy_cache_max_gb = 50.0
