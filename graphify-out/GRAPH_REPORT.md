@@ -1,16 +1,16 @@
 # Graph Report - geosorter  (2026-06-17)
 
 ## Corpus Check
-- 150 files · ~222,531 words
+- 150 files · ~223,943 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6270 nodes · 14683 edges · 216 communities (166 shown, 50 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 270 edges (avg confidence: 0.69)
+- 6283 nodes · 14729 edges · 209 communities (165 shown, 44 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 286 edges (avg confidence: 0.68)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6cc87a01`
+- Built from commit: `8c908623`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -219,17 +219,10 @@
 - [[_COMMUNITY_Community 202|Community 202]]
 - [[_COMMUNITY_Community 203|Community 203]]
 - [[_COMMUNITY_Community 204|Community 204]]
-- [[_COMMUNITY_Community 205|Community 205]]
 - [[_COMMUNITY_Community 206|Community 206]]
 - [[_COMMUNITY_Community 207|Community 207]]
-- [[_COMMUNITY_Community 208|Community 208]]
-- [[_COMMUNITY_Community 209|Community 209]]
-- [[_COMMUNITY_Community 210|Community 210]]
-- [[_COMMUNITY_Community 211|Community 211]]
 - [[_COMMUNITY_Community 212|Community 212]]
-- [[_COMMUNITY_Community 213|Community 213]]
 - [[_COMMUNITY_Community 214|Community 214]]
-- [[_COMMUNITY_Community 215|Community 215]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `_()` - 723 edges
@@ -278,7 +271,7 @@
 - **LoadingImage Consumers** — components_loadingimage_loadingimage, components_filelistpanel_filelistpanel, components_lightbox_lightbox [EXTRACTED 0.75]
 - **Tests sharing the local_media real-footage fixture** — tests_test_metadata, tests_test_derived, tests_test_srt_parser, tests_conftest_local_media [INFERRED 0.75]
 
-## Communities (216 total, 50 thin omitted)
+## Communities (209 total, 44 thin omitted)
 
 ### Community 0 - "Frontend Map SPA Core"
 Cohesion: 0.12
@@ -286,11 +279,11 @@ Nodes (27): Props, MapView(), Props, WORLD, App(), HEATMAP_LAYER, heatmapData(),
 
 ### Community 1 - "GeoNames Loader & DB Schema"
 Cohesion: 0.09
-Nodes (34): geonames_loader._download_file, geonames_loader._load_cities, geonames_loader._load_features, geonames_loader._parse_geonames_row, geonames_loader._populate_spatial_index, download(), _download_file(), load() (+26 more)
+Nodes (40): db._stamp_version, connect(), init_geonames_schema(), init_index_schema(), migrate_index_schema(), probe_rtree(), SQLite foundation for geosorter.  Two databases, both kept on local disk (neve, Open a SQLite connection with the project's standard PRAGMAs.      Sets WAL jo (+32 more)
 
 ### Community 2 - "Derived Media Assets"
-Cohesion: 0.11
-Nodes (24): api._lookup_codec, api._panorama_row, api._relpath, api._safe_cache_path, api._strip, api.frames route, api.library route, api.stitch_image route (+16 more)
+Cohesion: 0.07
+Nodes (42): a(), br(), bu(), cp(), Cr(), dd(), dp(), Ed() (+34 more)
 
 ### Community 3 - "API Integration Tests"
 Cohesion: 0.06
@@ -309,12 +302,12 @@ Cohesion: 0.18
 Nodes (16): CaptureGroup, _classify(), group_companions(), _parse(), prescan_inbox(), PrescanResult, Companion grouping: attach DJI sidecars to their primary capture.  DJI writes, Outcome of :func:`prescan_inbox`.      ``groups`` are the capture units to org (+8 more)
 
 ### Community 7 - "Job Manager Tests"
-Cohesion: 0.06
-Nodes (67): Outcome of a :func:`panorama_stitch` run.      ``path`` is the cached hero JPE, StitchResult, JobManager, Serializable snapshot of one panorama-stitch job's progress (B13)., Owns the worker pool and the live job table.      ``organize_fn``/``undo_fn``/, Drop the Windows ``\\\\?\\`` long-path prefix if present., Queue a panorama stitch for ``file_id`` and return its id.          Dedups: if, Consistent point-in-time snapshot of a stitch job, or ``None`` if unknown. (+59 more)
+Cohesion: 0.05
+Nodes (71): Outcome of a :func:`panorama_stitch` run.      ``path`` is the cached hero JPE, StitchResult, JobManager, Serializable snapshot of one post-organize warm-pass job (m-derived-at-scale)., Serializable snapshot of one panorama-stitch job's progress (B13)., Owns the worker pool and the live job table.      ``organize_fn``/``undo_fn``/, Drop the Windows ``\\\\?\\`` long-path prefix if present., Queue a panorama stitch for ``file_id`` and return its id.          Dedups: if (+63 more)
 
 ### Community 8 - "Offline Reverse Geocoder"
 Cohesion: 0.01
-Nodes (78): _a(), as(), bind(), bs(), ca(), cancel(), convertLinearToSRGB(), convertSRGBToLinear() (+70 more)
+Nodes (74): _a(), as(), bs(), ca(), cancel(), convertLinearToSRGB(), convertSRGBToLinear(), copyLinearToSRGB() (+66 more)
 
 ### Community 9 - "Crash-Safe Move Engine & Catalog"
 Cohesion: 0.10
@@ -322,7 +315,7 @@ Nodes (31): Group-atomic move/delete, move_engine._cleanup, _copy_file, _cleanup
 
 ### Community 10 - "Organize Pipeline Core"
 Cohesion: 0.06
-Nodes (64): JobManager._run, MetadataExtractor.extract, MediaMetadata, Capture metadata for one DJI photo or video.      ``gps_source`` is the proven, _borrow_frame_gps, _disk_preflight, _extract_one, _extract_pass (+56 more)
+Nodes (66): JobManager._run, MetadataExtractor.extract, MediaMetadata, Capture metadata for one DJI photo or video.      ``gps_source`` is the proven, _borrow_frame_gps, _disk_preflight, _extract_one, _extract_pass (+58 more)
 
 ### Community 11 - "Derived Assets Tests"
 Cohesion: 0.05
@@ -333,20 +326,20 @@ Cohesion: 0.06
 Nodes (34): dependencies, maplibre-gl, @photo-sphere-viewer/core, react, react-dom, react-map-gl, supercluster, @tanstack/react-virtual (+26 more)
 
 ### Community 13 - "CLI Tests"
-Cohesion: 0.09
-Nodes (30): Resolve the bind address and whether it warrants an exposure warning.      Def, _resolve_host(), _feature_src(), Path, CLI integration tests (click CliRunner, native tmp_path)., A GeoNames source dir = committed fixtures + an allCountries.txt sample., test_bootstrap_from_fixtures_loads_db(), test_bootstrap_no_download_without_from_errors() (+22 more)
+Cohesion: 0.08
+Nodes (37): Resolve the bind address and whether it warrants an exposure warning.      Def, _resolve_host(), _fake_warm(), _feature_src(), Path, CLI integration tests (click CliRunner, native tmp_path)., A GeoNames source dir = committed fixtures + an allCountries.txt sample., test_bootstrap_from_fixtures_loads_db() (+29 more)
 
 ### Community 14 - "FastAPI App Wiring"
 Cohesion: 0.02
-Nodes (56): _(), addControl(), cf(), _clearWatch(), completeTask(), ee(), ef(), ep (+48 more)
+Nodes (77): _(), angleWith(), angleWithSep(), At(), bs(), cf(), clear(), _clearWatch() (+69 more)
 
 ### Community 15 - "Undo Batch & CLI"
 Cohesion: 0.04
-Nodes (81): BatchReport, Disk-state idempotency, cli(), extract_test(), main(), organize(), geosorter command-line interface (Phase 0a foundations).  Verbs implemented in, Print extracted metadata for a single media file as JSON (debug). (+73 more)
+Nodes (92): BatchReport, Disk-state idempotency, cli(), extract_test(), main(), organize(), geosorter command-line interface (Phase 0a foundations).  Verbs implemented in, Print extracted metadata for a single media file as JSON (debug). (+84 more)
 
 ### Community 16 - "Job State Dataclasses"
 Cohesion: 0.04
-Nodes (84): $(), ad(), add(), _appendLeaves(), Ar(), bn(), br(), bs() (+76 more)
+Nodes (69): $(), _addTileFeatures(), _appendLeaves(), Ar(), as(), at(), bn(), bs() (+61 more)
 
 ### Community 17 - "Inbox Counter & Listing"
 Cohesion: 0.20
@@ -357,8 +350,8 @@ Cohesion: 0.10
 Nodes (19): _ffprobe_codec, _coalesce(), detect_codec(), _ffprobe_codec(), _find_srt(), DJI media metadata extraction.  Runs ExifTool in **persistent daemon mode** (`, Map a raw codec tag to ``'h264'``/``'h265'``, falling back to ffprobe.      ``, Extract :class:`MediaMetadata` for a single photo or video. (+11 more)
 
 ### Community 19 - "Rescan Tests"
-Cohesion: 0.06
-Nodes (14): addImage(), addSource(), Bn(), getLayer(), getLayoutProperty(), getLight(), getSource(), listImages() (+6 more)
+Cohesion: 0.05
+Nodes (12): addSource(), Bn(), getLayer(), getLayoutProperty(), getLight(), getPaintProperty(), getSource(), listImages() (+4 more)
 
 ### Community 20 - "Undo Tests"
 Cohesion: 0.25
@@ -372,21 +365,21 @@ Nodes (19): DirNode(), InboxPanel(), Props, TriCheckbox(), fetchInboxList(), all
 Cohesion: 0.05
 Nodes (4): SimpleNamespace, Tests for config loading and the starter writer., test_resolve_proxy_cache_dir_defaults_to_raw_library_root(), test_resolve_proxy_cache_dir_uses_explicit_when_set()
 
-### Community 23 - "CLI Metadata Commands"
-Cohesion: 0.05
-Nodes (12): isSourceLoaded(), isStyleLoaded(), Je(), Ke(), loaded(), Me, qe(), refreshTiles() (+4 more)
+### Community 25 - "Move Engine Tests"
+Cohesion: 0.03
+Nodes (3): hf(), If(), tn
 
 ### Community 26 - "TS App Compiler Config"
 Cohesion: 0.11
 Nodes (18): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, jsx, lib, module, moduleDetection, moduleResolution (+10 more)
 
 ### Community 27 - "Retag Tests"
-Cohesion: 0.03
-Nodes (3): fn, getBounds(), getMaxBounds()
+Cohesion: 0.02
+Nodes (3): fn, getMaxBounds(), setRenderWorldCopies()
 
 ### Community 28 - "Manual Re-Tag Engine"
-Cohesion: 0.05
-Nodes (35): am, bp(), Cp(), dm, Dp(), em(), fm(), gp() (+27 more)
+Cohesion: 0.17
+Nodes (7): Dp(), jm(), lm, qm(), Sp(), vm(), zp()
 
 ### Community 29 - "TS Node Compiler Config"
 Cohesion: 0.11
@@ -397,88 +390,92 @@ Cohesion: 0.26
 Nodes (17): infer_locations(), InferenceResult, Time-clustered neighbor-GPS inference (pure, side-effect-free).  DJI captures, One inferred location: ``item_id`` borrowed ``(lat, lon)`` from ``source_id``., Infer a coordinate for each no-coord-but-timestamped item.      ``items`` is a, datetime, datetime, Tests for time-clustered neighbor-GPS inference (pure core).  ``infer_location (+9 more)
 
 ### Community 31 - "Config Loading & Bootstrap"
-Cohesion: 0.04
-Nodes (32): addTo(), _createDelegatedListener(), filter(), _focusFirstElement(), isOpen(), mo, moveLayer(), off() (+24 more)
+Cohesion: 0.02
+Nodes (59): addClassName(), addControl(), addTo(), _cancelRenderFrame(), constructor(), _createButton(), _createCanvas(), _createCloseButton() (+51 more)
 
 ### Community 32 - "DB Schema Migration Tests"
 Cohesion: 0.14
 Nodes (13): _columns(), _make_v1_index_db(), _make_v2_index_db(), _make_v3_index_db(), Tests for the geosorter SQLite foundation (db module)., Create a synthetic v3 index DB (B13 columns, no stitch_projection) at version 3., Create a synthetic v1 index DB with one real ``files`` row at version 1., Create a synthetic v2 index DB (B9a columns, no stitch_status) at version 2. (+5 more)
 
 ### Community 33 - "DJI SRT Telemetry Parser"
-Cohesion: 0.06
-Nodes (70): addScaledVector(), angleTo(), at(), bi(), clampPoint(), clone(), closestPointToPoint(), _computeIntersections() (+62 more)
+Cohesion: 0.08
+Nodes (51): addScaledVector(), at(), clampLength(), clampPoint(), closestPointToPoint(), containsPoint(), cross(), crossVectors() (+43 more)
 
 ### Community 34 - "Pathing Tests"
-Cohesion: 0.06
-Nodes (69): addGroup(), addScalar(), addVectors(), applyMatrix3(), applyMatrix4(), applyNormalMatrix(), center(), clampLength() (+61 more)
+Cohesion: 0.04
+Nodes (102): addGroup(), addScalar(), addVectors(), applyAxisAngle(), applyMatrix4(), applyQuaternion(), attach(), center() (+94 more)
 
 ### Community 35 - "Backend API Contract Docs"
 Cohesion: 0.20
 Nodes (10): At scale — generation cap, warm pass, eviction (m-derived-at-scale), Background jobs (`geosorter.jobs`), Derived assets — lazy, cached, atomic, Endpoints, Frontend SPA (`frontend/`, B7), HEVC strategy (the gating decision), Phase 1 Backend — HTTP API Contract & Derived Assets, Scalable library feed (conditional GET + scoped gzip, m-library-feed-scale) (+2 more)
 
 ### Community 36 - "MISC Parser Tests"
-Cohesion: 0.08
-Nodes (68): aa(), ac(), af(), ao(), Bc(), be(), bi(), C() (+60 more)
+Cohesion: 0.10
+Nodes (45): ac(), af(), bi(), C(), cc(), cf(), ci(), co() (+37 more)
 
 ### Community 37 - "Ingest Pipeline Roadmap"
 Cohesion: 0.13
 Nodes (15): geonameid Canonical Key, GPS-Derived Local Time, Polished Map Viewer (Phase 1), DJI Metadata Extraction (pyexiftool), Offline Reverse Geocoding (GeoNames), DJI Media Organizer Ingest Pipeline, Prefer-Nearest-Feature Heuristic, Structured Library Layout (+7 more)
 
 ### Community 38 - "Library Rescan"
-Cohesion: 0.06
-Nodes (11): bd(), bf, ci(), clear(), dt(), Et(), ff(), hr() (+3 more)
+Cohesion: 0.04
+Nodes (15): bc(), bd(), bf, cl(), dc(), ff(), Hs(), ht() (+7 more)
 
 ### Community 39 - "Library Verify & Metadata Models"
+Cohesion: 0.07
+Nodes (9): dl(), fd, gc, ic(), Kc(), qc(), rc(), rl() (+1 more)
+
+### Community 40 - "Destructive Job Submission"
 Cohesion: 0.04
-Nodes (27): bc(), cc(), cl(), dl(), el(), fc(), fl(), gc (+19 more)
+Nodes (3): al(), Xt, zt()
 
 ### Community 41 - "GPS Local-Time Resolver"
-Cohesion: 0.05
-Nodes (63): add(), addEventListener(), addLayerUpdate(), addObject(), autoSize(), bl(), __close(), __computeTooltipPosition() (+55 more)
+Cohesion: 0.10
+Nodes (23): Br(), clear(), clearLayerUpdates(), clearViewOffset(), dispose(), disposeMesh(), disposeTexture(), fromEquirectangularTexture() (+15 more)
 
 ### Community 42 - "Crash-Safe Move Engine Docs"
 Cohesion: 0.14
 Nodes (17): Auto-Delete Source Policy (D14), Crash-Safe Move Engine (Phase 0a), Risk-Front-Loaded Phasing (Headless CLI First), Cache-Key String-Prefix Fix SEC-001, Pillow draft Fast Thumbnails Warm Pass, Hash-While-Copying Bulk Organize Throughput, Keep ThreadPoolExecutor No ProcessPool Multi-Worker, SMB Network IO Bottleneck (+9 more)
 
 ### Community 43 - "TZ Resolver Tests"
-Cohesion: 0.05
-Nodes (13): b(), draw(), g(), getImage(), getImageCanvasContext(), getImageData(), getPixelRatio(), _getStyleAndImages() (+5 more)
+Cohesion: 0.04
+Nodes (19): addImage(), b(), draw(), g(), getImage(), getImageCanvasContext(), getImageData(), getPixelRatio() (+11 more)
 
 ### Community 44 - "Panorama Stitch Architecture Docs"
 Cohesion: 0.27
 Nodes (9): Instant Panorama Raw-Tile Collage, Group-Atomic Deletes Companions-First Primary-Last, celeste Sky-Masking, OpenCV cv2.Stitcher NO-GO Finding, Dedicated Read-Only Stitch Worker Pool, Hugin CLI Stitch Pipeline, Output-Validity Gate, stitch_status Column Schema v3 (+1 more)
 
 ### Community 45 - "API Media Routes"
-Cohesion: 0.04
-Nodes (59): applyAxisAngle(), applyQuaternion(), attach(), clampScalar(), compose(), conjugate(), decompose(), determinant() (+51 more)
+Cohesion: 0.11
+Nodes (23): aa(), applyEuler(), dl(), __doClick(), equals(), getIntersections(), __handleObjectsEvents(), intersectObject() (+15 more)
 
 ### Community 46 - "Two-Pass Metadata Extraction"
 Cohesion: 0.05
-Nodes (11): de(), _diffStyle(), e(), fe(), frameAsync(), k(), le(), nc() (+3 more)
+Nodes (14): de(), _diffStyle(), fe(), frameAsync(), k(), le(), nc(), onRemove() (+6 more)
 
 ### Community 47 - "DJI MISC Catalog Docs"
 Cohesion: 0.27
 Nodes (9): DJI MISC Catalog Databases, gis_info_table file_name star, How geosorter uses it, Live-vs-Stale Catalog Selection Basename Overlap, Live vs. stale catalogs, misc_parser read_ratings Read-Only Fail-Safe, Rename-Suffix Join Gotcha, Schema (the parts that matter) (+1 more)
 
 ### Community 48 - "Panorama Stitch Job"
-Cohesion: 0.05
-Nodes (11): ac(), add(), as, dc(), Ds(), ec(), ht(), js (+3 more)
+Cohesion: 0.08
+Nodes (3): C(), tf(), ud
 
 ### Community 49 - "Media Loading Performance Docs"
-Cohesion: 0.04
-Nodes (57): Br(), clear(), clearLayerUpdates(), clearViewOffset(), constructor(), depth(), dispose(), disposeMesh() (+49 more)
+Cohesion: 0.05
+Nodes (41): abort(), abortLoading(), cleanScene(), constructor(), depth(), Ed(), es(), et() (+33 more)
 
 ### Community 50 - "Capture-Time & Geocoding Docs"
 Cohesion: 0.15
 Nodes (13): Capture time is naive — and its meaning depends on the source tag, DJI Capture Time & Offline Geocoding, geonameid is canonical; place_string is display-only, Offline reverse geocoding (GeoNames), Prefer-nearest-feature heuristic (Phase 0b, B5), Two-database split (decision D24), Windows-safe foldering, Bounding-Box Pre-Filter R-tree cos-lat (+5 more)
 
 ### Community 51 - "Stitch Image API Route"
-Cohesion: 0.05
-Nodes (22): aa(), al(), angleWith(), angleWithSep(), distSqr(), divByPoint(), hi(), Ka (+14 more)
+Cohesion: 0.07
+Nodes (13): aa(), ac(), divByPoint(), mag(), matMult(), mult(), multByPoint(), perp() (+5 more)
 
 ### Community 52 - "Tiered Derived Cache Keying"
-Cohesion: 0.06
-Nodes (69): api.poster route, api.preview route, Atomic temp-then-os.replace write discipline, derived._atomic_write, derived._is_fresh, derived._resize_jpeg, derived._run_ffmpeg, derived._run_hugin (+61 more)
+Cohesion: 0.04
+Nodes (87): api._lookup_codec, api._panorama_row, api._relpath, api._safe_cache_path, api._strip, api.frames route, api.library route, api.poster route (+79 more)
 
 ### Community 53 - "DJI SRT Telemetry Docs"
 Cohesion: 0.27
@@ -489,188 +486,184 @@ Cohesion: 0.50
 Nodes (4): api._submit_or_409, api.rescan_start route, api.retag_start route, api.undo_start route
 
 ### Community 56 - "Auxiliary Group 56"
-Cohesion: 0.07
-Nodes (54): a(), ai(), ap(), Au(), bd(), bu(), cd(), ci() (+46 more)
+Cohesion: 0.11
+Nodes (31): ad(), ai(), Au(), bd(), cd(), Cu(), et(), Eu() (+23 more)
 
 ### Community 61 - "Singleton 61"
-Cohesion: 0.28
-Nodes (13): Config, _cfg(), _proxy_cfg(), Path, Tests for the post-organize warm pass (m-derived-at-scale).  ``warm_library``, _seed_batch(), test_warm_library_evicts_proxy_tier_when_capped(), test_warm_library_generates_thumbs_and_posters() (+5 more)
+Cohesion: 0.26
+Nodes (14): Config, _cfg(), _proxy_cfg(), Path, Tests for the post-organize warm pass (m-derived-at-scale).  ``warm_library``, _seed_batch(), test_warm_library_all_batches(), test_warm_library_evicts_proxy_tier_when_capped() (+6 more)
 
 ### Community 63 - "Singleton 63"
-Cohesion: 0.06
+Cohesion: 0.08
 Nodes (4): be(), getClusterExpansionZoom(), sendAsync(), w()
 
 ### Community 66 - "Community 66"
-Cohesion: 0.08
-Nodes (27): au(), Bu, cu(), du(), eh(), eu(), filterUpdate(), fu() (+19 more)
+Cohesion: 0.05
+Nodes (22): Bu, cu(), du(), ed(), filterUpdate(), fu(), getClusterChildren(), getClusterLeaves() (+14 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.05
-Nodes (6): addClassName(), br(), div(), ha, Ir, rr
+Cohesion: 0.06
+Nodes (4): br(), ha, Ir, rr
 
 ### Community 68 - "Community 68"
 Cohesion: 0.21
 Nodes (29): _index(), _moves_row(), Tests for the crash-safe move engine (copy → verify → delete, recoverable)., _src(), test_commit_delete_removes_source(), test_copy_and_verify_happy(), test_copy_and_verify_provided_hash_mismatch_aborts(), test_copy_and_verify_provided_hash_resume_skips_recopy() (+21 more)
 
 ### Community 70 - "Community 70"
-Cohesion: 0.13
-Nodes (18): ai(), bi(), ea(), fi, getPaintProperty(), getTile(), ia(), ii() (+10 more)
+Cohesion: 0.06
+Nodes (25): ai(), bi(), ci(), di(), ea(), fi, h(), ia() (+17 more)
 
 ### Community 71 - "Community 71"
-Cohesion: 0.07
-Nodes (11): At(), Bt, en(), Ft(), gi(), i(), kt(), Nt() (+3 more)
+Cohesion: 0.06
+Nodes (9): Bt, en(), Ft(), gi(), i(), Ot(), pt(), ri() (+1 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.06
-Nodes (11): cr(), gf(), Hl(), is, kh(), pl, ss, ur() (+3 more)
+Cohesion: 0.04
+Nodes (12): gf(), Gs, Hl(), is, kh(), od, ss, vf (+4 more)
 
 ### Community 73 - "Community 73"
-Cohesion: 0.07
-Nodes (3): _cancelRenderFrame(), _requestRenderFrame(), Z
+Cohesion: 0.05
+Nodes (7): e(), ln, setMaxPitch(), setMaxZoom(), setMinPitch(), setMinZoom(), Z
 
 ### Community 74 - "Community 74"
 Cohesion: 0.22
 Nodes (14): _add(), _FakeExtractor, _index(), _md(), _organize_at(), _organize_one(), Tests for manual map-click re-tag (B8): re-file an organized capture to new GPS., Organize one Boulder photo (optionally + a .DNG companion); return its file id. (+6 more)
 
 ### Community 75 - "Community 75"
-Cohesion: 0.07
-Nodes (45): abort(), abortLoading(), al(), Bc(), __cancelLongTouch(), __cancelTwoFingersOverlay(), cleanScene(), __clearMoveDelta() (+37 more)
+Cohesion: 0.04
+Nodes (110): add(), addEventListener(), addLayerUpdate(), addObject(), al(), animate(), autoSize(), Bc() (+102 more)
 
 ### Community 76 - "Community 76"
 Cohesion: 0.06
-Nodes (4): Ga, j(), ta(), za
+Nodes (4): j(), ra(), ta(), za
 
 ### Community 77 - "Community 77"
-Cohesion: 0.05
-Nodes (30): Run a destructive-job submission, mapping :class:`WorkerBusy` to HTTP 409., _submit_or_409(), AssignJobState, _compute_eta(), JobState, Serializable snapshot of one manual re-tag job's progress., Serializable snapshot of one bulk assign-location job's progress.      Promote, Serializable snapshot of one rescan job's progress. (+22 more)
+Cohesion: 0.16
+Nodes (25): aa(), ao(), Bc(), be(), ff(), Ga(), gi(), i() (+17 more)
 
 ### Community 78 - "Community 78"
-Cohesion: 0.06
-Nodes (17): _containerDimensions(), _createButton(), _createCloseButton(), _getClampedPixelRatio(), _getUIString(), he(), ja(), _resizeCanvas() (+9 more)
+Cohesion: 0.67
+Nodes (3): _containerDimensions(), _resizeInternal(), _resizeTransform()
 
 ### Community 79 - "Community 79"
 Cohesion: 0.07
 Nodes (3): In, wn, Yt
 
 ### Community 80 - "Community 80"
-Cohesion: 0.07
-Nodes (42): animate(), __applyMoveDelta(), clamp(), cleanPanoramaOptions(), cleanPanoramaPose(), cleanPosition(), cleanSphereCorrection(), fl() (+34 more)
+Cohesion: 0.06
+Nodes (40): __applyMoveDelta(), bind(), clamp(), cleanPanoramaOptions(), cleanPanoramaPose(), cleanPosition(), cleanSphereCorrection(), findNode() (+32 more)
 
 ### Community 81 - "Community 81"
-Cohesion: 0.06
-Nodes (7): ah, ba(), C(), oe(), queryRenderedFeatures(), ud, xm
+Cohesion: 0.11
+Nodes (3): ip, rm(), zm
 
 ### Community 82 - "Community 82"
-Cohesion: 0.06
-Nodes (11): er(), gr(), jr(), kr(), mr, nr(), tr(), vr() (+3 more)
+Cohesion: 0.04
+Nodes (19): cn, cr(), ct(), Dr(), er(), gr(), Jn(), jr() (+11 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.07
-Nodes (38): ae(), b(), Ba(), ce(), d(), E(), ee(), fe() (+30 more)
+Cohesion: 0.09
+Nodes (30): ae(), d(), De(), E(), ee(), fe(), from(), Hd() (+22 more)
 
 ### Community 84 - "Community 84"
-Cohesion: 0.09
-Nodes (7): Ad, Ca(), D(), Dd(), getCanvas(), sf(), Td()
+Cohesion: 0.11
+Nodes (7): Ad, ae(), Ca(), D(), Dd(), sf(), Td()
 
 ### Community 85 - "Community 85"
-Cohesion: 0.08
-Nodes (36): as(), Bo(), cs(), da(), Do(), ds(), dt(), ep() (+28 more)
+Cohesion: 0.09
+Nodes (33): ap(), ct(), da(), ds(), dt(), ep(), fs(), Fu() (+25 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.07
-Nodes (4): ra(), rf(), Ua, wa()
-
-### Community 87 - "Community 87"
-Cohesion: 0.13
-Nodes (4): an(), _isOutOfMapMaxBounds(), m(), nn()
+Cohesion: 0.09
+Nodes (4): div(), rf(), Ua, wa()
 
 ### Community 88 - "Community 88"
-Cohesion: 0.08
-Nodes (5): Jt, Rt(), Tt(), v(), wt()
+Cohesion: 0.10
+Nodes (6): Et(), Nt(), Rt(), Tt(), v(), wt()
 
 ### Community 89 - "Community 89"
-Cohesion: 0.08
-Nodes (6): coveringTiles(), Ge(), mn, Ue(), uo, We()
+Cohesion: 0.11
+Nodes (3): coveringTiles(), mn, We()
 
 ### Community 90 - "Community 90"
 Cohesion: 0.06
 Nodes (3): Fr, Pr(), Qt()
 
 ### Community 91 - "Community 91"
-Cohesion: 0.08
-Nodes (5): ar(), hf(), If(), or(), zf()
+Cohesion: 0.14
+Nodes (4): Je(), Me, ve(), Ye()
 
 ### Community 93 - "Community 93"
 Cohesion: 0.20
 Nodes (21): _geonames_db(), _insert_city(), _insert_feature(), Tests for the reverse geocoder (nearest populated place + geocode_cache)., test_cache_hit_single_row(), test_candidates_lists_city_and_feature(), test_columnar_fallback(), test_feature_beyond_radius_yields_city() (+13 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.10
-Nodes (31): bl(), cl(), dl(), el(), eo(), fa(), fl(), gi() (+23 more)
-
-### Community 95 - "Community 95"
-Cohesion: 0.07
-Nodes (12): constructor(), _createCanvas(), _resolveContainer(), setAnisotropicFilterPitch(), setMaxPitch(), setMaxZoom(), setMinPitch(), setMinZoom() (+4 more)
+Cohesion: 0.12
+Nodes (33): bl(), cl(), dl(), ec(), el(), eo(), fa(), fl() (+25 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.08
-Nodes (4): isZooming(), r(), Sn(), X
+Cohesion: 0.05
+Nodes (11): distSqr(), getCanvas(), getLngLat(), isZooming(), project(), r(), unproject(), uo (+3 more)
 
 ### Community 98 - "Community 98"
-Cohesion: 0.08
-Nodes (5): calculateCameraOptionsFromTo(), getAnisotropicFilterPitch(), isMoving(), isRotating(), _render()
+Cohesion: 0.05
+Nodes (16): addSprite(), getAnisotropicFilterPitch(), isMoving(), isRotating(), isSourceLoaded(), isStyleLoaded(), _lazyInitEmptyStyle(), loaded() (+8 more)
 
 ### Community 99 - "Community 99"
-Cohesion: 0.12
-Nodes (4): Gs, Hs(), od, Vc()
+Cohesion: 0.19
+Nodes (8): dm, fm(), km(), mm(), nm(), om, pm(), yp()
 
 ### Community 101 - "Community 101"
-Cohesion: 0.09
-Nodes (30): blobToImage(), checkSupported(), cl(), createEquirectangularTexture(), ec(), get(), getDataURL(), getFragmentShaderID() (+22 more)
+Cohesion: 0.10
+Nodes (25): blobToImage(), createEquirectangularTexture(), ec(), get(), getDataURL(), getFragmentShaderID(), _getShaderCacheForMaterial(), _getShaderStage() (+17 more)
 
 ### Community 102 - "Community 102"
 Cohesion: 0.05
 Nodes (38): api.py (B6), auth.py (m-implement-view-only-admin-auth), cli.py, config.py, Configuration, Conventions, db.py, derived.py (B6; preview B7; cache-tiering; m-derived-at-scale; collage m-frontend-pano-ux) (+30 more)
 
 ### Community 103 - "Community 103"
-Cohesion: 0.13
-Nodes (5): bl(), getCurrentTime(), It(), l(), yl()
+Cohesion: 0.15
+Nodes (15): extractBasis(), extractRotation(), fromArray(), fromJSON(), getWorldPosition(), identity(), length(), setFromMatrix3Column() (+7 more)
+
+### Community 104 - "Community 104"
+Cohesion: 0.18
+Nodes (4): hi(), li, oi, rotate()
 
 ### Community 106 - "Community 106"
-Cohesion: 0.09
-Nodes (9): bs(), Jn(), qn(), Vn(), vs, Xf, xn, Yn() (+1 more)
+Cohesion: 0.08
+Nodes (8): cs(), he(), ie(), setSourceTileLodParams(), vs, xa(), ya(), ys()
+
+### Community 107 - "Community 107"
+Cohesion: 0.04
+Nodes (26): ah, au(), bl(), eh(), eu(), getCurrentTime(), gn, gt() (+18 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.17
-Nodes (21): bootstrap(), init_config(), Load GeoNames cities + admin/country data into the geonames database.      Wit, Write a starter geosorter.toml., default_cache_dir(), default_config_path(), default_data_dir(), load() (+13 more)
-
-### Community 109 - "Community 109"
-Cohesion: 0.09
-Nodes (13): get(), getAndRemove(), _getAndRemoveByKey(), has(), ie(), ne(), onRemove(), Re (+5 more)
-
-### Community 110 - "Community 110"
-Cohesion: 0.08
-Nodes (3): kf, qf(), wf
+Cohesion: 0.13
+Nodes (26): bootstrap(), init_config(), Load GeoNames cities + admin/country data into the geonames database.      Wit, Write a starter geosorter.toml., Mapped-SMB-drive-safe lexical relpath keying (no .resolve), Tiered derived cache (local SSD vs proxy tier), default_cache_dir(), default_config_path() (+18 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.09
-Nodes (4): ip, om, rm(), zm
+Cohesion: 0.12
+Nodes (4): as, Ds(), ec(), js
 
 ### Community 112 - "Community 112"
 Cohesion: 0.36
 Nodes (5): RescanState, runRescan(), sleep(), TERMINAL, base
 
 ### Community 113 - "Community 113"
-Cohesion: 0.10
-Nodes (6): Do, go, ko, resize(), setPixelRatio(), To
+Cohesion: 0.09
+Nodes (6): co, Do, ko, resize(), setPixelRatio(), To
 
 ### Community 114 - "Community 114"
 Cohesion: 0.11
 Nodes (7): Gd(), gm, Hd(), Id(), Ld(), Vd(), Wd()
 
 ### Community 117 - "Community 117"
-Cohesion: 0.10
-Nodes (6): di(), fd, ic(), oi, qr(), wi()
+Cohesion: 0.21
+Nodes (9): _counts(), Tests for the GeoNames bootstrap loader (parsing + loading into SQLite)., A source dir = committed fixtures + an allCountries.txt (the L/T/H sample)., _src_with_features(), test_features_covered_by_spatial_index(), test_load_features_custom_codes(), test_load_features_filters_to_allowlist(), test_load_is_idempotent() (+1 more)
+
+### Community 118 - "Community 118"
+Cohesion: 0.24
+Nodes (12): Cp(), gp(), hp(), Jp(), kp(), Op(), pp(), qp() (+4 more)
 
 ### Community 119 - "Community 119"
 Cohesion: 0.15
@@ -678,23 +671,31 @@ Nodes (25): Lightbox(), PanoSphere, PanoSphere(), Props, collageUrl(), enc(), fe
 
 ### Community 120 - "Community 120"
 Cohesion: 0.13
-Nodes (24): an(), bt(), constructor(), en(), fd(), fn(), gn(), Gt() (+16 more)
+Nodes (23): an(), bt(), ce(), constructor(), en(), fd(), gn(), Gt() (+15 more)
+
+### Community 121 - "Community 121"
+Cohesion: 0.06
+Nodes (4): dn, ei(), hn(), un
+
+### Community 122 - "Community 122"
+Cohesion: 0.07
+Nodes (3): ma(), sa, va()
 
 ### Community 123 - "Community 123"
 Cohesion: 0.20
 Nodes (9): _make_catalog(), Path, Tests for the DJI MISC-catalog ratings parser (B11).  `misc_parser.read_rating, Build a minimal DJI-shaped catalog DB at ``path``.      ``rows`` are ``(file_n, test_read_ratings_happy(), test_read_ratings_skips_null_and_blank(), test_select_catalog_all_zero_returns_none(), test_select_catalog_picks_live_over_stale() (+1 more)
 
-### Community 124 - "Community 124"
-Cohesion: 0.11
-Nodes (3): dn, ei(), un
-
 ### Community 126 - "Community 126"
-Cohesion: 0.17
-Nodes (23): ao(), co(), fo(), _getValue_toArray(), go(), ho(), io(), jo() (+15 more)
+Cohesion: 0.20
+Nodes (21): ao(), co(), fo(), go(), ho(), io(), jo(), ko() (+13 more)
 
 ### Community 127 - "Community 127"
 Cohesion: 0.06
-Nodes (53): EvictionResult, Outcome of one :func:`evict_local_cache` sweep., geosorter — organize DJI drone media by location and date.  Phase 0a foundatio, JobManager._run_rescan, JobManager._run_retag, Background ``organize`` job manager for the HTTP API (B6).  The map viewer tri, _companion_dest(), r"""Destination for a companion: the primary's folder, named off the primary. (+45 more)
+Nodes (50): Exception, EvictionResult, Outcome of one :func:`evict_local_cache` sweep., geosorter — organize DJI drone media by location and date.  Phase 0a foundatio, JobManager._run_rescan, JobManager._run_retag, _compute_eta(), JobState (+42 more)
+
+### Community 128 - "Community 128"
+Cohesion: 0.10
+Nodes (8): an(), ar(), Ge(), _isOutOfMapMaxBounds(), m(), nn(), or(), Ue()
 
 ### Community 129 - "Community 129"
 Cohesion: 0.09
@@ -705,12 +706,12 @@ Cohesion: 0.24
 Nodes (21): _add(), _companion_paths(), _counts(), _factory(), _FakeExtractor, _index(), _md(), _primary() (+13 more)
 
 ### Community 131 - "Community 131"
-Cohesion: 0.11
-Nodes (3): ce(), getFeatureState(), Se()
+Cohesion: 0.07
+Nodes (4): ce(), getFeatureState(), Se(), xe()
 
 ### Community 132 - "Community 132"
-Cohesion: 0.10
-Nodes (4): _down(), Kn(), Ls(), n()
+Cohesion: 0.07
+Nodes (6): _down(), Fs, Kn(), Ls(), n(), sl()
 
 ### Community 133 - "Community 133"
 Cohesion: 0.36
@@ -721,16 +722,20 @@ Cohesion: 0.28
 Nodes (16): FlatHero(), Press, axisOffset(), Box, clamp(), clampOffset(), clampScale(), fitScale() (+8 more)
 
 ### Community 135 - "Community 135"
-Cohesion: 0.10
-Nodes (6): gn, pop(), ql, yh, Zl, Zn()
+Cohesion: 0.18
+Nodes (3): bp(), hm, xp()
 
 ### Community 136 - "Community 136"
 Cohesion: 0.15
 Nodes (5): _local(), Tests for the Windows-safe sanitizer and destination-path computation., test_compute_dest_path_full(), test_compute_dest_path_geonameid_fallback(), test_compute_dest_path_truncates_only_city()
 
 ### Community 137 - "Community 137"
-Cohesion: 0.15
+Cohesion: 0.14
 Nodes (12): angleTo(), ch(), dh(), dist(), fh(), jh(), lh(), Oa() (+4 more)
+
+### Community 138 - "Community 138"
+Cohesion: 0.10
+Nodes (9): cc(), fc(), ks, lc(), Pc(), qs(), sc(), tc() (+1 more)
 
 ### Community 139 - "Community 139"
 Cohesion: 0.28
@@ -750,27 +755,27 @@ Nodes (31): geocode_test(), Print the geocode candidates and the chosen place fo
 
 ### Community 145 - "Community 145"
 Cohesion: 0.16
-Nodes (6): il(), Jd(), jl, kd(), ml, qd()
+Nodes (4): il(), Jd(), jl, ml
 
 ### Community 146 - "Community 146"
-Cohesion: 0.13
-Nodes (20): ceil(), floor(), Ge(), getHSL(), Je(), lerpHSL(), oa(), offsetHSL() (+12 more)
+Cohesion: 0.09
+Nodes (26): angleTo(), bi(), clampScalar(), Ge(), getHex(), getHexString(), getHSL(), _getValue_toArray() (+18 more)
 
 ### Community 147 - "Community 147"
 Cohesion: 0.40
 Nodes (6): Crash-safe copy-verify-delete discipline, rescan._prune, retag._relocate, retag._stored_sha, undo._drop_rows, _reverse_one
 
 ### Community 148 - "Community 148"
-Cohesion: 0.17
-Nodes (19): Ca(), dc(), ea(), fo(), gs(), io(), jo(), lc() (+11 more)
+Cohesion: 0.11
+Nodes (29): b(), Ba(), Bo(), Ca(), cs(), dc(), ea(), fo() (+21 more)
 
 ### Community 149 - "Community 149"
 Cohesion: 0.12
-Nodes (9): addLayer(), addSprite(), _lazyInitEmptyStyle(), removeSprite(), setGlyphs(), setLight(), setProjection(), setSky() (+1 more)
+Nodes (26): applyMatrix3(), applyNormalMatrix(), ceil(), _computeIntersections(), computeVertexNormals(), createMesh(), floor(), fromBufferAttribute() (+18 more)
 
 ### Community 150 - "Community 150"
-Cohesion: 0.13
-Nodes (3): ao, jo, setMaxBounds()
+Cohesion: 0.07
+Nodes (4): ao, jo, setMaxBounds(), y()
 
 ### Community 151 - "Community 151"
 Cohesion: 0.26
@@ -781,24 +786,20 @@ Cohesion: 0.11
 Nodes (17): [2026-05-31] create | Crash-Safe Move Engine & Organize Pipeline, [2026-05-31] create | DJI Capture Time & Offline Geocoding, [2026-05-31] create | DJI SRT Telemetry Formats, [2026-05-31] update | DJI Capture Time & Offline Geocoding (B5 feature geocoding), [2026-06-01] create | Phase 1 Backend — HTTP API Contract & Derived Assets, [2026-06-01] update | Crash-Safe Move Engine & Organize Pipeline (B8 manual re-tag), [2026-06-01] update | Crash-Safe Move Engine & Organize Pipeline (B8 neighbor-GPS inference), [2026-06-01] update | Crash-Safe Move Engine & Phase 1 Backend (B8 undo) (+9 more)
 
 ### Community 153 - "Community 153"
-Cohesion: 0.11
-Nodes (6): cn, cs(), ct(), lt(), st(), zo
-
-### Community 154 - "Community 154"
-Cohesion: 0.14
-Nodes (9): ed(), getClusterChildren(), getClusterLeaves(), gu(), hu(), u(), vu(), yu() (+1 more)
+Cohesion: 0.10
+Nodes (3): bo, dt(), It()
 
 ### Community 155 - "Community 155"
-Cohesion: 0.06
-Nodes (43): BaseModel, Exception, FastAPI, AssignRequest, _bearer(), create_app(), _etag_matches(), _http_date() (+35 more)
+Cohesion: 0.04
+Nodes (53): BaseModel, FastAPI, AssignRequest, _bearer(), create_app(), _etag_matches(), _http_date(), LoginRequest (+45 more)
 
 ### Community 156 - "Community 156"
-Cohesion: 0.13
-Nodes (19): aa(), applyEuler(), __doClick(), equals(), getIntersections(), intersectObject(), intersectObjects(), isPointVisible() (+11 more)
+Cohesion: 0.17
+Nodes (6): fl(), Hc(), kd(), ll(), qd(), ul()
 
 ### Community 157 - "Community 157"
-Cohesion: 0.13
-Nodes (19): _allocateTargets(), _applyPMREM(), Ba(), _blur(), _cleanup(), compileCubemapShader(), compileEquirectangularShader(), _compileMaterial() (+11 more)
+Cohesion: 0.14
+Nodes (18): _allocateTargets(), _applyPMREM(), Ba(), _blur(), _cleanup(), compileCubemapShader(), compileEquirectangularShader(), _compileMaterial() (+10 more)
 
 ### Community 158 - "Community 158"
 Cohesion: 0.11
@@ -821,8 +822,8 @@ Cohesion: 0.14
 Nodes (13): Branch Strategy, Cross-Reference Conventions, Domain Rules, Getting Started, Ingest (`/tm-wiki-ingest`), Lint (`/tm-wiki-lint`), LLM Wiki, Operations (+5 more)
 
 ### Community 164 - "Community 164"
-Cohesion: 0.14
-Nodes (7): getCanvasContainer(), getContainer(), getLngLat(), project(), unproject(), _updateCircleRadiusIfNeeded(), yo
+Cohesion: 0.25
+Nodes (3): Sn(), Vn(), xn
 
 ### Community 165 - "Community 165"
 Cohesion: 0.14
@@ -832,13 +833,9 @@ Nodes (14): Non-Blocking HEVC Background Transcode, Scalable Library Feed GZip E
 Cohesion: 0.19
 Nodes (15): parse_srt(), DJI ``.SRT`` telemetry parser.  DJI writes per-frame flight telemetry into the, Outcome of parsing a DJI SRT sidecar.      ``gps_source`` is one of ``'srt'``, Parse a DJI SRT sidecar and return its first valid GPS fix.      A missing or, SrtResult, _valid(), Path, Tests for the DJI SRT telemetry parser.  Fixtures under ``fixtures/srt/``: * (+7 more)
 
-### Community 167 - "Community 167"
-Cohesion: 0.19
-Nodes (15): _addTileFeatures(), at(), getClusters(), getTile(), it(), _limitZoom(), load(), lt() (+7 more)
-
 ### Community 168 - "Community 168"
-Cohesion: 0.18
-Nodes (11): api.inbox_count route, api.inbox_list route, count_inbox(), InboxCount, InboxGroup, list_inbox(), Count of inbox files and DJI capture groups awaiting ``organize``., One DJI capture group awaiting ``organize`` — the unit of import selection. (+3 more)
+Cohesion: 0.19
+Nodes (12): api.inbox_count route, api.inbox_list route, count_inbox(), InboxCount, InboxGroup, list_inbox(), Inbox counter — how much is waiting for the next ``organize`` run (B8).  A che, Count of inbox files and DJI capture groups awaiting ``organize``. (+4 more)
 
 ### Community 169 - "Community 169"
 Cohesion: 0.22
@@ -873,12 +870,12 @@ Cohesion: 0.29
 Nodes (7): Architecture decisions (geosorter), DJI Panorama Stitching (Hugin), Install, Output-validity gate, Retroactive re-stitch (m-cli-restitch-fix-projection), The pipeline (measured, full-res, all stages `rc=0`), Why Hugin, not OpenCV (the spike's central finding)
 
 ### Community 180 - "Community 180"
-Cohesion: 0.18
-Nodes (4): Rd(), um(), wm, Ym()
+Cohesion: 0.24
+Nodes (3): Rd(), um(), Ym()
 
 ### Community 181 - "Community 181"
-Cohesion: 0.21
-Nodes (14): GeocodeResult, GeocodeResult, Reverse-geocode outcome for one coordinate.      ``geonameid`` is the canonica, _place_folder, compute_dest_path(), _place_folder(), r"""Compute the absolute, ``\\?\``-prefixed destination path for one capture., Return a single Windows-safe path segment for ``name``.      NFC-normalizes, s (+6 more)
+Cohesion: 0.07
+Nodes (31): GeocodeResult, GeocodeResult, Reverse-geocode outcome for one coordinate.      ``geonameid`` is the canonica, _infer_batch, _place_folder, compute_dest_path(), library_rel_key(), _place_folder() (+23 more)
 
 ### Community 182 - "Community 182"
 Cohesion: 0.15
@@ -897,8 +894,8 @@ Cohesion: 0.31
 Nodes (6): POST+Poll Job Driver Pattern, RetagState, runRetag(), sleep(), TERMINAL, base
 
 ### Community 187 - "Community 187"
-Cohesion: 0.26
-Nodes (12): df(), ef(), gf(), If(), jf(), kf(), Lf(), Mf() (+4 more)
+Cohesion: 0.13
+Nodes (20): add(), df(), ef(), gf(), hl(), If(), jf(), jl() (+12 more)
 
 ### Community 190 - "Community 190"
 Cohesion: 0.25
@@ -909,8 +906,8 @@ Cohesion: 0.29
 Nodes (6): Build (production / same-origin), Develop, geosorter map viewer (frontend), Layout, Stack, Test
 
 ### Community 193 - "Community 193"
-Cohesion: 0.26
-Nodes (11): _infer_batch, _parse_naive, _finder(), local_time_from_utc(), _parse_naive(), GPS-derived local capture time (offline ``timezonefinder`` + ``zoneinfo``).  T, Recompute :class:`LocalTime` for a stored UTC instant at a new coordinate., Resolve a naive capture timestamp to GPS-derived local time.      Returns :dat (+3 more)
+Cohesion: 0.07
+Nodes (10): add(), ap, get(), getAndRemove(), _getAndRemoveByKey(), has(), Jt, oc() (+2 more)
 
 ### Community 194 - "Community 194"
 Cohesion: 0.33
@@ -920,21 +917,13 @@ Nodes (5): Analysis, Entities, Sources, Topics, Wiki Index
 Cohesion: 0.43
 Nodes (5): CaptionFields, captionInfo(), formatDate(), formatTime(), MONTHS
 
-### Community 199 - "Community 199"
-Cohesion: 0.22
-Nodes (3): ni(), ri(), ti()
-
 ### Community 200 - "Community 200"
-Cohesion: 0.22
-Nodes (5): Invalidate ``token`` if present; a no-op for unknown/``None`` tokens., Thread-safe set of live admin bearer tokens (in-memory, no expiry).      The F, Generate, store, and return a new bearer token., Whether ``token`` is a currently-live issued token (``False`` for ``None``)., TokenStore
+Cohesion: 0.13
+Nodes (10): hash_password(), Admin-auth core: password hashing + an in-memory session-token store.  The map, Invalidate ``token`` if present; a no-op for unknown/``None`` tokens., Hash ``password`` into ``pbkdf2_sha256$<iters>$<salt_hex>$<hash_hex>``.      A, Constant-time check of ``password`` against a :func:`hash_password` string., Thread-safe set of live admin bearer tokens (in-memory, no expiry).      The F, Generate, store, and return a new bearer token., Whether ``token`` is a currently-live issued token (``False`` for ``None``). (+2 more)
 
 ### Community 201 - "Community 201"
 Cohesion: 0.36
 Nodes (5): AssignState, runAssignLocation(), sleep(), TERMINAL, base
-
-### Community 209 - "Community 209"
-Cohesion: 0.20
-Nodes (15): db._stamp_version, connect(), init_geonames_schema(), init_index_schema(), migrate_index_schema(), probe_rtree(), SQLite foundation for geosorter.  Two databases, both kept on local disk (neve, Open a SQLite connection with the project's standard PRAGMAs.      Sets WAL jo (+7 more)
 
 ### Community 212 - "Community 212"
 Cohesion: 0.40
@@ -943,22 +932,22 @@ Nodes (5): _hyperlapse_client(), A client whose library holds one hyperlapse ren
 ## Knowledge Gaps
 - **342 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+337 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **50 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `_()` connect `FastAPI App Wiring` to `Job State Dataclasses`, `Rescan Tests`, `CLI Metadata Commands`, `Neighbor-GPS Inference`, `Move Engine Tests`, `Retag Tests`, `Manual Re-Tag Engine`, `Config Loading & Bootstrap`, `Library Rescan`, `Library Verify & Metadata Models`, `Destructive Job Submission`, `TZ Resolver Tests`, `Two-Pass Metadata Extraction`, `Panorama Stitch Job`, `Stitch Image API Route`, `Singleton 63`, `Community 66`, `Community 67`, `Community 69`, `Community 70`, `Community 71`, `Community 72`, `Community 73`, `Community 76`, `Community 78`, `Community 79`, `Community 81`, `Community 82`, `Community 83`, `Community 84`, `Community 86`, `Community 87`, `Community 88`, `Community 89`, `Community 90`, `Community 91`, `Community 92`, `Community 95`, `Community 96`, `Community 97`, `Community 98`, `Community 99`, `Community 100`, `Community 103`, `Community 104`, `Community 105`, `Community 106`, `Community 107`, `Community 109`, `Community 110`, `Community 111`, `Community 113`, `Community 114`, `Community 115`, `Community 116`, `Community 117`, `Community 118`, `Community 121`, `Community 122`, `Community 124`, `Community 125`, `Community 128`, `Community 131`, `Community 132`, `Community 135`, `Community 137`, `Community 138`, `Community 142`, `Community 144`, `Community 145`, `Community 149`, `Community 150`, `Community 153`, `Community 154`, `Community 158`, `Community 161`, `Community 162`, `Community 164`, `Community 170`, `Community 171`, `Community 178`, `Community 180`, `Community 186`, `Community 188`, `Community 189`, `Community 191`, `Community 195`, `Community 198`, `Community 199`, `Community 204`, `Community 205`, `Community 206`, `Community 207`, `Community 208`, `Community 210`, `Community 211`, `Community 213`, `Community 214`, `Community 215`?**
-  _High betweenness centrality (0.319) - this node is a cross-community bridge._
-- **Why does `$()` connect `Job State Dataclasses` to `MISC Parser Tests`, `Community 167`, `Offline Reverse Geocoder`, `Manual Re-Tag Engine`, `FastAPI App Wiring`, `Community 83`, `Community 148`, `Community 85`, `Auxiliary Group 56`, `Community 187`, `Community 120`, `Community 94`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
+- **Why does `_()` connect `FastAPI App Wiring` to `Job State Dataclasses`, `Rescan Tests`, `CLI Metadata Commands`, `Neighbor-GPS Inference`, `Move Engine Tests`, `Retag Tests`, `Manual Re-Tag Engine`, `Config Loading & Bootstrap`, `Library Rescan`, `Library Verify & Metadata Models`, `Destructive Job Submission`, `TZ Resolver Tests`, `Two-Pass Metadata Extraction`, `Panorama Stitch Job`, `Stitch Image API Route`, `Singleton 63`, `Community 66`, `Community 67`, `Community 69`, `Community 70`, `Community 71`, `Community 72`, `Community 73`, `Community 76`, `Community 78`, `Community 79`, `Community 81`, `Community 82`, `Community 83`, `Community 84`, `Community 86`, `Community 87`, `Community 88`, `Community 89`, `Community 90`, `Community 91`, `Community 92`, `Community 94`, `Community 95`, `Community 96`, `Community 97`, `Community 98`, `Community 99`, `Community 100`, `Community 104`, `Community 105`, `Community 106`, `Community 107`, `Community 109`, `Community 110`, `Community 111`, `Community 113`, `Community 114`, `Community 115`, `Community 116`, `Community 118`, `Community 121`, `Community 122`, `Community 124`, `Community 125`, `Community 128`, `Community 131`, `Community 132`, `Community 135`, `Community 137`, `Community 138`, `Community 142`, `Community 144`, `Community 145`, `Community 150`, `Community 153`, `Community 154`, `Community 156`, `Community 158`, `Community 161`, `Community 162`, `Community 164`, `Community 167`, `Community 170`, `Community 171`, `Community 178`, `Community 180`, `Community 186`, `Community 188`, `Community 189`, `Community 191`, `Community 193`, `Community 195`, `Community 196`, `Community 198`, `Community 199`, `Community 204`, `Community 206`, `Community 207`, `Community 214`?**
+  _High betweenness centrality (0.334) - this node is a cross-community bridge._
+- **Why does `$()` connect `Job State Dataclasses` to `Derived Media Assets`, `MISC Parser Tests`, `Offline Reverse Geocoder`, `Community 77`, `FastAPI App Wiring`, `Community 83`, `Community 148`, `Community 85`, `Community 118`, `Auxiliary Group 56`, `Community 187`, `Community 120`, `Community 94`?**
+  _High betweenness centrality (0.137) - this node is a cross-community bridge._
 - **Why does `ma()` connect `FastAPI App Wiring` to `Offline Reverse Geocoder`?**
   _High betweenness centrality (0.042) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `_()` (e.g. with `ie()` and `ma()`) actually correct?**
   _`_()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `name`, `private`, `version` to the rest of the system?**
-  _650 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _651 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Frontend Map SPA Core` be split into smaller, more focused modules?**
   _Cohesion score 0.11790780141843972 - nodes in this community are weakly interconnected._
 - **Should `GeoNames Loader & DB Schema` be split into smaller, more focused modules?**
-  _Cohesion score 0.08974358974358974 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08826945412311266 - nodes in this community are weakly interconnected._

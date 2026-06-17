@@ -235,12 +235,12 @@
     "semantic_hash": ""
   },
   "src/geosorter/cli.py": {
-    "mtime": 1781694214.7736783,
-    "ast_hash": "1e9e4569741529058e47baa5013121e3",
+    "mtime": 1781707139.274934,
+    "ast_hash": "3e6495eab956ea542406bac1abe4e6cd",
     "semantic_hash": ""
   },
   "src/geosorter/config.py": {
-    "mtime": 1781700808.0834863,
+    "mtime": 1781706118.5443957,
     "ast_hash": "f657e32b3ae918c0681b155dd028df4a",
     "semantic_hash": ""
   },
@@ -250,7 +250,7 @@
     "semantic_hash": ""
   },
   "src/geosorter/derived.py": {
-    "mtime": 1781700884.2955666,
+    "mtime": 1781706118.545411,
     "ast_hash": "b2b1e8c8587a325d1e0cf7d46bc1f6b8",
     "semantic_hash": ""
   },
@@ -280,8 +280,8 @@
     "semantic_hash": "0ec78edf0528763b33d8c132088f05a0"
   },
   "src/geosorter/jobs.py": {
-    "mtime": 1781700983.235701,
-    "ast_hash": "b490fd962d66f1a8264b37fc3d419951",
+    "mtime": 1781706118.5464182,
+    "ast_hash": "da7805368f78f85b11f55a966a2c6bae",
     "semantic_hash": ""
   },
   "src/geosorter/metadata.py": {
@@ -345,12 +345,12 @@
     "semantic_hash": ""
   },
   "tests/test_cli.py": {
-    "mtime": 1781694214.7751935,
-    "ast_hash": "38835927c30f1d9ef3cb7cbf755d7f9f",
+    "mtime": 1781707181.2127597,
+    "ast_hash": "ad88a52312f75ba318bfc186e314ee17",
     "semantic_hash": ""
   },
   "tests/test_config.py": {
-    "mtime": 1781700776.9336295,
+    "mtime": 1781706118.547996,
     "ast_hash": "3f44f022983c39e3b59cf55a1ada64a9",
     "semantic_hash": ""
   },
@@ -360,7 +360,7 @@
     "semantic_hash": ""
   },
   "tests/test_derived.py": {
-    "mtime": 1781700860.5904617,
+    "mtime": 1781706118.547996,
     "ast_hash": "623353c73baff7cc7159a74ba10d2629",
     "semantic_hash": ""
   },
@@ -595,8 +595,8 @@
     "semantic_hash": "47344e2be0d7cf3a6c14441158d51e4f"
   },
   "CLAUDE.md": {
-    "mtime": 1781677423.8787775,
-    "ast_hash": "228a581df0795969278552fd9d11a966",
+    "mtime": 1781702499.6765704,
+    "ast_hash": "f22c569dbf0750254b240c710862da90",
     "semantic_hash": ""
   },
   "CLAUDE.sessions.md": {
@@ -610,8 +610,8 @@
     "semantic_hash": ""
   },
   "src/geosorter/CLAUDE.md": {
-    "mtime": 1781677342.6032834,
-    "ast_hash": "37b7846833c85938e4f1e372f5f92081",
+    "mtime": 1781702515.50815,
+    "ast_hash": "b894bbb98b825ed6befc5164416e238c",
     "semantic_hash": ""
   },
   "src/geosorter/webui/index.html": {
@@ -640,13 +640,13 @@
     "semantic_hash": ""
   },
   "src/geosorter/warm.py": {
-    "mtime": 1781700956.7163415,
-    "ast_hash": "47bb0c7a67d45f0b2a9e92dd8992cd36",
+    "mtime": 1781706468.6722188,
+    "ast_hash": "23b991e7b6e9bb01e6342e23e4aee457",
     "semantic_hash": ""
   },
   "tests/test_warm.py": {
-    "mtime": 1781700929.2476945,
-    "ast_hash": "0ccb3ff6b7d08ba17948073dc48770f8",
+    "mtime": 1781706444.72903,
+    "ast_hash": "23eaee1e48870b1383c0f01b95470878",
     "semantic_hash": ""
   },
   "frontend/src/gridWindow.test.ts": {
