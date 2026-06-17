@@ -172,6 +172,35 @@ def test_assign_moves_companions(tmp_path):
     assert comp[0].endswith("2024-07-04_09-15-00_DJI_0003.SRT")
 
 
+def test_assign_progress_ticks_once_per_capture(tmp_path):
+    # Regression: the progress callback must fire exactly ONCE per capture, even
+    # when the capture has companions. The job denominator counts captures, so a
+    # per-file tick would push processed past total ("6 of 4").
+    cfg, inbox, library = _setup(tmp_path)
+    md = _md(media_type="video", codec="h264")
+    _add(inbox, "DJI_0003.MP4")
+    _add(inbox, "DJI_0003.SRT", data=b"srt-bytes")  # companion -> 2 files in the group
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0003.MP4": md}),
+    )
+    conn = _index(cfg)
+    fid = conn.execute(
+        "SELECT id FROM files WHERE status='quarantined'"
+    ).fetchone()[0]
+    conn.close()
+
+    calls: list[str] = []
+    report = setloc.assign_locations(
+        cfg, [fid], *BOULDER,
+        progress=calls.append,
+        extractor_factory=_factory({"DJI_0003.MP4": md}),
+    )
+
+    assert report.assigned == 1
+    # One capture in -> exactly one tick out, regardless of the companion count.
+    assert len(calls) == 1
+
+
 def test_assign_undated_falls_back_to_mtime(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
     md = _md(capture_ts_raw=None, capture_ts_source_tag=None)

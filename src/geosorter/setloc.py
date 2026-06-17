@@ -75,7 +75,8 @@ def assign_locations(
     fallback when undated), recomputes the destination, and re-files the capture
     (primary + companions) from ``_no-gps/…`` to ``<place>/<date>/`` crash-safely,
     flipping the row to ``organized`` with ``gps_source='manual'``. ``progress`` is a
-    per-file one-arg callback (mirrors :func:`geosorter.organize.run_organize`).
+    per-capture one-arg callback (called once per id processed — NOT once per moved
+    file — so a job's progress count tracks captures, mirroring the selection count).
     """
     library = Path(cfg.library_root)
     index = db.connect(cfg.index_db_path)
@@ -144,7 +145,11 @@ def _assign_one(index, library, geo, lat, lon, fid, extractor, progress, report)
         pairs.append((old_comp_dest, new_comp_dest))
 
     # Group-atomic copy+verify of every file BEFORE any DB write or old-copy delete.
-    moved = _relocate(index, pairs, progress)
+    # `progress` is NOT forwarded: the assign job's denominator counts captures, and
+    # `_assign_one` already ticked once per capture above. Passing it here would tick
+    # per physically-moved file (primary + each companion), pushing the job's
+    # `processed` past its `total` ("6 of 4").
+    moved = _relocate(index, pairs, None)
 
     # One commit: the primary's files row (geo + provenance + status flip + new path),
     # each companion's path, and every moves row's dest_path. dest_sha256 is unchanged.
