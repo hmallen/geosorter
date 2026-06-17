@@ -19,6 +19,7 @@ ffmpeg/ffprobe are invoked as list-form subprocesses (mirroring
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 import os
@@ -272,11 +273,62 @@ def poster(cache_root: Path | str, rel_key: str, source: Path | str) -> Path:
     return out
 
 
-def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str | None) -> Path:
+@functools.lru_cache(maxsize=1)
+def _detect_nvenc() -> bool:
+    """Return True if the ffmpeg on PATH advertises the ``h264_nvenc`` encoder.
+
+    Probes ``ffmpeg -encoders`` once (the answer is fixed for the process's lifetime —
+    the ffmpeg build / GPU does not change under us — so the result is memoized). Any
+    failure to run ffmpeg (absent binary, OS error, timeout) reports no NVENC, so the
+    caller transparently uses the CPU ``libx264`` path. Mirrors :func:`find_hugin`'s
+    runtime-detect-then-fall-back discipline.
+    """
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "h264_nvenc" in proc.stdout
+
+
+def _proxy_cmd(source: Path, dest: Path, *, nvenc: bool) -> list[str]:
+    """Build the ffmpeg command for an HEVC->H.264 proxy transcode.
+
+    The NVENC path decodes, scales, and encodes entirely on the GPU. The
+    ``scale_cuda=format=yuv420p`` filter downconverts a 10-bit Main10 source (common for
+    DJI D-Log) to the 8-bit ``yuv420p`` that ``h264_nvenc`` requires; it is a cheap no-op
+    on an already-8-bit source, so one command covers both bit depths. ``-cq 23`` is the
+    constant-quality (size/quality) knob. The libx264 path is the original CPU command.
+    """
+    if nvenc:
+        return [
+            "ffmpeg", "-v", "error", "-y",
+            "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
+            "-i", str(source),
+            "-vf", "scale_cuda=format=yuv420p",
+            "-c:v", "h264_nvenc", "-preset", "p5", "-cq", "23",
+            "-c:a", "aac", "-movflags", "+faststart", str(dest),
+        ]
+    return [
+        "ffmpeg", "-v", "error", "-y", "-i", str(source),
+        "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(dest),
+    ]
+
+
+def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str | None,
+          *, hwaccel: str = "auto") -> Path:
     """Return a browser-playable video path for ``source``.
 
     H.264 (or unknown) sources are already streamable and are returned unchanged.
     HEVC sources are transcoded to a cached H.264 proxy under ``proxies/``.
+
+    ``hwaccel`` (#124) selects the encoder: ``'none'`` always uses CPU ``libx264``;
+    ``'nvenc'`` forces GPU NVENC (strict — an encode failure propagates); ``'auto'``
+    (default) uses NVENC when :func:`_detect_nvenc` finds it and otherwise libx264, AND
+    falls back to libx264 if an NVENC encode fails at runtime (silent correctness on a
+    flaky GPU / unsupported source). NVENC is ~5-15x faster on 4K HEVC.
     """
     source = Path(source)
     if codec != "h265":
@@ -284,13 +336,24 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
     out = _cache_path(cache_root, rel_key, "proxies", ".mp4")
     if _is_fresh(out, source):
         return out
-    _generate(
-        out, source,
-        lambda dest: _run_ffmpeg(
-            ["ffmpeg", "-v", "error", "-y", "-i", str(source),
-             "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(dest)]
-        ),
-    )
+
+    use_nvenc = hwaccel == "nvenc" or (hwaccel == "auto" and _detect_nvenc())
+    allow_fallback = hwaccel == "auto"
+
+    def _produce(dest: Path) -> None:
+        if use_nvenc:
+            try:
+                _run_ffmpeg(_proxy_cmd(source, dest, nvenc=True))
+                return
+            except RuntimeError:
+                if not allow_fallback:
+                    raise  # explicit 'nvenc' is strict — surface the failure
+                logger.warning(
+                    "NVENC proxy transcode failed for %s; falling back to libx264", source
+                )
+        _run_ffmpeg(_proxy_cmd(source, dest, nvenc=False))
+
+    _generate(out, source, _produce)
     return out
 
 

@@ -312,3 +312,24 @@ def test_set_admin_password_hash_writes_and_loads(tmp_path):
 
 def test_set_admin_password_hash_missing_file_is_noop(tmp_path):
     assert config.set_admin_password_hash(tmp_path / "nope.toml", "x") is False
+
+
+# --- Proxy hardware-encoder selection (#124) -------------------------------- #
+def test_proxy_hwaccel_default_auto(tmp_path):
+    # No config file → the proxy transcode defaults to 'auto' (NVENC when detected).
+    assert config.load(tmp_path / "nope.toml").proxy_hwaccel == "auto"
+
+
+@pytest.mark.parametrize("value", ["auto", "nvenc", "none"])
+def test_proxy_hwaccel_override(tmp_path, value):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(f"proxy_hwaccel = '{value}'\n", encoding="utf-8")
+    assert config.load(cfg_path).proxy_hwaccel == value
+
+
+@pytest.mark.parametrize("value", ["cuda", "qsv", "gpu", "AUTO", "libx264", ""])
+def test_proxy_hwaccel_invalid_raises(tmp_path, value):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text(f"proxy_hwaccel = '{value}'\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load(cfg_path)

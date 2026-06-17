@@ -539,6 +539,38 @@ def test_stitch_bench_errors_for_non_panorama(tmp_path, monkeypatch):
     assert "not an organized panorama" in result.output
 
 
+# --- proxy-bench verb (#124) ------------------------------------------------ #
+def test_proxy_bench_errors_for_unknown_id(tmp_path):
+    from geosorter import db
+
+    cfg = _write_cfg(tmp_path)
+    conn = db.connect(tmp_path / "index.db", integrity_check=False)
+    db.init_index_schema(conn)
+    conn.close()
+    result = CliRunner().invoke(cli, ["proxy-bench", "--config", str(cfg), "999"])
+    assert result.exit_code != 0
+    assert "not found" in result.output
+
+
+def test_proxy_bench_errors_for_non_video(tmp_path):
+    from geosorter import db
+
+    cfg = _write_cfg(tmp_path)
+    conn = db.connect(tmp_path / "index.db", integrity_check=False)
+    db.init_index_schema(conn)
+    conn.execute(
+        "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
+        "local_date, lat, lon, gps_source, sha256, status) "
+        "VALUES (1,'P',?, 'a.JPG','photo','2024-07-04',40.0,-105.0,'exif','d','organized')",
+        (str(tmp_path / "a.JPG"),),
+    )
+    conn.commit()
+    conn.close()
+    result = CliRunner().invoke(cli, ["proxy-bench", "--config", str(cfg), "1"])
+    assert result.exit_code != 0
+    assert "not a video" in result.output
+
+
 def test_set_admin_password_writes_hash(tmp_path):
     from geosorter import auth, config
 

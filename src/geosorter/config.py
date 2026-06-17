@@ -108,6 +108,13 @@ spatial_index = 'rtree'
 # evicted). When set, the warm pass evicts least-recently-used proxies down to this
 # cap (panorama stitch heroes are never evicted by it).
 # proxy_cache_max_gb = 50.0
+
+# Hardware encoder for the HEVC->H.264 proxy transcode: 'auto' (default — use NVENC
+# when an h264_nvenc-capable ffmpeg is detected, else libx264, and fall back to
+# libx264 if an NVENC encode fails), 'nvenc' (force NVENC; an encode failure surfaces),
+# or 'none' (always libx264 — the CPU path). NVENC needs an NVIDIA GPU + an ffmpeg
+# built with h264_nvenc/CUDA; on any other machine 'auto' transparently uses libx264.
+# proxy_hwaccel = 'auto'
 """
 
 
@@ -157,6 +164,11 @@ class Config:
     # API stay fully open (today's loopback-dev behaviour); when set, the map UI is
     # view-only until login and the mutating API routes require a valid bearer token.
     admin_password_hash: str | None = None
+    # Hardware-encoder selection for the HEVC->H.264 proxy transcode
+    # (#124): 'auto' (NVENC when detected, else libx264, fall back to libx264 on a
+    # failed NVENC encode), 'nvenc' (force NVENC — strict, a failure surfaces), or
+    # 'none' (always libx264). Validated at load.
+    proxy_hwaccel: str = "auto"
 
 
 def default_data_dir() -> Path:
@@ -278,6 +290,12 @@ def load(path: str | Path | None = None) -> Config:
                 f"proxy_cache_max_gb must be > 0: {proxy_cache_max_gb!r}"
             )
 
+    proxy_hwaccel = str(data.get("proxy_hwaccel", "auto"))
+    if proxy_hwaccel not in ("auto", "nvenc", "none"):
+        raise ValueError(
+            f"proxy_hwaccel must be 'auto', 'nvenc', or 'none': {proxy_hwaccel!r}"
+        )
+
     return Config(
         inbox_path=inbox_path,
         library_root=library_root,
@@ -302,6 +320,7 @@ def load(path: str | Path | None = None) -> Config:
         warm_proxies=warm_proxies,
         proxy_cache_max_gb=proxy_cache_max_gb,
         admin_password_hash=admin_password_hash,
+        proxy_hwaccel=proxy_hwaccel,
     )
 
 

@@ -708,6 +708,64 @@ def stitch_bench(config_path: str | None, file_id: int) -> None:
         click.echo(f"speedup: {old / new:.2f}x faster ({old - new:.1f}s saved)")
 
 
+@cli.command(name="proxy-bench")
+@_CONFIG_OPTION
+@click.argument("file_id", type=int)
+def proxy_bench(config_path: str | None, file_id: int) -> None:
+    """Time the HEVC->H.264 proxy transcode with libx264 (CPU) vs NVENC (GPU).
+
+    Runs the REAL ffmpeg transcode twice on one organized video (cold, into throwaway
+    cache dirs so neither hits a stale cache) and prints both wall-times + the speedup,
+    so the NVENC gain can be measured on real footage. Requires the FILE_ID of an
+    organized video (see the map UI / index DB); NVENC additionally needs an NVIDIA GPU
+    + an h264_nvenc-capable ffmpeg build.
+    """
+    cfg = config.load(config_path)
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    try:
+        row = conn.execute(
+            "SELECT dest_path, media_type, codec FROM files WHERE id=?", (file_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise click.ClickException(f"file_id {file_id} not found in the index DB.")
+    if row[1] != "video":
+        raise click.ClickException(
+            f"file_id {file_id} is not a video (media_type={row[1]!r})."
+        )
+    source = Path(_strip(row[0]))
+    if not source.exists():
+        raise click.ClickException(f"source file missing on disk: {source}")
+    rel_key = pathing.library_rel_key(cfg.library_root, row[0])
+
+    detected = derived._detect_nvenc()
+    click.echo(f"Benchmarking proxy transcode of {source.name} (stored codec: {row[2]})")
+    click.echo(f"  h264_nvenc detected: {detected}")
+    if not detected:
+        raise click.ClickException(
+            "h264_nvenc not available in this ffmpeg build — cannot benchmark NVENC."
+        )
+
+    # Force the transcode branch (codec='h265') so both runs actually encode; each into
+    # its own throwaway cache root so neither hits a stale cache.
+    results: dict[str, float] = {}
+    for label, hw in (("libx264", "none"), ("nvenc", "nvenc")):
+        with tempfile.TemporaryDirectory(prefix="geosorter-proxybench-") as tmp:
+            started = time.perf_counter()
+            try:
+                derived.proxy(tmp, rel_key, source, "h265", hwaccel=hw)
+            except RuntimeError as exc:
+                raise click.ClickException(f"{label} transcode failed: {exc}")
+            elapsed = time.perf_counter() - started
+        results[label] = elapsed
+        click.echo(f"  {label:8}: {elapsed:.1f}s")
+
+    cpu, gpu = results["libx264"], results["nvenc"]
+    if gpu > 0:
+        click.echo(f"  speedup : {cpu / gpu:.1f}x ({cpu - gpu:.1f}s saved)")
+
+
 @cli.command()
 def version() -> None:
     """Print the geosorter version."""
