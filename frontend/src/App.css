@@ -367,7 +367,7 @@
   background: var(--placeholder);
 }
 
-/* Image box for a file tile: positioned so the capture-kind / star badges anchor
+/* Image box for a file tile: positioned so the capture-kind badges anchor
    to the IMAGE, not the whole button (which also holds the filename row). */
 .thumb-img {
   position: relative;
@@ -531,7 +531,7 @@
 }
 
 /* Panorama stitch-failed indicator (m-fix-wide-pano-stitch-and-failure-ux): top-right
-   so it never collides with the top-left capture-kind badge or the bottom-left stars.
+   so it never collides with the top-left capture-kind badge.
    Danger tint so a failed hero is obvious while browsing the list. */
 .badge--stitch-failed {
   position: absolute;
@@ -542,21 +542,6 @@
   border-radius: 8px;
   background: var(--danger);
   color: var(--accent-contrast);
-  pointer-events: none;
-}
-
-/* DJI in-app star rating (B11): bottom-left so it never collides with the
-   top-left capture-kind badge. Gold stars on a dark chip. */
-.badge--stars {
-  position: absolute;
-  bottom: 4px;
-  left: 4px;
-  font-size: 11px;
-  letter-spacing: 1px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #f5c518;
   pointer-events: none;
 }
 
