@@ -339,6 +339,34 @@ def test_warm_proxies_batch_flag(tmp_path, monkeypatch):
     assert captured == {"batch_id": "b1", "warm_proxies": True}
 
 
+def test_warm_proxies_shows_progress(tmp_path, monkeypatch):
+    # The verb wires on_plan (total) + progress (per-file) into warm_library and
+    # renders a live "[done/total] <filename>" status line during the pass.
+    cfg = _warm_cfg(tmp_path)
+    from geosorter.derived import EvictionResult
+    from geosorter.warm import WarmResult
+
+    def fake(cfg_obj, batch_id=None, *, on_plan=None, progress=None, **kwargs):
+        assert on_plan is not None and progress is not None
+        on_plan(2)
+        progress("DJI_0001.MP4")
+        progress("DJI_0002.MP4")
+        return WarmResult(
+            batch_id=batch_id,
+            warmed=2,
+            eviction=EvictionResult(bytes_before=0, bytes_after=0, deleted=0, skipped=0),
+            proxies_warmed=1,
+        )
+
+    monkeypatch.setattr("geosorter.cli.warm_library", fake)
+    result = CliRunner().invoke(cli, ["warm-proxies", "--all", "--yes", "--config", str(cfg)])
+
+    assert result.exit_code == 0, result.output
+    assert "/2]" in result.output  # the planned total
+    assert "DJI_0002.MP4" in result.output  # the file being warmed
+    assert "Warm complete" in result.output
+
+
 def test_warm_proxies_requires_selection(tmp_path):
     cfg = _write_cfg(tmp_path)
     result = CliRunner().invoke(cli, ["warm-proxies", "--config", str(cfg)])

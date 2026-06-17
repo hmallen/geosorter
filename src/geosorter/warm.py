@@ -46,7 +46,7 @@ class WarmResult:
     proxy_eviction: EvictionResult | None = None
 
 
-def warm_library(cfg, batch_id=None, *, progress=None, cancel=None) -> WarmResult:
+def warm_library(cfg, batch_id=None, *, progress=None, cancel=None, on_plan=None) -> WarmResult:
     """Pre-generate thumbnails (photos) + posters (videos) for organized media.
 
     Generates ONLY the local-tier browse assets — thumbnails for photos, poster
@@ -60,7 +60,10 @@ def warm_library(cfg, batch_id=None, *, progress=None, cancel=None) -> WarmResul
     ``cfg.cache_max_gb``.
 
     ``progress`` (one-arg, the filename) and ``cancel`` (no-arg predicate, polled
-    between files) mirror the other background-job entry points. Previews are never
+    between files) mirror the other background-job entry points. ``on_plan`` (one-arg,
+    the total number of rows to warm), if given, is called ONCE before the warm loop so
+    a caller (the ``warm-proxies`` CLI) can render ``[done/total]`` progress — mirroring
+    ``organize.run_organize``'s ``on_plan``. Previews are never
     warmed. HEVC proxies are warmed ONLY when ``cfg.warm_proxies`` is set (opt-in —
     they are large and slow to transcode); a non-HEVC video is a no-op (``derived.proxy``
     returns the source unchanged). When ``cfg.proxy_cache_max_gb`` is set, the proxy
@@ -84,6 +87,9 @@ def warm_library(cfg, batch_id=None, *, progress=None, cancel=None) -> WarmResul
             ).fetchall()
     finally:
         conn.close()
+
+    if on_plan is not None:
+        on_plan(len(rows))
 
     warmed = 0
     proxies_warmed = 0
