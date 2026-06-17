@@ -109,7 +109,8 @@ def warm_library(cfg, batch_id=None, *, progress=None, cancel=None, on_plan=None
             if cfg.warm_proxies and media_type == "video":
                 # Codec-gated inside derived.proxy: an H.264/unknown source returns
                 # unchanged (out == source), only HEVC is actually transcoded.
-                out = derived.proxy(proxy_cache_dir, rel_key, source, codec)
+                out = derived.proxy(proxy_cache_dir, rel_key, source, codec,
+                                    hwaccel=cfg.proxy_hwaccel)
                 if out != source:
                     proxies_warmed += 1
         except Exception:  # a single bad file must not abort the whole warm pass

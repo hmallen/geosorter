@@ -153,8 +153,8 @@ def test_warm_library_warms_proxies_when_opted_in(tmp_path, monkeypatch):
 
     calls: list[tuple] = []
 
-    def fake_proxy(cache_root, rel_key, source, codec):
-        calls.append((Path(cache_root), rel_key, Path(source), codec))
+    def fake_proxy(cache_root, rel_key, source, codec, *, hwaccel="auto"):
+        calls.append((Path(cache_root), rel_key, Path(source), codec, hwaccel))
         out = derived._cache_path(cache_root, rel_key, "proxies", ".mp4")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"proxy")
@@ -166,6 +166,7 @@ def test_warm_library_warms_proxies_when_opted_in(tmp_path, monkeypatch):
     assert len(calls) == 1
     assert calls[0][0] == cfg.proxy_cache_dir  # proxy tier, not the local cache_dir
     assert calls[0][3] == "h265"  # codec threaded from the DB
+    assert calls[0][4] == cfg.proxy_hwaccel  # hwaccel threaded from config (#124)
     assert result.proxies_warmed == 1
     proxies = list((cfg.proxy_cache_dir / derived.CACHE_DIRNAME / "proxies").rglob("*.mp4"))
     assert len(proxies) == 1

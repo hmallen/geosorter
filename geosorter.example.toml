@@ -91,3 +91,9 @@ spatial_index = 'rtree'
 # Cap (GB) on the proxy tier's HEVC proxies. Unset = uncapped (never evicted). When
 # set, the warm pass LRU-evicts proxies down to it (stitch heroes are never evicted).
 # proxy_cache_max_gb = 50.0
+
+# Hardware encoder for the HEVC->H.264 proxy transcode: 'auto' (default — NVENC when
+# an h264_nvenc-capable ffmpeg is detected, else libx264, with a libx264 fallback if an
+# NVENC encode fails), 'nvenc' (force NVENC; a failure surfaces), or 'none' (always
+# libx264). NVENC needs an NVIDIA GPU + an ffmpeg built with h264_nvenc/CUDA.
+# proxy_hwaccel = 'auto'

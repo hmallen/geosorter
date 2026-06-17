@@ -657,7 +657,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     @app.get("/api/video/{relpath:path}")
     def video(relpath: str) -> FileResponse:
         source = _safe_path(relpath)
-        out = derived.proxy(proxy_cache_dir, relpath, source, _lookup_codec(relpath))
+        out = derived.proxy(proxy_cache_dir, relpath, source, _lookup_codec(relpath),
+                            hwaccel=cfg.proxy_hwaccel)
         # An h264 source is returned unchanged (under library_root); a proxy lives
         # under proxy_cache_dir — allow either.
         return FileResponse(_safe_cache_path(out, proxy_cache_dir, library_root))

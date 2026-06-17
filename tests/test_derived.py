@@ -172,6 +172,105 @@ def test_proxy_lands_under_proxy_tier(tmp_path):
     assert out.is_relative_to(proxy_root / CACHE / "proxies")
 
 
+# --- NVENC hardware-encoder selection (#124) -------------------------------- #
+def _record_ffmpeg(monkeypatch, *, fail_on=None):
+    """Monkeypatch ``derived._run_ffmpeg`` to record commands (no real transcode).
+
+    Returns the list the recorded command lists are appended to. ``fail_on`` is a
+    token substring: a recorded command containing it raises ``RuntimeError`` (an
+    encoder failure) instead of writing the stub output, so a successful command writes
+    a stub file at its output path (the last argument) and ``proxy``'s atomic replace
+    succeeds.
+    """
+    calls: list[list[str]] = []
+
+    def fake(cmd, **kwargs):
+        calls.append(cmd)
+        if fail_on is not None and any(fail_on in tok for tok in cmd):
+            raise RuntimeError("simulated ffmpeg failure")
+        Path(cmd[-1]).write_bytes(b"stub")
+
+    monkeypatch.setattr(derived, "_run_ffmpeg", fake)
+    return calls
+
+
+def test_proxy_hwaccel_none_uses_libx264(tmp_path, monkeypatch):
+    calls = _record_ffmpeg(monkeypatch)
+    out = derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                        hwaccel="none")
+    assert out.exists()
+    assert len(calls) == 1
+    assert "libx264" in calls[0] and "h264_nvenc" not in calls[0]
+
+
+def test_proxy_hwaccel_nvenc_builds_gpu_command(tmp_path, monkeypatch):
+    calls = _record_ffmpeg(monkeypatch)
+    derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                  hwaccel="nvenc")
+    assert len(calls) == 1
+    cmd = calls[0]
+    assert "h264_nvenc" in cmd
+    assert "scale_cuda=format=yuv420p" in cmd  # 10-bit Main10 -> 8-bit
+    assert "23" in cmd and "-cq" in cmd        # constant-quality knob
+    assert "cuda" in cmd                        # full GPU decode pipeline
+
+
+def test_proxy_auto_uses_nvenc_when_detected(tmp_path, monkeypatch):
+    monkeypatch.setattr(derived, "_detect_nvenc", lambda: True)
+    calls = _record_ffmpeg(monkeypatch)
+    derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                  hwaccel="auto")
+    assert len(calls) == 1 and "h264_nvenc" in calls[0]
+
+
+def test_proxy_auto_uses_libx264_when_not_detected(tmp_path, monkeypatch):
+    monkeypatch.setattr(derived, "_detect_nvenc", lambda: False)
+    calls = _record_ffmpeg(monkeypatch)
+    derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                  hwaccel="auto")
+    assert len(calls) == 1 and "libx264" in calls[0]
+
+
+def test_proxy_auto_falls_back_to_libx264_on_nvenc_failure(tmp_path, monkeypatch):
+    # NVENC is detected and attempted, fails, and 'auto' retries with libx264.
+    monkeypatch.setattr(derived, "_detect_nvenc", lambda: True)
+    calls = _record_ffmpeg(monkeypatch, fail_on="h264_nvenc")
+    out = derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                        hwaccel="auto")
+    assert out.exists()
+    assert len(calls) == 2
+    assert "h264_nvenc" in calls[0]   # tried NVENC first
+    assert "libx264" in calls[1]      # fell back to CPU
+
+
+def test_proxy_nvenc_strict_raises_on_failure(tmp_path, monkeypatch):
+    # Explicit 'nvenc' is strict: a failure surfaces and is NOT retried with libx264.
+    calls = _record_ffmpeg(monkeypatch, fail_on="h264_nvenc")
+    with pytest.raises(RuntimeError):
+        derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                      hwaccel="nvenc")
+    assert len(calls) == 1 and "h264_nvenc" in calls[0]  # no libx264 fallback
+
+
+def test_proxy_passthrough_ignores_hwaccel(tmp_path, monkeypatch):
+    # A non-HEVC source is returned unchanged regardless of hwaccel — no transcode.
+    calls = _record_ffmpeg(monkeypatch)
+    src = FIXTURES / "h264_tiny.mp4"
+    out = derived.proxy(tmp_path / "c", "v.mp4", src, "h264", hwaccel="nvenc")
+    assert out == src and calls == []
+
+
+def test_detect_nvenc_returns_false_when_ffmpeg_absent(monkeypatch):
+    derived._detect_nvenc.cache_clear()
+
+    def boom(*a, **k):
+        raise FileNotFoundError("no ffmpeg")
+
+    monkeypatch.setattr(derived.subprocess, "run", boom)
+    assert derived._detect_nvenc() is False
+    derived._detect_nvenc.cache_clear()
+
+
 def test_preview_caps_long_edge_at_1920(tmp_path):
     cache = tmp_path / "cache"
     src = tmp_path / "big.jpg"
