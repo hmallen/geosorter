@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { runRescan, type RescanState } from './rescanJob'
+import { useAuthContext } from './useAuth'
 
 // React wrapper around the pure runRescan driver. A confirm gate guards the
 // (index-only) prune; onDone fires after a run finishes so the caller can reload
 // the library feed + inbox badge.
 export function useRescanJob(onDone?: () => void) {
+  const { authFetch } = useAuthContext()
   const [rescan, setRescan] = useState<RescanState | null>(null)
   const [rescanning, setRescanning] = useState(false)
 
@@ -18,7 +20,7 @@ export function useRescanJob(onDone?: () => void) {
       return
     setRescanning(true)
     try {
-      const final = await runRescan(fetch, { onProgress: setRescan })
+      const final = await runRescan(authFetch, { onProgress: setRescan })
       setRescan(final)
       onDone?.()
     } catch (e) {

@@ -1065,3 +1065,130 @@ def test_library_path_roundtrips_when_root_resolves_differently(tmp_path):
     path = client.get("/api/library").json()["features"][0]["properties"]["path"]
     assert path == "Place/2024-01-01/p.JPG"  # folderful, not the bare "p.JPG"
     assert client.get(f"/api/thumb/{path}").status_code == 200
+
+
+# --- Admin auth (m-implement-view-only-admin-auth) ---
+
+from geosorter import auth as _auth  # noqa: E402
+
+# A guarded mutating route that needs no request body and no real side effect to
+# probe the gate (the rescan job runs in the background; we only assert the HTTP
+# status of the submit).
+_GUARDED = "/api/rescan"
+
+
+def _password_client(tmp_path, password="s3cret"):
+    """A TestClient whose Config has an admin password configured (cheap hash)."""
+    library = tmp_path / "library"
+    library.mkdir()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+        cache_dir=tmp_path / "cache",
+        admin_password_hash=_auth.hash_password(password, iterations=1),
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    conn.commit()
+    conn.close()
+    return TestClient(api.create_app(cfg))
+
+
+def test_auth_status_required(tmp_path):
+    client = _password_client(tmp_path)
+    assert client.get("/api/auth").json() == {"auth_required": True}
+
+
+def test_auth_status_not_required(client_and_lib):
+    # The default fixture configures no password -> the app is open.
+    client, _ = client_and_lib
+    assert client.get("/api/auth").json() == {"auth_required": False}
+
+
+def test_login_wrong_password_401(tmp_path):
+    client = _password_client(tmp_path)
+    assert client.post("/api/login", json={"password": "nope"}).status_code == 401
+
+
+def test_login_ok_returns_token(tmp_path):
+    client = _password_client(tmp_path)
+    resp = client.post("/api/login", json={"password": "s3cret"})
+    assert resp.status_code == 200
+    assert isinstance(resp.json()["token"], str) and resp.json()["token"]
+
+
+def test_login_when_not_configured_400(client_and_lib):
+    client, _ = client_and_lib
+    assert client.post("/api/login", json={"password": "x"}).status_code == 400
+
+
+def test_guarded_route_401_without_token(tmp_path):
+    client = _password_client(tmp_path)
+    assert client.post(_GUARDED).status_code == 401
+    # A bogus bearer is also rejected.
+    assert client.post(
+        _GUARDED, headers={"Authorization": "Bearer not-a-real-token"}
+    ).status_code == 401
+
+
+def test_guarded_route_ok_with_token(tmp_path):
+    client = _password_client(tmp_path)
+    token = client.post("/api/login", json={"password": "s3cret"}).json()["token"]
+    resp = client.post(_GUARDED, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert "job_id" in resp.json()
+
+
+def test_organize_route_is_guarded(tmp_path):
+    # The main mutating route is gated too (not just rescan).
+    client = _password_client(tmp_path)
+    assert client.post("/api/organize").status_code == 401
+
+
+def test_logout_invalidates_token(tmp_path):
+    client = _password_client(tmp_path)
+    token = client.post("/api/login", json={"password": "s3cret"}).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.post("/api/logout", headers=headers).status_code == 200
+    assert client.post(_GUARDED, headers=headers).status_code == 401
+
+
+def test_guarded_route_open_when_no_password(client_and_lib):
+    # With no password configured the guard is a no-op: rescan submits without a token.
+    client, _ = client_and_lib
+    resp = client.post(_GUARDED)
+    assert resp.status_code == 200
+    assert "job_id" in resp.json()
+
+
+# Every mutating route is guarded (the require_admin dependency runs before body
+# validation, so even body-required routes 401 cleanly without a token).
+_MUTATING_ROUTES = [
+    "/api/organize",
+    "/api/organize/cancel/x",
+    "/api/undo",
+    "/api/undo/cancel/x",
+    "/api/retag",
+    "/api/assign-location",
+    "/api/rescan",
+    "/api/stitch/1",
+]
+
+
+@pytest.mark.parametrize("route", _MUTATING_ROUTES)
+def test_all_mutating_routes_guarded(tmp_path, route):
+    client = _password_client(tmp_path)
+    assert client.post(route).status_code == 401
+
+
+@pytest.mark.parametrize("route", _MUTATING_ROUTES)
+def test_all_mutating_routes_open_without_password(client_and_lib, route):
+    # With no password configured, none of them 401 (the guard is a no-op).
+    client, _ = client_and_lib
+    assert client.post(route).status_code != 401

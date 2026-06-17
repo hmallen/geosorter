@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { runUndo, type UndoState } from './undoJob'
+import { useAuthContext } from './useAuth'
 
 // React wrapper around the pure runUndo driver. A confirm gate guards the
 // destructive reverse-move; onDone fires after a run finishes so the caller can
 // reload the library feed.
 export function useUndoJob(onDone?: () => void) {
+  const { authFetch } = useAuthContext()
   const [undo, setUndo] = useState<UndoState | null>(null)
   const [undoing, setUndoing] = useState(false)
 
@@ -13,7 +15,7 @@ export function useUndoJob(onDone?: () => void) {
     if (!window.confirm('Undo the most recent batch? Its files move back to the inbox.')) return
     setUndoing(true)
     try {
-      const final = await runUndo(fetch, { onProgress: setUndo })
+      const final = await runUndo(authFetch, { onProgress: setUndo })
       setUndo(final)
       onDone?.()
     } catch (e) {

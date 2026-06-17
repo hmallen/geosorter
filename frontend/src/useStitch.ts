@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { runStitch, type StitchState } from './stitchJob'
+import { useAuthContext } from './useAuth'
 
 // App-level panorama-stitch tracking, keyed by file_id. The stitch is a ~7-min job;
 // keeping its poll loop here (above the lightbox) means closing/reopening the
@@ -7,6 +8,7 @@ import { runStitch, type StitchState } from './stitchJob'
 // per-file inflight guard dedups starts client-side (the server dedups too), and
 // `onComplete` reloads the library on success so the hero + stitch_status persist.
 export function useStitch(onComplete: () => void) {
+  const { authFetch } = useAuthContext()
   const [byFile, setByFile] = useState<Record<number, StitchState>>({})
   const inflight = useRef<Set<number>>(new Set())
 
@@ -18,7 +20,7 @@ export function useStitch(onComplete: () => void) {
         ...m,
         [fileId]: { state: 'pending', status: '', file_id: fileId, error: null },
       }))
-      runStitch(fetch, fileId, {
+      runStitch(authFetch, fileId, {
         onProgress: (st) => setByFile((m) => ({ ...m, [fileId]: st })),
         ...opts,
       })
@@ -34,7 +36,7 @@ export function useStitch(onComplete: () => void) {
         )
         .finally(() => inflight.current.delete(fileId))
     },
-    [onComplete],
+    [onComplete, authFetch],
   )
 
   return { byFile, start }

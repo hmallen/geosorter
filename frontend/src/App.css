@@ -33,6 +33,31 @@
   background: var(--surface-3);
 }
 
+/* Admin login control (m-implement-view-only-admin-auth) */
+.login-control {
+  margin-left: 4px;
+}
+
+.login-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.login-form input {
+  padding: 5px 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.login-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
 .toolbar .job {
   color: var(--text-muted);
 }

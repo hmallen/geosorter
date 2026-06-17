@@ -20,7 +20,7 @@ from pathlib import Path
 import click
 import uvicorn
 
-from . import __version__, api, config, db, derived, geocoder, geonames_loader, pathing
+from . import __version__, api, auth, config, db, derived, geocoder, geonames_loader, pathing
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
@@ -56,6 +56,30 @@ def init_config(config_path: str | None, force: bool) -> None:
             f"{exc} already exists; pass --force to overwrite."
         ) from exc
     click.echo(f"Wrote starter config to {written}")
+
+
+@cli.command(name="set-admin-password")
+@_CONFIG_OPTION
+def set_admin_password(config_path: str | None) -> None:
+    """Set the admin password that gates the map UI's management actions.
+
+    Prompts (hidden, confirmed), hashes the password, and writes
+    ``admin_password_hash`` into the existing config file. Once set, ``geosorter
+    serve`` is view-only until login and the mutating API routes require an admin
+    token. Re-run to change it; clear the key by hand to disable auth.
+    """
+    cfg_path = config.resolve_config_path(config_path)
+    if not cfg_path.exists():
+        raise click.ClickException(
+            f"No config file at {cfg_path}; run `geosorter init-config` first."
+        )
+    password = click.prompt(
+        "Admin password", hide_input=True, confirmation_prompt=True
+    )
+    if not password:
+        raise click.ClickException("password must not be empty.")
+    config.set_admin_password_hash(cfg_path, auth.hash_password(password))
+    click.echo(f"Admin password set in {cfg_path}.")
 
 
 @cli.command()
@@ -506,9 +530,19 @@ def serve(config_path: str | None, host: str | None, port: int) -> None:
     cfg = config.load(config_path)
     bind, warn = _resolve_host(host)
     if warn:
+        # Admin auth only gates the mutating routes; the library GeoJSON (home GPS)
+        # stays a public read either way, so warn about GPS exposure regardless and
+        # note whether management actions are at least password-gated.
+        gate = (
+            "Management actions are admin-password-gated, but the library "
+            "(home GPS locations) is a public read."
+            if cfg.admin_password_hash
+            else "The library (home GPS locations) and all management actions are "
+            "open with no authentication (set one with `geosorter set-admin-password`)."
+        )
         click.echo(
-            f"WARNING: binding to {bind} exposes the library (home GPS locations) "
-            "with no authentication. Use only on a trusted network."
+            f"WARNING: binding to {bind} exposes the server. {gate} "
+            "Use only on a trusted network."
         )
     click.echo(f"geosorter serving on http://{bind}:{port}")
     uvicorn.run(api.create_app(cfg), host=bind, port=port)

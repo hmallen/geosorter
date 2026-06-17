@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { runOrganize, type JobState } from './organizeJob'
+import { useAuthContext } from './useAuth'
 
 // React wrapper around the pure runOrganize driver. onDone fires after a run
 // finishes so the caller can reload the library feed.
 export function useOrganizeJob(onDone?: () => void) {
+  const { authFetch } = useAuthContext()
   const [job, setJob] = useState<JobState | null>(null)
   const [running, setRunning] = useState(false)
   // Expected capture count for this run (drives the import progress bar); null when
@@ -15,7 +17,7 @@ export function useOrganizeJob(onDone?: () => void) {
     setTotal(expected ?? null)
     setRunning(true)
     try {
-      const final = await runOrganize(fetch, { onProgress: setJob }, primaries ?? null)
+      const final = await runOrganize(authFetch, { onProgress: setJob }, primaries ?? null)
       setJob(final)
     } catch (e) {
       setJob({

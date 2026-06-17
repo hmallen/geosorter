@@ -11,6 +11,7 @@ import { useRetagJob } from './useRetagJob'
 import { useAssignLocation } from './useAssignLocation'
 import { useQuarantine } from './useQuarantine'
 import { useStitch } from './useStitch'
+import { useAuthContext } from './useAuth'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
 import type { LibraryFeature, QuarantineItem } from './types'
@@ -47,6 +48,10 @@ function quarantineToFeature(item: QuarantineItem): LibraryFeature {
 }
 
 export default function App() {
+  // Admin gate (m-implement-view-only-admin-auth): isAdmin is true when no password
+  // is configured (open app) or the user has logged in. The management controls below
+  // are passed down only when isAdmin, so a view-only viewer never sees them.
+  const { isAdmin } = useAuthContext()
   const { features, reload } = useLibrary()
   // Current map viewport bounds, lifted from MapView (null until the map's first
   // onLoad). The side panel always lists the captures inside these bounds.
@@ -142,6 +147,7 @@ export default function App() {
   return (
     <div className="app">
       <Toolbar
+        admin={isAdmin}
         onDone={handleChanged}
         stitchTargets={panoramaTargets}
         onReload={reload}
@@ -217,16 +223,20 @@ export default function App() {
       <FileListPanel
         files={panelFiles}
         onOpen={(i) => setLightbox({ files: panelFiles, index: i })}
-        onRetag={(i) => {
-          // panelFiles is volatile (viewport-driven); guard the deref in case a
-          // click races a list shrink between paints.
-          const file = panelFiles[i]
-          // Mutually exclusive with No-GPS assign placement (see onPickOnMap).
-          if (file) {
-            cancelAssign()
-            beginRetag(file.properties.id)
-          }
-        }}
+        onRetag={
+          isAdmin
+            ? (i) => {
+                // panelFiles is volatile (viewport-driven); guard the deref in case a
+                // click races a list shrink between paints.
+                const file = panelFiles[i]
+                // Mutually exclusive with No-GPS assign placement (see onPickOnMap).
+                if (file) {
+                  cancelAssign()
+                  beginRetag(file.properties.id)
+                }
+              }
+            : undefined
+        }
       />
       {lightbox && (
         <Lightbox
@@ -235,7 +245,7 @@ export default function App() {
           onIndex={(i) => setLightbox((lb) => (lb ? { files: lb.files, index: i } : null))}
           onClose={() => setLightbox(null)}
           stitchByFile={stitchByFile}
-          onStartStitch={startStitch}
+          onStartStitch={isAdmin ? startStitch : undefined}
         />
       )}
     </div>

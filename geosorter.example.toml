@@ -22,6 +22,12 @@ geonames_db_path = 'C:\Users\you\AppData\Local\geosorter\geonames.db'
 # Spatial index for geocoding: 'rtree' (default) or 'columnar' (fallback).
 spatial_index = 'rtree'
 
+# Admin password hash. When set, the map UI is view-only until login and the
+# mutating API routes (organize/undo/rescan/retag/assign/stitch) require a valid
+# admin token; unset means the app and API are fully open. Do NOT write a plaintext
+# password here — generate the hash with `geosorter set-admin-password`.
+# admin_password_hash = 'pbkdf2_sha256$...'
+
 # --- Optional tuning (defaults shown; uncomment to override) ---
 
 # Prefer-nearest-feature radius (km): a named park/peak/lake within this distance of

@@ -36,6 +36,12 @@ geonames_db_path = '{geonames_db}'
 # Spatial index for geocoding: 'rtree' (default) or 'columnar' (fallback).
 spatial_index = 'rtree'
 
+# Admin password hash. When set, the map UI is view-only until login and the
+# mutating API routes (organize/undo/rescan/retag/assign/stitch) require a valid
+# admin token; unset means the app and API are fully open. Do NOT write a plaintext
+# password here — generate the hash with `geosorter set-admin-password`.
+# admin_password_hash = 'pbkdf2_sha256$...'
+
 # Prefer-nearest-feature radius (km). A named park/peak/hydro feature wins over
 # the nearest town when it lies within this distance of the capture coordinate.
 # GeoNames features are point centroids, not polygons, so this is an
@@ -129,6 +135,12 @@ class Config:
     cache_dir: Path | None = None  # local-SSD cache for thumbs/posters/previews
     proxy_cache_dir: Path | None = None  # None → library_root (proxies/stitch tier)
     cache_max_gb: float = 10.0  # local-tier eviction cap (consumed by m-derived-at-scale)
+    # Admin-auth (m-implement-view-only-admin-auth): the PBKDF2 hash of the single
+    # shared admin password (see auth.hash_password), set via
+    # `geosorter set-admin-password`. None = no password configured -> the app and
+    # API stay fully open (today's loopback-dev behaviour); when set, the map UI is
+    # view-only until login and the mutating API routes require a valid bearer token.
+    admin_password_hash: str | None = None
 
 
 def default_data_dir() -> Path:
@@ -221,6 +233,11 @@ def load(path: str | Path | None = None) -> Config:
     inbox_path = _opt_path(data.get("inbox_path"))
     library_root = _opt_path(data.get("library_root"))
 
+    # Admin-auth: a blank/absent key means "no password configured" (open app).
+    admin_password_hash = str(data["admin_password_hash"]) if data.get(
+        "admin_password_hash"
+    ) else None
+
     cache_dir = _opt_path(data.get("cache_dir")) or default_cache_dir()
     proxy_cache_dir = _opt_path(data.get("proxy_cache_dir"))
     cache_max_gb = float(data.get("cache_max_gb", 10.0))
@@ -257,6 +274,7 @@ def load(path: str | Path | None = None) -> Config:
         cache_dir=cache_dir,
         proxy_cache_dir=proxy_cache_dir,
         cache_max_gb=cache_max_gb,
+        admin_password_hash=admin_password_hash,
     )
 
 
@@ -285,6 +303,33 @@ def update_spatial_index(path: str | Path | None, value: str) -> bool:
             out.append(line)
     if not found:
         out.append(f"spatial_index = '{value}'")
+    cfg_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return True
+
+
+def set_admin_password_hash(path: str | Path | None, value: str) -> bool:
+    """Persist ``admin_password_hash`` into an existing config file.
+
+    Mirrors :func:`update_spatial_index`: rewrites the exact ``admin_password_hash``
+    key line in place (appending it when absent), and returns ``False`` (no-op) when
+    the config file does not exist — ``set-admin-password`` should not silently create
+    one. ``value`` is the :func:`geosorter.auth.hash_password` string.
+    """
+    cfg_path = resolve_config_path(path)
+    if not cfg_path.exists():
+        return False
+    lines = cfg_path.read_text(encoding="utf-8").splitlines()
+    out: list[str] = []
+    found = False
+    for line in lines:
+        key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if key == "admin_password_hash":
+            out.append(f"admin_password_hash = '{value}'")
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f"admin_password_hash = '{value}'")
     cfg_path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return True
 
