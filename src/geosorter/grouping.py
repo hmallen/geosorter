@@ -39,6 +39,29 @@ _DJI_RE = re.compile(
 _COMPANION_EXT = {".dng": "dng", ".lrf": "lrf", ".srt": "srt"}
 _PRIMARY_EXT = {".jpg", ".jpeg", ".mp4", ".mov"}
 
+# Inbox subdir that `organize` relocates detected duplicates into (m-implement-relocate-
+# duplicates). It holds files already filed in the library, so every inbox scan
+# (organize, the inbox badge, diagnose) must SKIP it — otherwise the relocated
+# duplicates are re-detected every run. (`_recovered_collisions/` is deliberately NOT
+# excluded: `recover.py` stages survivors there for `organize` to re-file.)
+DUPLICATES_DIRNAME = "_duplicates"
+
+
+def scan_inbox_files(inbox: Path) -> list[Path]:
+    """Every file under ``inbox`` (recursive, sorted), excluding the ``_duplicates/`` tier.
+
+    The single source of truth for "what is waiting in the inbox" — shared by
+    :func:`geosorter.organize.run_organize`, :func:`geosorter.inbox.count_inbox` /
+    :func:`geosorter.inbox.list_inbox`, and :func:`geosorter.diagnose.diagnose_inbox`,
+    so relocated duplicates (already filed in the library) never reappear in a scan.
+    """
+    inbox = Path(inbox)
+    return [
+        p
+        for p in sorted(inbox.rglob("*"))
+        if p.is_file() and DUPLICATES_DIRNAME not in p.relative_to(inbox).parts
+    ]
+
 
 @dataclass(frozen=True)
 class CaptureGroup:

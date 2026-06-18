@@ -77,6 +77,17 @@ def test_retain_hyperlapse_frames_override_false(tmp_path):
     assert config.load(cfg_path).retain_hyperlapse_frames is False
 
 
+def test_relocate_duplicates_default_true(tmp_path):
+    # No config file → duplicates are relocated to _duplicates/ (and logged).
+    assert config.load(tmp_path / "nope.toml").relocate_duplicates is True
+
+
+def test_relocate_duplicates_override_false(tmp_path):
+    cfg_path = tmp_path / "geosorter.toml"
+    cfg_path.write_text("relocate_duplicates = false\n", encoding="utf-8")
+    assert config.load(cfg_path).relocate_duplicates is False
+
+
 def test_hugin_bin_dir_default_none(tmp_path):
     # No config file → the optional Hugin binary dir is unset (PATH-only detection).
     assert config.load(tmp_path / "nope.toml").hugin_bin_dir is None

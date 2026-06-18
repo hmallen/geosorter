@@ -230,7 +230,8 @@ def _render_report(report: BatchReport, dry_run: bool) -> None:
         click.echo(f"  hyperlapse frames:  {mib:.1f} MiB retained (set retain_hyperlapse_frames=false to skip)")
     if report.ratings_applied:
         click.echo(f"  star ratings:       {report.ratings_applied} applied from a MISC catalog")
-    click.echo(f"  duplicates skipped: {report.duplicates_skipped}")
+    dup_note = " (moved to _duplicates/)" if report.duplicates_relocated else ""
+    click.echo(f"  duplicates skipped: {report.duplicates_skipped}{dup_note}")
     if report.unclaimed:
         click.echo(f"  unclaimed:          {report.unclaimed} file(s) in PANORAMA/MISC (not yet handled) — left in the inbox")
     for warning in report.warnings:

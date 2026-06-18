@@ -61,6 +61,12 @@ spatial_index = 'rtree'
 # false to file only the render and leave the frames in the inbox (saves disk).
 # retain_hyperlapse_frames = true
 
+# Move a detected duplicate (content already in the library) into
+# `<inbox>/_duplicates/<original-relpath>` and log it to
+# `<inbox>/_duplicates/duplicates.log`, instead of silently leaving it in the inbox.
+# Set false to restore the old skip-in-place behavior.
+# relocate_duplicates = true
+
 # Optional directory holding the Hugin CLI tools (pto_gen, cpfind, hugin_executor,
 # ...), used to stitch a 360 panorama hero from a DJI PANORAMA tile set. Leave unset
 # to detect them on PATH. When neither finds Hugin, panorama stitching is silently
@@ -130,6 +136,10 @@ class Config:
     feature_proximity_km: float = 5.0
     inference_max_gap_minutes: float = 30.0
     retain_hyperlapse_frames: bool = True
+    # When True (default), `organize` MOVES a detected duplicate (content already in the
+    # library) into `<inbox>/_duplicates/<original-relpath>` and logs it, instead of
+    # silently leaving it in the inbox. False restores the old skip-in-place behavior.
+    relocate_duplicates: bool = True
     hugin_bin_dir: Path | None = None
     # Panorama-stitch tuning (m-frontend-pano-ux): the equirectangular canvas
     # (smaller = faster) and two opt-out quality steps — cpfind --celeste and
@@ -305,6 +315,7 @@ def load(path: str | Path | None = None) -> Config:
         feature_proximity_km=float(data.get("feature_proximity_km", 5.0)),
         inference_max_gap_minutes=float(data.get("inference_max_gap_minutes", 30.0)),
         retain_hyperlapse_frames=bool(data.get("retain_hyperlapse_frames", True)),
+        relocate_duplicates=bool(data.get("relocate_duplicates", True)),
         hugin_bin_dir=_opt_path(data.get("hugin_bin_dir")),
         stitch_canvas=stitch_canvas,
         stitch_celeste=stitch_celeste,

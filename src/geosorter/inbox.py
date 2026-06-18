@@ -62,7 +62,7 @@ def count_inbox(inbox_path: Path | None) -> InboxCount:
     inbox = Path(inbox_path)
     if not inbox.is_dir():
         return InboxCount(0, 0)
-    paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
+    paths = grouping.scan_inbox_files(inbox)
     result = grouping.prescan_inbox(paths, inbox_root=inbox)
     return InboxCount(files=len(paths), captures=len(result.groups))
 
@@ -80,7 +80,7 @@ def list_inbox(inbox_path: Path | None) -> list[InboxGroup]:
     inbox = Path(inbox_path)
     if not inbox.is_dir():
         return []
-    paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
+    paths = grouping.scan_inbox_files(inbox)
     result = grouping.prescan_inbox(paths, inbox_root=inbox)
     groups = [
         InboxGroup(
