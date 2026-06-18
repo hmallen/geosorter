@@ -20,7 +20,7 @@ from pathlib import Path
 import click
 import uvicorn
 
-from . import __version__, api, auth, config, db, derived, geocoder, geonames_loader, pathing
+from . import __version__, api, auth, config, db, derived, diagnose, geocoder, geonames_loader, pathing
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
@@ -398,6 +398,80 @@ def _render_rescan_report(report: RescanReport) -> None:
         )
         for o in report.orphaned:
             click.echo(f"    ! {o}")
+
+
+@cli.command(name="diagnose-inbox")
+@_CONFIG_OPTION
+@click.option(
+    "--no-hash",
+    is_flag=True,
+    help="Skip the per-file duplicate hash check (faster; no duplicate detection).",
+)
+def diagnose_inbox(config_path: str | None, no_hash: bool) -> None:
+    """Explain why each inbox file is (or isn't) organized — read-only, no changes.
+
+    Accounts for every file waiting in the inbox with a disposition (would-organize /
+    would-quarantine / duplicate / non-DJI clutter / orphaned sidecar / unlinked
+    frame dir / already-moved / MISC catalog) and a reason, using the same grouping,
+    metadata, and duplicate-detection logic as ``organize``. By default it hashes each
+    primary to detect content already in the library (the silent skip that keeps a
+    re-imported file stuck in the inbox); ``--no-hash`` skips that for a faster
+    structural triage. Mutates nothing on disk or in the index DB.
+    """
+    cfg = config.load(config_path)
+    try:
+        report = diagnose.diagnose_inbox(
+            cfg, hash_check=not no_hash, progress=lambda msg: None
+        )
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    _render_diagnosis(report, hashed=not no_hash)
+
+
+# Order dispositions worst-stuck first so the actionable cases lead the report.
+_DISPOSITION_ORDER = [
+    diagnose.DUPLICATE,
+    diagnose.NON_DJI_CLUTTER,
+    diagnose.ORPHANED_SIDECAR,
+    diagnose.UNLINKED_FRAME_DIR,
+    diagnose.WOULD_QUARANTINE,
+    diagnose.ALREADY_MOVED,
+    diagnose.MISC_CATALOG,
+    diagnose.WOULD_ORGANIZE,
+]
+
+
+def _render_diagnosis(report: diagnose.InboxDiagnosis, *, hashed: bool) -> None:
+    total = len(report.files)
+    click.echo(
+        f"Inbox diagnosis: {total} file(s)"
+        + ("" if hashed else " (--no-hash: duplicates not detected)")
+    )
+    if total == 0:
+        click.echo("  inbox is empty (or unset / missing).")
+        return
+    # Summary line per disposition (declared order first, then any extras).
+    seen = set(_DISPOSITION_ORDER)
+    ordered = _DISPOSITION_ORDER + [d for d in report.counts if d not in seen]
+    click.echo("  summary:")
+    for disp in ordered:
+        n = report.counts.get(disp, 0)
+        if n:
+            click.echo(f"    {disp:<18} {n}")
+    # Per-file detail, grouped by disposition (same order).
+    by_disp: dict[str, list[diagnose.FileDiagnosis]] = {}
+    for d in report.files:
+        by_disp.setdefault(d.disposition, []).append(d)
+    for disp in ordered:
+        files = by_disp.get(disp)
+        if not files:
+            continue
+        click.echo(f"\n  {disp} ({len(files)}):")
+        for d in files:
+            line = f"    {d.path}  — {d.reason}"
+            if d.detail:
+                line += f"  [{d.detail}]"
+            click.echo(line)
 
 
 @cli.command(name="recover-collisions")

@@ -113,6 +113,29 @@ def test_help_lists_organize_verbs():
     assert "verify-library" in result.output
     assert "rescan" in result.output
     assert "recover-collisions" in result.output
+    assert "diagnose-inbox" in result.output
+
+
+def test_diagnose_inbox_reports_duplicate_cli(tmp_path):
+    # Organize a real DJI photo, then re-import the SAME bytes under a new name:
+    # diagnose-inbox must flag the re-import as a duplicate (the silent stuck case).
+    import shutil
+
+    cfg, inbox, _library = _write_cfg_organize(tmp_path)
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0001.JPG")
+    CliRunner().invoke(cli, ["organize", "--yes", "--config", str(cfg)])
+    # The first source was moved out; drop a same-content re-import back in.
+    shutil.copy(MEDIA / "dji_photo.jpg", inbox / "DJI_0002.JPG")
+
+    r = CliRunner().invoke(cli, ["diagnose-inbox", "--config", str(cfg)])
+    assert r.exit_code == 0, r.output
+    assert "duplicate" in r.output
+    assert "DJI_0002.JPG" in r.output
+
+    # --no-hash skips duplicate detection: the same file reads as would-organize.
+    r2 = CliRunner().invoke(cli, ["diagnose-inbox", "--no-hash", "--config", str(cfg)])
+    assert r2.exit_code == 0, r2.output
+    assert "duplicates not detected" in r2.output
 
 
 def test_recover_collisions_dry_run_no_collisions_cli(tmp_path):
