@@ -121,7 +121,7 @@ def diagnose_inbox(
     if not inbox.is_dir():
         return InboxDiagnosis(files=[], counts={})
 
-    paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
+    paths = grouping.scan_inbox_files(inbox)
     pre = grouping.prescan_inbox(paths, inbox_root=inbox)
 
     index = db.connect(cfg.index_db_path, integrity_check=False)

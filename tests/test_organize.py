@@ -254,12 +254,120 @@ def test_dedup_skips_identical_content(tmp_path):
     )
     assert report.duplicates_skipped == 1
     assert report.organized == 0
-    assert dup.exists()  # duplicate left in the inbox, NOT deleted
+    # Default relocation moved the dup out of its inbox path into _duplicates/.
+    assert not dup.exists()
+    assert (inbox / "_duplicates" / "DJI_0002.JPG").exists()
     conn = _index(cfg)
     try:
         assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
     finally:
         conn.close()
+
+
+def test_duplicate_relocated_and_logged(tmp_path):
+    # Default relocate_duplicates: a re-imported duplicate is MOVED into
+    # <inbox>/_duplicates/<relpath> and recorded in _duplicates/duplicates.log with the
+    # incoming path and the matched library path.
+    cfg, inbox, _library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"same-content")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    dup = _add(inbox, "sub/DJI_0002.JPG", b"same-content")
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert report.duplicates_skipped == 1
+    assert report.duplicates_relocated == 1
+    assert not dup.exists()  # moved out of its inbox path
+    moved = inbox / "_duplicates" / "sub" / "DJI_0002.JPG"  # subpath preserved
+    assert moved.exists() and moved.read_bytes() == b"same-content"
+
+    log = (inbox / "_duplicates" / "duplicates.log").read_text(encoding="utf-8")
+    conn = _index(cfg)
+    try:
+        matched = conn.execute(
+            "SELECT dest_path FROM files WHERE status='organized'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert str(dup) in log  # incoming path
+    assert organize._strip(matched) in log  # matched library path
+
+
+def test_duplicate_relocation_off_leaves_in_place(tmp_path):
+    cfg, inbox, _library = _setup(tmp_path)
+    cfg = replace(cfg, relocate_duplicates=False)
+    _add(inbox, "DJI_0001.JPG", b"same-content")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    dup = _add(inbox, "DJI_0002.JPG", b"same-content")
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert report.duplicates_skipped == 1
+    assert report.duplicates_relocated == 0
+    assert dup.exists()  # left in place
+    assert not (inbox / "_duplicates").exists()
+
+
+def test_duplicate_relocation_moves_companion(tmp_path):
+    cfg, inbox, _library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"prim-content")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    # Re-import the same primary content plus a .DNG companion, in a different dir.
+    prim = _add(inbox, "card/DJI_0001.JPG", b"prim-content")
+    dng = _add(inbox, "card/DJI_0001.DNG", b"raw-content")
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert report.duplicates_relocated == 1
+    assert not prim.exists() and not dng.exists()  # whole group moved together
+    assert (inbox / "_duplicates" / "card" / "DJI_0001.JPG").exists()
+    assert (inbox / "_duplicates" / "card" / "DJI_0001.DNG").exists()
+
+
+def test_relocated_duplicates_excluded_from_scan(tmp_path):
+    from geosorter import grouping
+    from geosorter import inbox as inbox_mod
+
+    cfg, inbox, _library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"dup")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    _add(inbox, "DJI_0002.JPG", b"dup")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    # The relocated file under _duplicates/ must be invisible to every inbox scan.
+    assert all("_duplicates" not in p.relative_to(inbox).parts for p in grouping.scan_inbox_files(inbox))
+    assert inbox_mod.count_inbox(inbox).captures == 0
+
+
+def test_relocated_duplicate_suffixes_on_collision(tmp_path):
+    # A second duplicate landing at the same _duplicates/ relpath must not clobber the
+    # first — it is suffixed (recycled DJI names across cards).
+    cfg, inbox, _library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG", b"X")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    _add(inbox, "d/DJI_0002.JPG", b"X")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert (inbox / "_duplicates" / "d" / "DJI_0002.JPG").exists()
+    # Same inbox relpath, again a duplicate → relocation must suffix, not overwrite.
+    _add(inbox, "d/DJI_0002.JPG", b"X")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert (inbox / "_duplicates" / "d" / "DJI_0002.JPG").exists()
+    assert (inbox / "_duplicates" / "d" / "DJI_0002_2.JPG").exists()
 
 
 def test_collision_different_content_gets_suffix(tmp_path, monkeypatch):
@@ -849,8 +957,11 @@ def test_same_volume_foreign_duplicate_with_stale_row_is_skipped(tmp_path, monke
     conn.commit()
     conn.close()
 
+    # Pin relocation off here so the test stays focused on dedup DETECTION (the stale-row
+    # "mine" exemption), not the relocation behavior covered by its own tests.
     report = organize.run_organize(
-        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+        replace(cfg, relocate_duplicates=False), assume_yes=True,
+        extractor_factory=_factory({"DJI_0002.JPG": _md()}),
     )
     assert report.duplicates_skipped == 1  # P recognized as a foreign duplicate of Q
     assert report.organized == 0

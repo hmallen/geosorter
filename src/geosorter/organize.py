@@ -49,6 +49,7 @@ class BatchReport:
     inferred: int = 0  # subset of `organized` whose location was borrowed (B8)
     quarantined: int = 0
     duplicates_skipped: int = 0
+    duplicates_relocated: int = 0  # duplicates moved to <inbox>/_duplicates/ (relocate_duplicates)
     companions: int = 0
     retained_frame_bytes: int = 0  # disk cost of retained hyperlapse frames (B10)
     unclaimed: int = 0  # recognized PANORAMA/MISC paths B10 does not file (B10)
@@ -190,6 +191,61 @@ def _resolve_collision(conn, primary: Path, dest_path: str) -> str:
             "SELECT 1 FROM files WHERE dest_path=? LIMIT 1", (candidate,)
         ).fetchone()
         if taken_in_db is None and not os.path.exists(f"{stem}_{n}{ext}"):
+            return candidate
+        n += 1
+
+
+def _relocate_duplicate(index, group, companions, inbox, src_sha: str, report) -> None:
+    r"""Move a duplicate capture out of the inbox into ``<inbox>/_duplicates/`` + log it.
+
+    A duplicate is byte-identical content already verified in ``library_root``, so this is
+    a plain move (no copy-verify, never touches the library). The whole capture (primary +
+    its effective companions) moves together, each preserving its inbox-relative subpath so
+    recycled DJI names across cards never collide, and one TSV line — incoming primary path
+    and the matched library ``dest_path`` — is appended to ``_duplicates/duplicates.log``.
+    """
+    dup_root = Path(inbox) / grouping.DUPLICATES_DIRNAME
+    # Companions FIRST, primary LAST — mirroring the organizer's move discipline. This
+    # path is off the crash-safe move log, so if a move fails midway the primary must
+    # still be in the inbox for the next run to rebuild and retry the group from it
+    # (a primary moved out first would strand any unmoved companion as an orphan).
+    for src in [c for c, _t in companions] + [group.primary]:
+        if not src.exists():
+            continue
+        target = _dup_target(dup_root, Path(inbox), src)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.replace(src, target)  # atomic within the inbox volume
+        except OSError:
+            try:
+                shutil.move(str(src), str(target))  # cross-device fallback
+            except OSError as exc:
+                # A duplicate is already safe in the library, so a relocation failure is
+                # non-fatal: record it and leave the rest in place rather than aborting
+                # the whole run. The next run rebuilds the group from the primary.
+                report.failures.append(f"{src}: duplicate relocation failed: {exc}")
+                return
+    row = index.execute(
+        "SELECT dest_path FROM files WHERE sha256=? LIMIT 1", (src_sha,)
+    ).fetchone()
+    matched_dest = _strip(row[0]) if row else ""
+    dup_root.mkdir(parents=True, exist_ok=True)
+    line = f"{datetime.now().isoformat(timespec='seconds')}\t{report.batch_id}\t{group.primary}\t{matched_dest}\n"
+    with open(dup_root / "duplicates.log", "a", encoding="utf-8") as fh:
+        fh.write(line)
+    report.duplicates_relocated += 1
+
+
+def _dup_target(dup_root: Path, inbox: Path, src: Path) -> Path:
+    """Non-clobbering ``_duplicates/`` destination preserving ``src``'s inbox subpath."""
+    target = dup_root / src.relative_to(inbox)
+    if not target.exists():
+        return target
+    stem, ext = os.path.splitext(target.name)
+    n = 2
+    while True:
+        candidate = target.with_name(f"{stem}_{n}{ext}")
+        if not candidate.exists():
             return candidate
         n += 1
 
@@ -412,7 +468,7 @@ def run_organize(
     db.init_index_schema(index)
     geonames = db.connect(cfg.geonames_db_path, integrity_check=False)
     try:
-        paths = [p for p in sorted(inbox.rglob("*")) if p.is_file()]
+        paths = grouping.scan_inbox_files(inbox)
         pre = grouping.prescan_inbox(paths, inbox_root=inbox)
         groups = pre.groups
         if selected_primaries is not None:
@@ -510,7 +566,8 @@ def run_organize(
                            library, report, dry_run, progress, cfg.feature_proximity_km,
                            byte_progress, cfg.retain_hyperlapse_frames,
                            cfg.copy_retry_attempts, cfg.copy_retry_backoff_s,
-                           same_volume=same_volume)
+                           same_volume=same_volume, inbox=inbox,
+                           relocate_duplicates=cfg.relocate_duplicates)
             bytes_since_check += grp_bytes
 
         if not dry_run:
@@ -635,7 +692,8 @@ def _apply_catalog_ratings(index, report, unclaimed, cfg, *, archive=True) -> No
 def _process_group(group, md, inferred, index, geonames, library, report, dry_run,
                    progress, feature_proximity_km=5.0, byte_progress=None,
                    retain_hyperlapse_frames=True, copy_retry_attempts=1,
-                   copy_retry_backoff_s=0.0, same_volume=False) -> None:
+                   copy_retry_backoff_s=0.0, same_volume=False, inbox=None,
+                   relocate_duplicates=False) -> None:
     primary = group.primary
 
     # Effective companion set: a hyperlapse group with retention off files the render
@@ -698,6 +756,8 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         src_sha = move_engine.sha256_file(primary)
         if _is_duplicate(index, primary, src_sha):
             report.duplicates_skipped += 1
+            if relocate_duplicates and inbox is not None:
+                _relocate_duplicate(index, group, companions, inbox, src_sha, report)
             return
     else:
         src_sha = None

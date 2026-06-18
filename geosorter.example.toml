@@ -43,6 +43,11 @@ spatial_index = 'rtree'
 # `<render>_frames/` subfolder). Set false to file only the render.
 # retain_hyperlapse_frames = true
 
+# Move a detected duplicate (content already in the library) into
+# `<inbox>/_duplicates/` and log it to `_duplicates/duplicates.log`, instead of
+# leaving it in the inbox. Set false to restore the old skip-in-place behavior.
+# relocate_duplicates = true
+
 # Directory holding the Hugin CLI tools for 360 panorama stitching. Leave unset to
 # detect them on PATH; absent Hugin just disables stitching (the tile gallery remains).
 # hugin_bin_dir = 'C:\Program Files\Hugin\bin'
