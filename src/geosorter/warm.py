@@ -46,7 +46,8 @@ class WarmResult:
     proxy_eviction: EvictionResult | None = None
 
 
-def warm_library(cfg, batch_id=None, *, progress=None, cancel=None, on_plan=None) -> WarmResult:
+def warm_library(cfg, batch_id=None, *, progress=None, cancel=None, on_plan=None,
+                 verbose_ffmpeg=False) -> WarmResult:
     """Pre-generate thumbnails (photos) + posters (videos) for organized media.
 
     Generates ONLY the local-tier browse assets — thumbnails for photos, poster
@@ -69,6 +70,11 @@ def warm_library(cfg, batch_id=None, *, progress=None, cancel=None, on_plan=None
     returns the source unchanged). When ``cfg.proxy_cache_max_gb`` is set, the proxy
     tier's ``proxies`` kind is LRU-evicted down to it after generation — enforced
     INDEPENDENT of ``warm_proxies`` so the cap also bounds lazily-generated proxies.
+
+    ``verbose_ffmpeg`` (warm-proxies ``--show-ffmpeg``) is threaded into
+    ``derived.proxy(..., verbose=...)`` ONLY (not ``derived.poster``), so the HEVC
+    transcode streams its ffmpeg output live to the terminal; default False suppresses
+    it as before, and the auto-enqueue path (``jobs._run_warm``) never sets it.
     """
     cache_dir = Path(cfg.cache_dir) if cfg.cache_dir else config.default_cache_dir()
     proxy_cache_dir = config.resolve_proxy_cache_dir(cfg)
@@ -110,7 +116,7 @@ def warm_library(cfg, batch_id=None, *, progress=None, cancel=None, on_plan=None
                 # Codec-gated inside derived.proxy: an H.264/unknown source returns
                 # unchanged (out == source), only HEVC is actually transcoded.
                 out = derived.proxy(proxy_cache_dir, rel_key, source, codec,
-                                    hwaccel=cfg.proxy_hwaccel)
+                                    hwaccel=cfg.proxy_hwaccel, verbose=verbose_ffmpeg)
                 if out != source:
                     proxies_warmed += 1
         except Exception:  # a single bad file must not abort the whole warm pass

@@ -390,6 +390,33 @@ def test_warm_proxies_shows_progress(tmp_path, monkeypatch):
     assert "Warm complete" in result.output
 
 
+def test_warm_proxies_show_ffmpeg_threads_flag(tmp_path, monkeypatch):
+    cfg = _warm_cfg(tmp_path)
+    captured = {}
+
+    def fake(cfg_obj, batch_id=None, **kwargs):
+        captured["verbose_ffmpeg"] = kwargs.get("verbose_ffmpeg")
+        return _fake_warm({})(cfg_obj, batch_id, **kwargs)
+
+    monkeypatch.setattr("geosorter.cli.warm_library", fake)
+
+    result = CliRunner().invoke(
+        cli, ["warm-proxies", "--all", "--show-ffmpeg", "--yes", "--config", str(cfg)]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["verbose_ffmpeg"] is True
+
+    # Default (flag omitted) → verbose_ffmpeg False.
+    CliRunner().invoke(cli, ["warm-proxies", "--all", "--yes", "--config", str(cfg)])
+    assert captured["verbose_ffmpeg"] is False
+
+
+def test_warm_proxies_show_ffmpeg_in_help():
+    result = CliRunner().invoke(cli, ["warm-proxies", "--help"])
+    assert result.exit_code == 0
+    assert "--show-ffmpeg" in result.output
+
+
 def test_warm_proxies_requires_selection(tmp_path):
     cfg = _write_cfg(tmp_path)
     result = CliRunner().invoke(cli, ["warm-proxies", "--config", str(cfg)])

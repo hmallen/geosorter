@@ -589,8 +589,15 @@ def _render_restitch_report(report: RestitchReport) -> None:
     help="Warm every organized file in the library (a full HEVC sweep — slow).",
 )
 @click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
+@click.option(
+    "--show-ffmpeg",
+    "show_ffmpeg",
+    is_flag=True,
+    help="Stream full ffmpeg output for proxy transcodes (do not capture/suppress).",
+)
 def warm_proxies(
-    config_path: str | None, batch_id: str | None, all_batches: bool, yes: bool
+    config_path: str | None, batch_id: str | None, all_batches: bool, yes: bool,
+    show_ffmpeg: bool,
 ) -> None:
     """Pre-generate HEVC->H.264 proxies (and thumbs/posters) for organized media.
 
@@ -631,7 +638,9 @@ def warm_proxies(
     # file. Rendered as a carriage-return-updated single line so a multi-hour --all
     # sweep shows how far along it is (a file whose source is missing on disk is
     # skipped without a tick, so the counter may finish just below the total — the
-    # final report carries the authoritative counts).
+    # final report carries the authoritative counts). With --show-ffmpeg the per-file
+    # line is printed on its own line (no carriage return) so the live ffmpeg output
+    # streamed during the next transcode is not clobbered.
     state = {"total": 0, "done": 0}
 
     def on_plan(total: int) -> None:
@@ -643,7 +652,7 @@ def warm_proxies(
         width = len(str(state["total"]))
         click.echo(
             f"\r[{state['done']:>{width}}/{state['total']}] {name[:60]}",
-            nl=False,
+            nl=show_ffmpeg,
         )
 
     try:
@@ -652,10 +661,11 @@ def warm_proxies(
             batch_id=None if all_batches else batch_id,
             on_plan=on_plan,
             progress=progress,
+            verbose_ffmpeg=show_ffmpeg,
         )
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
-    if state["done"]:
+    if state["done"] and not show_ffmpeg:
         click.echo()  # terminate the carriage-return progress line
     _render_warm_report(report)
 

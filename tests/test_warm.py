@@ -153,7 +153,7 @@ def test_warm_library_warms_proxies_when_opted_in(tmp_path, monkeypatch):
 
     calls: list[tuple] = []
 
-    def fake_proxy(cache_root, rel_key, source, codec, *, hwaccel="auto"):
+    def fake_proxy(cache_root, rel_key, source, codec, *, hwaccel="auto", verbose=False):
         calls.append((Path(cache_root), rel_key, Path(source), codec, hwaccel))
         out = derived._cache_path(cache_root, rel_key, "proxies", ".mp4")
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -170,6 +170,37 @@ def test_warm_library_warms_proxies_when_opted_in(tmp_path, monkeypatch):
     assert result.proxies_warmed == 1
     proxies = list((cfg.proxy_cache_dir / derived.CACHE_DIRNAME / "proxies").rglob("*.mp4"))
     assert len(proxies) == 1
+
+
+def test_warm_library_threads_verbose_ffmpeg_to_proxy(tmp_path, monkeypatch):
+    cfg = _proxy_cfg(tmp_path, warm_proxies=True)
+    lib = cfg.library_root / "A"
+    lib.mkdir(parents=True)
+    video = lib / "v.mp4"
+    shutil.copy(FIXTURES / "h265_tiny.mp4", video)
+    _seed_batch(cfg, [(str(video), "video", "h265")], "b1")
+
+    seen: list[bool] = []
+
+    def fake_proxy(cache_root, rel_key, source, codec, *, hwaccel="auto", verbose=False):
+        seen.append(verbose)
+        out = derived._cache_path(cache_root, rel_key, "proxies", ".mp4")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"proxy")
+        return out
+
+    monkeypatch.setattr(derived, "proxy", fake_proxy)
+    warm.warm_library(cfg, "b1", verbose_ffmpeg=True)
+    assert seen == [True]  # verbose_ffmpeg threaded into derived.proxy
+
+    seen.clear()
+    # Default (verbose_ffmpeg omitted) passes verbose=False. Use batch b2 so the
+    # b1 proxy cache hit does not skip the call.
+    video2 = lib / "v2.mp4"
+    shutil.copy(FIXTURES / "h265_tiny.mp4", video2)
+    _seed_batch(cfg, [(str(video2), "video", "h265")], "b2")
+    warm.warm_library(cfg, "b2")
+    assert seen == [False]
 
 
 def test_warm_library_skips_proxies_by_default(tmp_path, monkeypatch):
