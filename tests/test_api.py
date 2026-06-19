@@ -978,7 +978,7 @@ def test_undo_retag_rescan_return_409_while_organize_running(tmp_path):
     block = threading.Event()
 
     def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
-                      selected_primaries=None, on_plan=None):
+                      selected_primaries=None, on_plan=None, invalidate=None):
         block.wait(3.0)
         return BatchReport(batch_id="x")
 

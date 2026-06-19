@@ -23,7 +23,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import db, geocoder, move_engine, pathing, tz_resolver
+from . import config, db, derived, geocoder, move_engine, pathing, tz_resolver
 from .organize import _companion_dest, _strip
 
 
@@ -186,6 +186,20 @@ def retag_file(cfg, file_id: int, lat: float, lon: float, *, progress=None) -> R
         for old_dest, new_dest in pairs:
             if old_dest != new_dest:
                 _cleanup(_strip(old_dest))
+
+        # Invalidate the derived cache (poster/thumb/preview/proxy/stitch) for BOTH the
+        # vacated OLD paths and the freshly-written NEW paths
+        # (m-fix-stale-derived-cache-thumbnails): the new path may have held a different
+        # capture's stale assets, and the old path's assets are now orphaned.
+        cache_dir = cfg.cache_dir or config.default_cache_dir()
+        proxy_cache_dir = config.resolve_proxy_cache_dir(cfg)
+        for old_dest, new_dest in pairs:
+            if old_dest != new_dest:
+                for d in (old_dest, new_dest):
+                    derived.invalidate(
+                        cache_dir, proxy_cache_dir,
+                        pathing.library_rel_key(library, d),
+                    )
 
         report.moved = moved
         report.status = "retagged"

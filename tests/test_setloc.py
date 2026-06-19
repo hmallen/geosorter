@@ -122,6 +122,25 @@ def test_assign_single_quarantined_promotes(tmp_path):
     assert row[5] == "2024-07-04"
 
 
+def test_assign_invalidates_derived_cache(tmp_path, monkeypatch):
+    # (m-fix-stale-derived-cache-thumbnails) Promoting a no-GPS capture rewrites content
+    # at a NEW library dest, so the derived cache for that path must be invalidated.
+    cfg, inbox, library = _setup(tmp_path)
+    ids = _quarantine(cfg, inbox, {"DJI_0001.JPG": _md()})
+    fid = ids["DJI_0001.JPG"]
+
+    calls = []
+    monkeypatch.setattr(
+        setloc.derived, "invalidate",
+        lambda cache_dir, proxy_cache_dir, rel_key: calls.append(rel_key),
+    )
+    report = setloc.assign_locations(
+        cfg, [fid], *BOULDER, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    assert report.assigned == 1
+    assert any("Boulder" in r and r.endswith("DJI_0001.JPG") for r in calls)  # new dest
+
+
 def test_assign_bulk_each_to_own_date(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
     md1 = _md(capture_ts_raw="2024:07:04 09:15:00")

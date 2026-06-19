@@ -27,6 +27,7 @@ from .derived import (
     panorama_stitch,
     stitch_cache_path,
 )
+from .derived import invalidate as invalidate_cache
 from .organize import run_organize
 from .rescan import run_rescan
 from .retag import retag_file
@@ -337,11 +338,30 @@ class JobManager:
             state.bytes_done = done
             state.bytes_total = total
 
+        # Drop any stale derived asset at each filed dest (a path may have held different
+        # prior content via recover / recycled-name re-file / re-import after undo). The
+        # callback keeps organize.py Pillow-free (m-fix-stale-derived-cache-thumbnails).
+        # Only wired when a real Config is present (tests inject cfg=None with simple
+        # organize fakes that take no `invalidate`).
+        organize_kwargs: dict = {}
+        if self._cfg is not None:
+            cache_dir = self._cfg.cache_dir or config.default_cache_dir()
+            proxy_cache_dir = config.resolve_proxy_cache_dir(self._cfg)
+
+            def invalidate(dest_path: str) -> None:
+                invalidate_cache(
+                    cache_dir, proxy_cache_dir,
+                    pathing.library_rel_key(self._cfg.library_root, dest_path),
+                )
+
+            organize_kwargs["invalidate"] = invalidate
+
         try:
             report = self._organize_fn(
                 self._cfg, assume_yes=True, cancel=event.is_set,
                 progress=progress, byte_progress=byte_progress,
                 selected_primaries=selected_primaries, on_plan=on_plan,
+                **organize_kwargs,
             )
         except Exception as exc:  # surface any pipeline failure as a job error
             state.state = "error"

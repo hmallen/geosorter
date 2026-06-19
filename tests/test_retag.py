@@ -130,6 +130,27 @@ def test_retag_moves_organized_file_to_new_place(tmp_path):
     assert mv_sha == old_sha
 
 
+def test_retag_invalidates_derived_cache(tmp_path, monkeypatch):
+    # (m-fix-stale-derived-cache-thumbnails) A re-tag rewrites content at the OLD and NEW
+    # dest paths, so the derived cache for both (primary + companion) must be invalidated
+    # — otherwise a stale poster/thumbnail/proxy from the prior content keeps being served.
+    cfg, inbox, _ = _setup(tmp_path)
+    fid = _organize_one(cfg, inbox, with_companion=True)
+
+    calls = []
+    monkeypatch.setattr(
+        retag.derived, "invalidate",
+        lambda cache_dir, proxy_cache_dir, rel_key: calls.append(rel_key),
+    )
+    report = retag.retag_file(cfg, fid, *DENVER)
+    assert report.status == "retagged"
+
+    assert any("Boulder" in r and r.endswith("DJI_0001.JPG") for r in calls)  # old primary
+    assert any("Denver" in r and r.endswith("DJI_0001.JPG") for r in calls)   # new primary
+    assert any("Boulder" in r and r.endswith(".DNG") for r in calls)          # old companion
+    assert any("Denver" in r and r.endswith(".DNG") for r in calls)           # new companion
+
+
 def test_retag_is_idempotent_when_repeated(tmp_path):
     # Re-tagging twice to the same new place is a no-op the second time: the file
     # is already at the Denver path, so nothing moves and no data is lost.

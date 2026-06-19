@@ -1040,3 +1040,112 @@ def test_atomic_write_failure_publishes_nothing(tmp_path):
         derived._atomic_write(out, boom)
     assert not out.exists()  # ...but `out` was never published
     assert list(out.parent.iterdir()) == []  # temp cleaned up
+
+
+# --- Size-aware freshness (m-fix-stale-derived-cache-thumbnails) ------------ #
+
+
+def test_generate_writes_size_sidecar(tmp_path):
+    # _generate records the source's byte size in a <cachefile>.src sidecar so a later
+    # content swap (different size, possibly older mtime) is detected as stale.
+    src = FIXTURES / "dji_photo.jpg"
+    out = derived.thumbnail(tmp_path / "cache", "dji_photo.jpg", src)
+    sidecar = derived._src_sidecar(out)
+    assert sidecar.exists()
+    assert sidecar.read_text() == str(src.stat().st_size)
+
+
+def test_is_fresh_stale_on_size_mismatch(tmp_path):
+    # The headline bug: a dest path whose content was REPLACED by a file with an OLDER
+    # mtime than the cached asset must NOT be served from cache. The size sidecar catches
+    # it even though cache_mtime >= source_mtime still holds.
+    cache = tmp_path / "cache"
+    src = tmp_path / "photo.jpg"
+    Image.new("RGB", (40, 30), "red").save(src)
+    out = derived.thumbnail(cache, "photo.jpg", src)
+    pinned = out.stat().st_mtime  # cache mtime is pinned to the (original) source mtime
+
+    # Replace the source with different-size bytes, keeping mtime <= cache mtime so the
+    # legacy mtime-only check would (wrongly) still consider the cache fresh.
+    src.write_bytes(b"\0" * (out.stat().st_size + src.stat().st_size + 123))
+    os.utime(src, (pinned, pinned))
+
+    assert not derived._is_fresh(out, src)  # size sidecar mismatch -> stale
+
+
+def test_is_fresh_lenient_without_sidecar(tmp_path):
+    # An EXISTING cache file with no .src sidecar (e.g. a proxy generated before this
+    # fix) keeps the old mtime-only leniency, so it is NOT force-regenerated.
+    src = tmp_path / "s.bin"
+    src.write_bytes(b"x" * 10)
+    cache = tmp_path / "c.jpg"
+    cache.write_bytes(b"y" * 5)  # deliberately a different size than the source
+    os.utime(src, (1000.0, 1000.0))
+    os.utime(cache, (1000.0, 1000.0))  # cache mtime >= source mtime
+    assert not derived._src_sidecar(cache).exists()
+    assert derived._is_fresh(cache, src)  # no sidecar -> lenient, still fresh
+
+
+# --- invalidate() + eviction sidecar handling ------------------------------ #
+
+
+def test_invalidate_removes_asset_and_sidecar(tmp_path):
+    cache_dir = tmp_path / "cache"
+    proxy_dir = tmp_path / "proxytier"
+    rel = "Place, Region, Country/2024-01-01/clip.mp4"
+
+    # Seed a local-tier poster (cache_dir) and a proxy-tier proxy (proxy_dir), each with
+    # its size sidecar, directly at the computed cache paths (no ffmpeg needed).
+    poster = derived._cache_path(cache_dir, rel, "posters", ".jpg")
+    proxy = derived._cache_path(proxy_dir, rel, "proxies", ".mp4")
+    for f in (poster, proxy):
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"data")
+        derived._src_sidecar(f).write_text("4")
+
+    derived.invalidate(cache_dir, proxy_dir, rel)
+
+    assert not poster.exists() and not derived._src_sidecar(poster).exists()
+    assert not proxy.exists() and not derived._src_sidecar(proxy).exists()
+    derived.invalidate(cache_dir, proxy_dir, rel)  # idempotent: a second call never raises
+
+
+def test_evict_cache_ignores_src_sidecars(tmp_path):
+    cache_root = tmp_path / "cache"
+    thumbs = cache_root / CACHE / "thumbs"
+    thumbs.mkdir(parents=True)
+    mib = 1 << 20
+    big = _make_cache_file(thumbs, "f.jpg", 2 * mib, atime=1000)
+    sidecar = thumbs / "f.jpg.src"
+    sidecar.write_text("123")
+    os.utime(sidecar, (1, 1))  # oldest atime — would be evicted first if counted
+
+    res = derived.evict_local_cache(cache_root, max_gb=1 / 1024)  # 1 MiB cap
+
+    assert not big.exists()  # the real asset evicted
+    assert sidecar.exists()  # the sidecar is never swept
+    assert res.bytes_before == 2 * mib  # sidecar bytes not counted toward the cap
+    assert res.deleted == 1
+
+
+# --- clear_local_cache remediation ----------------------------------------- #
+
+
+def test_clear_local_cache_spares_proxies_stitch(tmp_path):
+    cache_dir = tmp_path / "cache"
+    seeded = {}
+    for kind, ext in [("thumbs", ".jpg"), ("previews", ".jpg"), ("posters", ".jpg"),
+                      ("collage", ".jpg"), ("proxies", ".mp4"), ("stitch", ".jpg")]:
+        d = cache_dir / CACHE / kind
+        d.mkdir(parents=True)
+        f = d / ("a" + ext)
+        f.write_bytes(b"x")
+        seeded[kind] = f
+
+    n = derived.clear_local_cache(cache_dir)
+
+    for kind in ("thumbs", "previews", "posters", "collage"):
+        assert not seeded[kind].exists()  # cheap local kinds wiped
+    assert seeded["proxies"].exists()  # expensive proxy spared
+    assert seeded["stitch"].exists()  # expensive Hugin hero spared
+    assert n == 4

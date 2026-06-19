@@ -436,6 +436,7 @@ def run_organize(
     selected_primaries: set[str] | None = None,
     extractor_factory=MetadataExtractor,
     on_plan=None,
+    invalidate=None,
 ) -> BatchReport:
     """Scan ``cfg.inbox_path`` and organize every capture into ``cfg.library_root``.
 
@@ -456,6 +457,12 @@ def run_organize(
     ``extractor_factory`` is injectable for tests. ``on_plan``, if given, is called
     once as ``on_plan(total_groups, total_bytes)`` after the selection filter so a
     caller (the HTTP job manager) can show "N of M captures" and a bytes-based ETA.
+    ``invalidate`` (m-fix-stale-derived-cache-thumbnails), if given, is called as
+    ``invalidate(dest_path)`` for each library file written this run, so the caller can
+    drop any stale derived asset (poster/thumbnail/proxy) at a dest path that previously
+    held DIFFERENT content (recover / recycled-name re-file / re-import after undo). It is
+    an injected callback (the CLI omits it; the HTTP job manager wires it to
+    ``derived.invalidate``) so this Pillow-free move path never imports Pillow/ffmpeg.
     """
     if cfg.inbox_path is None or cfg.library_root is None:
         raise ValueError("organize requires both inbox_path and library_root in geosorter.toml")
@@ -567,7 +574,8 @@ def run_organize(
                            byte_progress, cfg.retain_hyperlapse_frames,
                            cfg.copy_retry_attempts, cfg.copy_retry_backoff_s,
                            same_volume=same_volume, inbox=inbox,
-                           relocate_duplicates=cfg.relocate_duplicates)
+                           relocate_duplicates=cfg.relocate_duplicates,
+                           invalidate=invalidate)
             bytes_since_check += grp_bytes
 
         if not dry_run:
@@ -693,7 +701,7 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
                    progress, feature_proximity_km=5.0, byte_progress=None,
                    retain_hyperlapse_frames=True, copy_retry_attempts=1,
                    copy_retry_backoff_s=0.0, same_volume=False, inbox=None,
-                   relocate_duplicates=False) -> None:
+                   relocate_duplicates=False, invalidate=None) -> None:
     primary = group.primary
 
     # Effective companion set: a hyperlapse group with retention off files the render
@@ -825,6 +833,7 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
                 report.aborted = True
                 report.failures.append(f"{sp}: {outcome.error}")
                 return  # files row already durable; re-run completes the renames
+        _invalidate_moved(invalidate, files_to_move)
         _tally(report, companions, geo, quarantine, local, was_inferred, frame_bytes)
         return
 
@@ -866,7 +875,23 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         if sha is not None:  # already-deleted files (skipped in Phase A) need nothing
             move_engine.commit_delete(index, sp, sha)
 
+    _invalidate_moved(invalidate, files_to_move)
     _tally(report, companions, geo, quarantine, local, was_inferred, frame_bytes)
+
+
+def _invalidate_moved(invalidate, files_to_move) -> None:
+    """Drop any stale derived asset for each library file written this group.
+
+    (m-fix-stale-derived-cache-thumbnails) ``invalidate`` is an injected
+    ``invalidate(dest_path)`` callback (or ``None``) — the caller wires it to
+    ``derived.invalidate`` so this Pillow-free move path never imports Pillow. A dest may
+    have previously held DIFFERENT content (recover / recycled-name re-file / re-import
+    after undo), whose poster/thumbnail/proxy would otherwise be served for the new file.
+    """
+    if invalidate is None:
+        return
+    for _sp, dp in files_to_move:
+        invalidate(str(dp))
 
 
 def _persist(index, report, md, geo, local, quarantine, primary, primary_dest,

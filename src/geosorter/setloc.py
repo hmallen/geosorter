@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import db, geocoder, pathing, tz_resolver
+from . import config, db, derived, geocoder, pathing, tz_resolver
 from .metadata import MetadataExtractor
 from .organize import _companion_dest, _strip
 from .retag import _RetagError, _cleanup, _relocate, _resolve_collision
@@ -90,11 +90,14 @@ def assign_locations(
         )
         report.place_string = geo.place_string
 
+        cache_dir = cfg.cache_dir or config.default_cache_dir()
+        proxy_cache_dir = config.resolve_proxy_cache_dir(cfg)
         with extractor_factory() as extractor:
             for fid in file_ids:
                 try:
                     report.moved += _assign_one(
-                        index, library, geo, lat, lon, fid, extractor, progress, report
+                        index, library, geo, lat, lon, fid, extractor, progress, report,
+                        cache_dir, proxy_cache_dir,
                     )
                 except _RetagError as err:
                     report.failures.append(f"{fid}: {err}")
@@ -104,7 +107,8 @@ def assign_locations(
         index.close()
 
 
-def _assign_one(index, library, geo, lat, lon, fid, extractor, progress, report) -> int:
+def _assign_one(index, library, geo, lat, lon, fid, extractor, progress, report,
+                cache_dir=None, proxy_cache_dir=None) -> int:
     """Promote one quarantined capture; return the count of files physically moved."""
     row = index.execute(
         "SELECT dest_path, filename FROM files WHERE id=? AND status='quarantined'",
@@ -179,6 +183,19 @@ def _assign_one(index, library, geo, lat, lon, fid, extractor, progress, report)
     for old_dest, new_dest in pairs:
         if old_dest != new_dest:
             _cleanup(_strip(old_dest))
+
+    # Invalidate the derived cache for the NEW library paths
+    # (m-fix-stale-derived-cache-thumbnails): a promoted capture now occupies a dest that
+    # may have held a different capture's stale poster/thumbnail/proxy. (The OLD path is a
+    # `_no-gps/…` quarantine location that is never served derived assets, so it needs no
+    # invalidation.)
+    if cache_dir is not None:
+        for old_dest, new_dest in pairs:
+            if old_dest != new_dest:
+                derived.invalidate(
+                    cache_dir, proxy_cache_dir,
+                    pathing.library_rel_key(library, new_dest),
+                )
 
     report.assigned += 1
     return moved
