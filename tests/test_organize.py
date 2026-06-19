@@ -115,6 +115,23 @@ def test_organize_photo_end_to_end(tmp_path):
     assert mrow[0] == "source_deleted"
 
 
+def test_organize_invalidates_filed_dest_cache(tmp_path):
+    # (m-fix-stale-derived-cache-thumbnails) organize files content at a dest path that
+    # may have been used by DIFFERENT prior content (recover / recycled-name re-file /
+    # re-import after undo). The optional `invalidate` callback is called per moved dest
+    # so any stale derived asset there is cleared. organize.py stays Pillow-free — the
+    # callback is injected by the caller (jobs.py wires it to derived.invalidate).
+    cfg, inbox, library = _setup(tmp_path)
+    _add(inbox, "DJI_0001.JPG")
+    calls = []
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()}),
+        invalidate=lambda dest: calls.append(dest),
+    )
+    assert report.organized == 1
+    assert any("Boulder" in d and d.endswith("DJI_0001.JPG") for d in calls)
+
+
 def test_recycled_name_across_dirs_files_both(tmp_path):
     # Regression for the recycled-DJI-filename data-loss bug: two UNRELATED files with
     # the SAME stem in DIFFERENT inbox subdirs (DJI counters recycle per SD card) must

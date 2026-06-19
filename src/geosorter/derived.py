@@ -148,9 +148,39 @@ def _cache_path(cache_root: Path | str, rel_key: str, kind: str, ext: str) -> Pa
     return (Path(cache_root) / CACHE_DIRNAME / kind / rel_key).with_suffix(ext)
 
 
+def _src_sidecar(cache_file: Path) -> Path:
+    """The ``<cache_file>.src`` sidecar recording the source byte size at generation.
+
+    (m-fix-stale-derived-cache-thumbnails) mtime-only freshness cannot detect a dest
+    path whose content was REPLACED by a file with an OLDER mtime than the cached asset
+    (the recycled-filename / recover / retag / re-import case). The sidecar stores the
+    source's ``st_size`` so :func:`_is_fresh` can reject a size mismatch even when the
+    cache is still "newer" than the (replaced) source. Named ``<name><ext>.src`` (e.g.
+    ``clip.jpg.src``) so it never collides with a real cache file.
+    """
+    return cache_file.with_name(cache_file.name + ".src")
+
+
 def _is_fresh(cache_file: Path, source: Path) -> bool:
-    """True if the cached file exists and is no older than its source."""
-    return cache_file.exists() and cache_file.stat().st_mtime >= source.stat().st_mtime
+    """True if the cached file exists and is no older than its source.
+
+    The mtime check is the base freshness signal (SMB-granularity-safe via the
+    generation-time :func:`_touch_to_source` pin). When a size sidecar exists
+    (:func:`_src_sidecar`), the source size MUST also match — an additive, stricter gate
+    that catches a content swap the mtime alone misses. Absent a sidecar (legacy assets
+    generated before this fix), the size gate is skipped, so existing proxies/stitch keep
+    the old lenient behaviour and are not force-regenerated.
+    """
+    if not cache_file.exists() or cache_file.stat().st_mtime < source.stat().st_mtime:
+        return False
+    try:
+        recorded = _src_sidecar(cache_file).read_text()
+    except OSError:
+        return True  # no sidecar (or unreadable) -> lenient, mtime-only
+    try:
+        return int(recorded) == source.stat().st_size
+    except ValueError:
+        return True  # malformed sidecar -> ignore the size gate, never crash
 
 
 def _touch_to_mtime(cache_file: Path, mtime: float) -> None:
@@ -233,6 +263,47 @@ def _generate(out: Path, source: Path, produce: Callable[[Path], None]) -> None:
             return
         _atomic_write(out, produce)
         _touch_to_source(out, source)
+        _write_size_sidecar(out, source)
+
+
+def _write_size_sidecar(cache_file: Path, source: Path) -> None:
+    """Record the source byte size next to ``cache_file`` (see :func:`_src_sidecar`).
+
+    ``OSError``-tolerant: a failed sidecar write just leaves the asset on the lenient
+    mtime-only freshness path (never a crash), exactly like a legacy asset.
+    """
+    try:
+        _src_sidecar(cache_file).write_text(str(source.stat().st_size))
+    except OSError:
+        pass
+
+
+def invalidate(cache_dir: Path | str, proxy_cache_dir: Path | str, rel_key: str) -> None:
+    """Delete every cached derived asset (and its size sidecar) for ``rel_key``.
+
+    (m-fix-stale-derived-cache-thumbnails) Called by the library-mutating flows
+    (:mod:`geosorter.organize`, :mod:`geosorter.retag`, :mod:`geosorter.setloc`) the
+    moment content is written/replaced at a dest path, so a stale poster/thumbnail/proxy
+    from the path's PRIOR content can never be served. Removes the asset for ``rel_key``
+    across all kinds on both tiers — thumbs/previews/posters/collage on ``cache_dir``,
+    proxies/stitch on ``proxy_cache_dir`` — plus each ``.src`` sidecar. Best-effort and
+    idempotent: an already-absent file is a no-op, never an error.
+    """
+    targets = [
+        (cache_dir, "thumbs", ".jpg"),
+        (cache_dir, "previews", ".jpg"),
+        (cache_dir, "posters", ".jpg"),
+        (cache_dir, "collage", ".jpg"),
+        (proxy_cache_dir, "proxies", ".mp4"),
+        (proxy_cache_dir, "stitch", ".jpg"),
+    ]
+    for root, kind, ext in targets:
+        out = _cache_path(root, rel_key, kind, ext)
+        for f in (out, _src_sidecar(out)):
+            try:
+                f.unlink(missing_ok=True)
+            except OSError:
+                pass  # locked/open on Windows -> leave it; next regen overwrites
 
 
 def _resize_jpeg(cache_root: Path | str, rel_key: str, source: Path, kind: str,
@@ -485,6 +556,34 @@ def evict_proxy_cache(cache_root: Path | str, max_gb: float) -> EvictionResult:
     return _evict_cache(cache_root, max_gb, ("proxies",))
 
 
+def clear_local_cache(cache_root: Path | str) -> int:
+    """Delete every cached asset in the cheap LOCAL kinds under ``cache_root``.
+
+    (m-fix-stale-derived-cache-thumbnails) The one-off remediation for the stale-poster
+    bug: wipes ``thumbs``/``previews``/``posters``/``collage`` (each a few-KB JPEG that
+    regenerates lazily on next view) so any historically-stale thumbnail is rebuilt
+    correctly. DELIBERATELY spares the expensive ``proxies`` (HEVC transcodes) and
+    ``stitch`` (minutes of Hugin) kinds — those self-heal going forward via
+    :func:`invalidate` + the size sidecar, so a blanket wipe is unwarranted. Returns the
+    number of files removed; tolerant of missing kind dirs and per-file unlink errors.
+    """
+    base = Path(cache_root) / CACHE_DIRNAME
+    removed = 0
+    for kind in _LOCAL_CACHE_KINDS:
+        kind_dir = base / kind
+        if not kind_dir.is_dir():
+            continue
+        for f in kind_dir.rglob("*"):
+            if not f.is_file():
+                continue
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass  # locked/open on Windows -> skip, never abort the sweep
+    return removed
+
+
 def _evict_cache(
     cache_root: Path | str, max_gb: float, kinds: tuple[str, ...]
 ) -> EvictionResult:
@@ -506,6 +605,11 @@ def _evict_cache(
         if not kind_dir.is_dir():
             continue
         for f in kind_dir.rglob("*"):
+            # Size sidecars (m-fix-stale-derived-cache-thumbnails) are freshness
+            # metadata, not cache payload: never count them toward the cap nor evict
+            # them on their own (an orphaned .src is harmless — regeneration rewrites it).
+            if f.name.endswith(".src"):
+                continue
             # One guarded stat (not is_file()+stat): a concurrent _atomic_write temp
             # in a swept dir can be renamed away between listing and stat, which would
             # otherwise raise FileNotFoundError and abort the whole sweep.

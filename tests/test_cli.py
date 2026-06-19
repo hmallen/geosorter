@@ -114,6 +114,33 @@ def test_help_lists_organize_verbs():
     assert "rescan" in result.output
     assert "recover-collisions" in result.output
     assert "diagnose-inbox" in result.output
+    assert "clear-derived-cache" in result.output
+
+
+def test_clear_derived_cache_verb(tmp_path):
+    # The verb wipes the cheap local kinds (posters/thumbs/previews/collage) and SPARES
+    # the expensive proxies/stitch kinds (m-fix-stale-derived-cache-thumbnails).
+    cache_dir = tmp_path / "derivedcache"
+    cfg = tmp_path / "geosorter.toml"
+    cfg.write_text(
+        f"index_db_path = '{tmp_path / 'index.db'}'\n"
+        f"geonames_db_path = '{tmp_path / 'geonames.db'}'\n"
+        f"cache_dir = '{cache_dir}'\n"
+        "spatial_index = 'rtree'\n",
+        encoding="utf-8",
+    )
+    base = cache_dir / ".geosorter-cache"
+    (base / "posters").mkdir(parents=True)
+    (base / "proxies").mkdir(parents=True)
+    (base / "posters" / "a.jpg").write_bytes(b"x")
+    proxy = base / "proxies" / "p.mp4"
+    proxy.write_bytes(b"y")
+
+    result = CliRunner().invoke(cli, ["clear-derived-cache", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "removed 1 file" in result.output
+    assert not (base / "posters" / "a.jpg").exists()  # cheap kind wiped
+    assert proxy.exists()  # expensive proxy spared
 
 
 def test_diagnose_inbox_reports_duplicate_cli(tmp_path):

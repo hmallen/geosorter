@@ -274,6 +274,26 @@ def organize(config_path: str | None, dry_run: bool, yes: bool) -> None:
     _render_report(report, dry_run)
 
 
+@cli.command(name="clear-derived-cache")
+@_CONFIG_OPTION
+def clear_derived_cache(config_path: str | None) -> None:
+    """Delete the cheap LOCAL derived cache (thumbs/previews/posters/collage).
+
+    Remediation for historically-stale thumbnails (a dest path that was re-pointed to
+    different content kept its old cached poster). Each cleared asset regenerates lazily
+    on next view. The expensive ``proxies`` (HEVC transcodes) and ``stitch`` (Hugin)
+    kinds are SPARED — they self-heal going forward via the cache-invalidation hooks and
+    the size-aware freshness check.
+    """
+    cfg = config.load(config_path)
+    cache_dir = cfg.cache_dir or config.default_cache_dir()
+    removed = derived.clear_local_cache(cache_dir)
+    click.echo(
+        f"clear-derived-cache: removed {removed} file(s) from {cache_dir} "
+        f"(proxies and stitch spared)."
+    )
+
+
 @cli.command(name="verify-library")
 @_CONFIG_OPTION
 def verify_library(config_path: str | None) -> None:
