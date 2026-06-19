@@ -271,6 +271,73 @@ def test_detect_nvenc_returns_false_when_ffmpeg_absent(monkeypatch):
     derived._detect_nvenc.cache_clear()
 
 
+# --- verbose ffmpeg (warm-proxies --show-ffmpeg) ----------------------------- #
+def _has_subseq(cmd: list[str], sub: list[str]) -> bool:
+    """True if ``sub`` appears as a contiguous subsequence of ``cmd``."""
+    n = len(sub)
+    return any(cmd[i:i + n] == sub for i in range(len(cmd) - n + 1))
+
+
+@pytest.mark.parametrize("nvenc", [False, True])
+def test_proxy_cmd_quiet_by_default(nvenc):
+    cmd = derived._proxy_cmd(Path("s.mp4"), Path("d.mp4"), nvenc=nvenc)
+    assert _has_subseq(cmd, ["-v", "error"])  # suppressed output (today's behaviour)
+
+
+@pytest.mark.parametrize("nvenc", [False, True])
+def test_proxy_cmd_verbose_drops_quiet_flag(nvenc):
+    cmd = derived._proxy_cmd(Path("s.mp4"), Path("d.mp4"), nvenc=nvenc, verbose=True)
+    assert not _has_subseq(cmd, ["-v", "error"])  # full ffmpeg output
+    assert cmd[0] == "ffmpeg" and str(Path("d.mp4")) == cmd[-1]  # otherwise intact
+
+
+def test_proxy_threads_verbose_to_helpers(tmp_path, monkeypatch):
+    seen: list[bool] = []
+
+    def fake(cmd, **kwargs):
+        seen.append(kwargs.get("verbose", False))
+        Path(cmd[-1]).write_bytes(b"stub")
+
+    monkeypatch.setattr(derived, "_run_ffmpeg", fake)
+    derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                  hwaccel="none", verbose=True)
+    assert seen == [True]  # _run_ffmpeg called with verbose=True
+
+
+def test_proxy_default_is_not_verbose(tmp_path, monkeypatch):
+    seen: list[bool] = []
+
+    def fake(cmd, **kwargs):
+        seen.append(kwargs.get("verbose", False))
+        Path(cmd[-1]).write_bytes(b"stub")
+
+    monkeypatch.setattr(derived, "_run_ffmpeg", fake)
+    derived.proxy(tmp_path / "c", "v.mp4", FIXTURES / "h265_tiny.mp4", "h265",
+                  hwaccel="none")
+    assert seen == [False]
+
+
+def test_run_ffmpeg_verbose_does_not_capture(monkeypatch):
+    captured: list[dict] = []
+
+    def fake_run(cmd, **kwargs):
+        captured.append(kwargs)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(derived.subprocess, "run", fake_run)
+    derived._run_ffmpeg(["ffmpeg", "x"], verbose=True)
+    assert captured[0].get("capture_output") is not True  # output inherits the terminal
+
+
+def test_run_ffmpeg_verbose_failure_raises_without_stderr(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 1)  # non-zero, no captured stderr
+
+    monkeypatch.setattr(derived.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="ffmpeg failed"):
+        derived._run_ffmpeg(["ffmpeg", "x"], verbose=True)
+
+
 def test_preview_caps_long_edge_at_1920(tmp_path):
     cache = tmp_path / "cache"
     src = tmp_path / "big.jpg"

@@ -174,17 +174,28 @@ def _touch_to_source(cache_file: Path, source: Path) -> None:
         pass
 
 
-def _run_ffmpeg(cmd: list[str], *, timeout: int = FFMPEG_TIMEOUT_S) -> None:
+def _run_ffmpeg(cmd: list[str], *, timeout: int = FFMPEG_TIMEOUT_S,
+                verbose: bool = False) -> None:
     """Run an ffmpeg subprocess (list-form) with a hard timeout.
 
     Maps both a non-zero exit and a timeout to ``RuntimeError``; the partial output is
     cleaned by :func:`_atomic_write` (the caller), which removes its temp on any error.
+
+    ``verbose`` (warm-proxies ``--show-ffmpeg``): when True the subprocess output is NOT
+    captured, so ffmpeg's progress/stats stream straight to the inherited terminal in
+    real time (the caller also drops ``-v error`` from the command). The non-zero-exit
+    message then omits stderr (it was never captured). Default False is today's
+    behaviour for every other caller.
     """
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(
+            cmd, capture_output=not verbose, text=not verbose, timeout=timeout
+        )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"ffmpeg timed out after {timeout}s") from exc
     if proc.returncode != 0:
+        if verbose:  # output already streamed to the terminal — no captured stderr
+            raise RuntimeError(f"ffmpeg failed ({proc.returncode})")
         raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {proc.stderr.strip()}")
 
 
@@ -293,7 +304,7 @@ def _detect_nvenc() -> bool:
     return "h264_nvenc" in proc.stdout
 
 
-def _proxy_cmd(source: Path, dest: Path, *, nvenc: bool) -> list[str]:
+def _proxy_cmd(source: Path, dest: Path, *, nvenc: bool, verbose: bool = False) -> list[str]:
     """Build the ffmpeg command for an HEVC->H.264 proxy transcode.
 
     The NVENC path decodes, scales, and encodes entirely on the GPU. The
@@ -301,10 +312,14 @@ def _proxy_cmd(source: Path, dest: Path, *, nvenc: bool) -> list[str]:
     DJI D-Log) to the 8-bit ``yuv420p`` that ``h264_nvenc`` requires; it is a cheap no-op
     on an already-8-bit source, so one command covers both bit depths. ``-cq 23`` is the
     constant-quality (size/quality) knob. The libx264 path is the original CPU command.
+
+    ``verbose`` (warm-proxies ``--show-ffmpeg``) omits the ``-v error`` quiet flag so
+    ffmpeg emits its normal progress/stats; default False keeps today's quiet command.
     """
+    quiet = [] if verbose else ["-v", "error"]
     if nvenc:
         return [
-            "ffmpeg", "-v", "error", "-y",
+            "ffmpeg", *quiet, "-y",
             "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
             "-i", str(source),
             "-vf", "scale_cuda=format=yuv420p",
@@ -312,13 +327,13 @@ def _proxy_cmd(source: Path, dest: Path, *, nvenc: bool) -> list[str]:
             "-c:a", "aac", "-movflags", "+faststart", str(dest),
         ]
     return [
-        "ffmpeg", "-v", "error", "-y", "-i", str(source),
+        "ffmpeg", *quiet, "-y", "-i", str(source),
         "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", str(dest),
     ]
 
 
 def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str | None,
-          *, hwaccel: str = "auto") -> Path:
+          *, hwaccel: str = "auto", verbose: bool = False) -> Path:
     """Return a browser-playable video path for ``source``.
 
     H.264 (or unknown) sources are already streamable and are returned unchanged.
@@ -329,6 +344,10 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
     (default) uses NVENC when :func:`_detect_nvenc` finds it and otherwise libx264, AND
     falls back to libx264 if an NVENC encode fails at runtime (silent correctness on a
     flaky GPU / unsupported source). NVENC is ~5-15x faster on 4K HEVC.
+
+    ``verbose`` (warm-proxies ``--show-ffmpeg``) live-streams the ffmpeg transcode output
+    to the terminal instead of suppressing it; default False is unchanged for the
+    ``/api/video`` route and ``proxy-bench``.
     """
     source = Path(source)
     if codec != "h265":
@@ -343,7 +362,8 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
     def _produce(dest: Path) -> None:
         if use_nvenc:
             try:
-                _run_ffmpeg(_proxy_cmd(source, dest, nvenc=True))
+                _run_ffmpeg(_proxy_cmd(source, dest, nvenc=True, verbose=verbose),
+                            verbose=verbose)
                 return
             except RuntimeError:
                 if not allow_fallback:
@@ -351,7 +371,8 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
                 logger.warning(
                     "NVENC proxy transcode failed for %s; falling back to libx264", source
                 )
-        _run_ffmpeg(_proxy_cmd(source, dest, nvenc=False))
+        _run_ffmpeg(_proxy_cmd(source, dest, nvenc=False, verbose=verbose),
+                    verbose=verbose)
 
     _generate(out, source, _produce)
     return out
