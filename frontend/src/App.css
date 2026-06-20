@@ -1096,3 +1096,132 @@
   font-size: 13px;
   padding: 4px 8px;
 }
+
+/* ============================================================
+   Responsive / mobile (m-implement-mobile-responsive-ui)
+   Phone (<640px) and tablet (640-1024px) share a bottom-sheet
+   file list + a reflowed full-width toolbar; desktop (>1024px)
+   keeps the original right-rail layout defined above. The 1024px
+   ceiling matches useIsMobile()'s `(max-width: 1024px)` query, so
+   the `.panel--sheet` element below only ever renders inside this
+   block (the component picks rail vs sheet by the same threshold).
+   ============================================================ */
+@media (max-width: 1024px) {
+  /* Toolbar: a full-width wrapping top bar instead of a centered no-wrap pill that
+     would run off-screen. Status/job spans wrap to their own line rather than push
+     buttons out of view. */
+  .toolbar {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .toolbar .job--error {
+    max-width: 100%;
+  }
+
+  /* File list becomes a bottom sheet over the full-screen map. Height comes from the
+     component's inline `height: <frac>vh`; like the rail, .grid flex-shrinks (its
+     overflow:auto gives it min-height:0) and scrolls inside the definite-height sheet. */
+  .panel.panel--sheet {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    z-index: 15; /* above the map + .map-overlay-bl (10); below dropdowns (30)/lightbox (40) */
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Grab handle: TAP cycles to the next snap, DRAG resizes (settles on the nearest
+     snap on release). touch-action:none so the browser's scroll/zoom never steals the
+     drag gesture. */
+  .sheet-handle {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .sheet-handle:active {
+    cursor: grabbing;
+  }
+
+  .sheet-grip {
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+  }
+
+  /* Toolbar-anchored + app-anchored dropdown panels go near-full-bleed so they never
+     overflow a phone's edge. They render above the toolbar (z-30) and carry their own
+     close button, so overlapping a wrapped toolbar row is harmless. */
+  .inbox-panel,
+  .quarantine-panel,
+  .location-panel {
+    left: 6px;
+    right: 6px;
+    width: auto;
+    max-width: none;
+  }
+
+  /* Lift the map view-toggle/legend overlay above the collapsed sheet (the 12vh here
+     mirrors SHEET_SNAPS[0] = 0.12 in sheet.ts — keep them in sync), so satellite/heatmap
+     stay reachable while the list is collapsed. At the peek/expanded snaps the sheet
+     covers this line, which is fine — the sheet is the active surface then. */
+  .map-overlay-bl {
+    bottom: calc(12vh + 16px);
+  }
+
+  /* Touch devices pinch-zoom, and the maplibre +/- control would sit under the
+     full-width toolbar anyway — hide it. */
+  .maplibregl-ctrl-top-left {
+    display: none;
+  }
+
+  /* Bigger tap targets for the primary controls. */
+  .toolbar button {
+    padding: 8px 14px;
+    min-height: 40px;
+  }
+}
+
+/* Phone-only tightening: condense the toolbar and bump lightbox touch targets. */
+@media (max-width: 639px) {
+  .toolbar {
+    font-size: 13px;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .toolbar button {
+    padding: 8px 12px;
+  }
+
+  .lightbox-body {
+    width: 96vw;
+  }
+
+  .lightbox-nav button {
+    padding: 8px 14px;
+    min-height: 40px;
+  }
+
+  .lightbox-caption {
+    font-size: 13px;
+  }
+
+  .map-legend {
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+}
