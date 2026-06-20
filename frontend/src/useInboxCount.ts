@@ -24,7 +24,10 @@ export function useInboxCount(intervalMs = 5000, pausedRef?: RefObject<boolean>)
   const refresh = useCallback(() => pollRef.current?.(), [])
 
   useEffect(() => {
-    refresh()
+    // Gate the initial fetch on the pause ref too (not just the interval) so a paused
+    // caller — e.g. a non-admin toolbar — issues no /api/inbox request at all. When no
+    // pausedRef is passed, `!undefined` is true, so unguarded callers fetch as before.
+    if (!pausedRef?.current) refresh()
     const id = setInterval(() => {
       if (!pausedRef?.current) refresh()
     }, intervalMs)
