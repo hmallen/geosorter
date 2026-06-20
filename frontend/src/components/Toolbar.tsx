@@ -42,7 +42,9 @@ export default function Toolbar({
   // Suspend the inbox-badge poll while a destructive job runs (synced to `busy` in the
   // effect below). Stable ref -> the useInboxCount interval is established once, not
   // reset each render; the interval reads pausedRef.current freshly at each tick.
-  const pausedRef = useRef(false)
+  // Start paused when not admin so a view-only viewer issues no /api/inbox fetch at
+  // all (the inbox badge is admin-only — see the JSX gate below).
+  const pausedRef = useRef(!admin)
   const { count, refresh } = useInboxCount(5000, pausedRef)
   // The inbox listing is owned here (Toolbar is alive from app startup) so the scan
   // runs once on mount and the Process Inbox panel opens pre-populated instead of
@@ -51,8 +53,8 @@ export default function Toolbar({
   const [picking, setPicking] = useState(false)
 
   useEffect(() => {
-    loadInbox()
-  }, [loadInbox])
+    if (admin) loadInbox()
+  }, [admin, loadInbox])
 
   // After an organize OR undo run, reload the library AND refresh the inbox badge
   // (organize empties the inbox, undo refills it) without waiting for the next poll.
@@ -70,10 +72,14 @@ export default function Toolbar({
   const stitchAll = useStitchAll(onReload)
   const busy = running || undoing || rescanning
   // Write the ref in an effect (not during render — react-hooks/refs) so the inbox poll
-  // suspends while a destructive job runs.
+  // suspends while a destructive job runs OR while the viewer is not admin (the badge is
+  // hidden for non-admins, so polling for it would be wasted /api/inbox traffic).
+  // refresh() bypasses the pause gate, so entering admin (login / auth-off probe
+  // resolving) populates the badge immediately instead of waiting a full poll tick.
   useEffect(() => {
-    pausedRef.current = busy
-  }, [busy])
+    pausedRef.current = busy || !admin
+    if (admin && !busy) refresh()
+  }, [busy, admin, refresh])
 
   return (
     <div className="toolbar">
@@ -94,12 +100,14 @@ export default function Toolbar({
           )}
         </>
       )}
-      <span className="inbox">
-        {count.files > 0
-          ? `inbox: ${count.captures} capture${count.captures === 1 ? '' : 's'} ` +
-            `(${count.files} file${count.files === 1 ? '' : 's'})`
-          : 'inbox empty'}
-      </span>
+      {admin && (
+        <span className="inbox">
+          {count.files > 0
+            ? `inbox: ${count.captures} capture${count.captures === 1 ? '' : 's'} ` +
+              `(${count.files} file${count.files === 1 ? '' : 's'})`
+            : 'inbox empty'}
+        </span>
+      )}
       {admin && (
         <>
           <button onClick={startUndo} disabled={busy}>
