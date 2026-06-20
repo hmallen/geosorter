@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { listThumb } from '../api'
 import { columnsForWidth, rowCount, rowSlice } from '../gridWindow'
+import { useIsMobile } from '../useMediaQuery'
+import { clampFraction, nearestSnap, cycleSnap, SHEET_SNAPS } from '../sheet'
 import type { LibraryFeature } from '../types'
 import LoadingImage from './LoadingImage'
 
@@ -13,7 +15,15 @@ interface Props {
   onRetag?: (index: number) => void
 }
 
+// Pixel pointer-move below which a sheet-handle gesture counts as a tap (cycle snaps)
+// rather than a drag (settle on the nearest snap).
+const TAP_THRESHOLD_PX = 6
+
 export default function FileListPanel({ files, onOpen, onRetag }: Props) {
+  // Below 1024px the panel is a bottom sheet over a full-screen map; at desktop width it
+  // stays the right rail (m-implement-mobile-responsive-ui).
+  const mobile = useIsMobile()
+
   const empty = files.length === 0
   const place = files[0]?.properties.place_string ?? ''
   const date = files[0]?.properties.local_date ?? ''
@@ -24,8 +34,9 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
   const onePlace = !empty && files.every((f) => f.properties.place_string === place)
   const oneDate = onePlace && files.every((f) => f.properties.local_date === date)
 
-  // Drag-to-resize: the panel is too narrow for long filenames at the default
-  // width, so a left-edge handle lets the user widen it (clamped to a usable range).
+  // Drag-to-resize (rail only): the panel is too narrow for long filenames at the
+  // default width, so a left-edge handle lets the user widen it (clamped to a usable
+  // range). Hidden in sheet mode (the sheet resizes vertically instead).
   const [width, setWidth] = useState(380)
   const dragging = useRef(false)
 
@@ -45,22 +56,71 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
     }
   }
 
+  // Bottom-sheet height as a fraction of the viewport height; rests at a SHEET_SNAPS
+  // value. Starts at the middle "peek" snap so the list is visible without hiding the map.
+  const [sheetFrac, setSheetFrac] = useState<number>(SHEET_SNAPS[1])
+  const sheetDrag = useRef<{ startY: number; movedFar: boolean } | null>(null)
+  // Live fraction kept in a ref so the pointerup handler reads the latest value (the
+  // state closure captured at pointerdown would be stale after a drag). Mirrored in an
+  // effect, NOT during render — a render-phase ref write trips react-hooks/refs (the same
+  // reason Toolbar's pausedRef is synced in an effect); the handler reads it on the next
+  // pointer event, by which point the commit + effect have run.
+  const fracRef = useRef(sheetFrac)
+  useEffect(() => {
+    fracRef.current = sheetFrac
+  }, [sheetFrac])
+
+  const onHandleDown = (e: React.PointerEvent) => {
+    sheetDrag.current = { startY: e.clientY, movedFar: false }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onHandleMove = (e: React.PointerEvent) => {
+    const d = sheetDrag.current
+    if (!d) return
+    if (Math.abs(e.clientY - d.startY) > TAP_THRESHOLD_PX) d.movedFar = true
+    // Fraction grows as the pointer moves UP from the bottom edge.
+    const frac = clampFraction((window.innerHeight - e.clientY) / window.innerHeight)
+    setSheetFrac(frac)
+  }
+  const onHandleUp = (e: React.PointerEvent) => {
+    const d = sheetDrag.current
+    sheetDrag.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    if (!d) return
+    // A tap cycles to the next snap; a drag settles on the nearest snap.
+    setSheetFrac(d.movedFar ? nearestSnap(fracRef.current) : cycleSnap(fracRef.current))
+  }
+
   // Virtualize the thumbnail grid: a cluster can hold hundreds of files, and
   // mounting every thumb would fire one /api/thumb request per file at once. We
   // window by ROW (each row is `columns` files) so only viewport-visible rows
-  // mount their LoadingImage. Columns track the (resizable) panel width; the
-  // ROW grid uses 1fr columns so cells always fit the width regardless of the
-  // computed count (no horizontal overflow). The row-height estimate is the
+  // mount their LoadingImage. Columns track the panel's content width — the
+  // (resizable) rail width on desktop, the live viewport width as a full-bleed
+  // sheet on mobile. The ROW grid uses 1fr columns so cells always fit regardless
+  // of the computed count (no horizontal overflow). The row-height estimate is the
   // cell width (square thumb, aspect-ratio:1) plus the filename + retag button;
   // `measureElement` corrects it from the real DOM height after first paint.
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Track the viewport width so the sheet's column count is responsive to rotation/resize.
+  const [vw, setVw] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 768))
+  useEffect(() => {
+    if (!mobile) return
+    const onResize = () => setVw(window.innerWidth)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [mobile])
+
   // GAP_PX must match the .grid-row CSS gap so the column count and the cell-width
   // estimate agree; PAD_PX is the .grid padding on both sides.
   const GAP_PX = 6
   const PAD_PX = 8
-  const columns = columnsForWidth(width, 120, GAP_PX)
+  const panelWidth = mobile ? vw : width
+  const columns = columnsForWidth(panelWidth, 120, GAP_PX)
   const rows = rowCount(files.length, columns)
-  const cellWidth = (width - 2 * PAD_PX - (columns - 1) * GAP_PX) / columns
+  const cellWidth = (panelWidth - 2 * PAD_PX - (columns - 1) * GAP_PX) / columns
   const estRow = Math.max(80, cellWidth + 46)
 
   const virtualizer = useVirtualizer({
@@ -70,16 +130,34 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
     overscan: 2,
   })
 
+  const rootClass = `panel ${mobile ? 'panel--sheet' : 'panel--rail'}`
+  const rootStyle = mobile ? { height: `${sheetFrac * 100}vh` } : { width }
+
   return (
-    <div className="panel" style={{ width }}>
-      <div
-        className="panel-resize"
-        onPointerDown={onResizeDown}
-        onPointerMove={onResizeMove}
-        onPointerUp={onResizeUp}
-        onPointerCancel={onResizeUp}
-        title="Drag to resize"
-      />
+    <div className={rootClass} style={rootStyle}>
+      {mobile ? (
+        <div
+          className="sheet-handle"
+          onPointerDown={onHandleDown}
+          onPointerMove={onHandleMove}
+          onPointerUp={onHandleUp}
+          onPointerCancel={onHandleUp}
+          title="Drag or tap to resize the list"
+          role="button"
+          aria-label="Resize file list"
+        >
+          <span className="sheet-grip" />
+        </div>
+      ) : (
+        <div
+          className="panel-resize"
+          onPointerDown={onResizeDown}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+          onPointerCancel={onResizeUp}
+          title="Drag to resize"
+        />
+      )}
       <div className="panel-head">
         <div>
           {empty ? (
