@@ -317,6 +317,80 @@
   font-size: 14px;
 }
 
+/* Date-grouping toggle + media-type filter chips above the thumbnail grid. */
+.panel-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Day / Month / Year segmented control. */
+.seg {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.seg-btn + .seg-btn {
+  border-left: 1px solid var(--border);
+}
+
+.seg-btn--active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Mutually-exclusive media-type filter chips (multi-select). */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip--on {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+}
+
+/* A virtualized group-heading row (e.g. "April 2024"); positioned like .grid-row. */
+.group-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px 2px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+}
+
 /* Scroll container for the virtualized thumbnail grid (react-virtual). The grid
    layout moved to .grid-row so only viewport-visible rows mount/request. */
 .grid {
@@ -930,6 +1004,110 @@
   border-radius: 4px;
 }
 
+/* Unstitched-panorama panel (StitchPanel): a library-wide list of panoramas waiting
+   to be stitched. Mirrors .location-panel positioning. */
+.stitch-panel {
+  position: absolute;
+  top: 56px;
+  left: 8px;
+  width: 380px;
+  max-width: 92vw;
+  max-height: 80vh;
+  z-index: 30;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.stitch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+}
+
+.stitch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.stitch-thumb-btn {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* LoadingImage applies the className to its WRAPPER span, so size the wrapper here and
+   scope the actual image sizing to the descendant img (mirrors .quarantine-thumb). */
+.stitch-thumb {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--placeholder);
+}
+
+.stitch-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.stitch-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stitch-name {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stitch-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stitch-status {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.stitch-go {
+  flex: 0 0 auto;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.stitch-go:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .location-list {
   list-style: none;
   margin: 0;
@@ -1167,7 +1345,8 @@
      close button, so overlapping a wrapped toolbar row is harmless. */
   .inbox-panel,
   .quarantine-panel,
-  .location-panel {
+  .location-panel,
+  .stitch-panel {
     left: 6px;
     right: 6px;
     width: auto;

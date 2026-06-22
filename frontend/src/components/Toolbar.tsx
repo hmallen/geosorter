@@ -28,6 +28,9 @@ interface ToolbarProps {
   // Open the location-filter panel (owned by App, which holds the place list +
   // map flyTo). Lets the user jump the map to any place in the library by name.
   onOpenLocations: () => void
+  // Open the unstitched-panorama panel (owned by App) listing exactly which panorama
+  // sets are waiting to be stitched. Admin-only (stitching is an admin action).
+  onOpenStitch: () => void
 }
 
 export default function Toolbar({
@@ -38,6 +41,7 @@ export default function Toolbar({
   onOpenNoGps,
   noGpsCount,
   onOpenLocations,
+  onOpenStitch,
 }: ToolbarProps) {
   // Suspend the inbox-badge poll while a destructive job runs (synced to `busy` in the
   // effect below). Stable ref -> the useInboxCount interval is established once, not
@@ -121,6 +125,11 @@ export default function Toolbar({
       <button onClick={onOpenLocations}>Locations</button>
       {admin && noGpsCount > 0 && (
         <button onClick={onOpenNoGps}>No-GPS ({noGpsCount})</button>
+      )}
+      {admin && stitchTargets.length > 0 && (
+        <button onClick={onOpenStitch} title="See exactly which panorama sets are waiting to be stitched">
+          Unstitched panoramas ({stitchTargets.length})
+        </button>
       )}
       {admin &&
         (stitchAll.running ? (

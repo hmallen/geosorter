@@ -5,6 +5,7 @@ import Lightbox from './components/Lightbox'
 import Toolbar from './components/Toolbar'
 import QuarantinePanel from './components/QuarantinePanel'
 import LocationPanel from './components/LocationPanel'
+import StitchPanel from './components/StitchPanel'
 import { buildPlaces } from './locationFilter'
 import { useLibrary } from './useLibrary'
 import { useRetagJob } from './useRetagJob'
@@ -64,6 +65,9 @@ export default function App() {
   // panel open flag + the imperative map-fit target. `nonce` makes each pick a
   // distinct value so re-picking the same place re-fires MapView's fitBounds.
   const [showLocations, setShowLocations] = useState(false)
+  // Unstitched-panorama panel: a library-wide list of which panorama sets still want a
+  // 360 stitch (the toolbar shows only the count).
+  const [showStitch, setShowStitch] = useState(false)
   const [flyTo, setFlyTo] = useState<{ bbox: BBox; nonce: number } | null>(null)
   const places = useMemo(() => buildPlaces(features), [features])
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
@@ -128,20 +132,23 @@ export default function App() {
   const onMapClick = retagPlacing ? retagPick : assignPlacing ? assignPick : undefined
 
   // Panoramas that still want a 360 stitch: a panorama with tiles whose stitch
-  // hasn't succeeded yet. The toolbar's optional "Stitch all" button targets these.
-  // Memoized on `features` so the per-pan re-renders (setBounds) don't rescan the
-  // whole library every time.
-  const panoramaTargets = useMemo(
+  // hasn't succeeded yet. The toolbar's "Stitch all" button + the StitchPanel target
+  // these. Memoized on `features` so the per-pan re-renders (setBounds) don't rescan
+  // the whole library every time. The full features feed the StitchPanel (it shows a
+  // thumbnail + label); the ids feed the toolbar's stitch-all.
+  const panoramaTargetFeatures = useMemo(
     () =>
-      features
-        .filter(
-          (f) =>
-            f.properties.capture_kind === 'panorama' &&
-            (f.properties.frame_count ?? 0) > 0 &&
-            f.properties.stitch_status !== 'ok',
-        )
-        .map((f) => f.properties.id),
+      features.filter(
+        (f) =>
+          f.properties.capture_kind === 'panorama' &&
+          (f.properties.frame_count ?? 0) > 0 &&
+          f.properties.stitch_status !== 'ok',
+      ),
     [features],
+  )
+  const panoramaTargets = useMemo(
+    () => panoramaTargetFeatures.map((f) => f.properties.id),
+    [panoramaTargetFeatures],
   )
 
   return (
@@ -154,6 +161,7 @@ export default function App() {
         onOpenNoGps={() => setShowNoGps(true)}
         noGpsCount={quarantineCount}
         onOpenLocations={() => setShowLocations(true)}
+        onOpenStitch={() => setShowStitch(true)}
       />
       <MapView
         features={features}
@@ -220,20 +228,30 @@ export default function App() {
           }}
         />
       )}
+      {showStitch && (
+        <StitchPanel
+          panoramas={panoramaTargetFeatures}
+          stitchByFile={stitchByFile}
+          onStartStitch={isAdmin ? startStitch : undefined}
+          onView={(f) => {
+            // Open the unstitched-panorama list at this capture so prev/next walks them.
+            const idx = panoramaTargetFeatures.findIndex(
+              (p) => p.properties.id === f.properties.id,
+            )
+            setLightbox({ files: panoramaTargetFeatures, index: idx < 0 ? 0 : idx })
+          }}
+          onClose={() => setShowStitch(false)}
+        />
+      )}
       <FileListPanel
         files={panelFiles}
-        onOpen={(i) => setLightbox({ files: panelFiles, index: i })}
+        onOpen={(files, i) => setLightbox({ files, index: i })}
         onRetag={
           isAdmin
-            ? (i) => {
-                // panelFiles is volatile (viewport-driven); guard the deref in case a
-                // click races a list shrink between paints.
-                const file = panelFiles[i]
+            ? (file) => {
                 // Mutually exclusive with No-GPS assign placement (see onPickOnMap).
-                if (file) {
-                  cancelAssign()
-                  beginRetag(file.properties.id)
-                }
+                cancelAssign()
+                beginRetag(file.properties.id)
               }
             : undefined
         }

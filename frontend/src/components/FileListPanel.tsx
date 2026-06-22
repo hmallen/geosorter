@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { listThumb } from '../api'
-import { columnsForWidth, rowCount, rowSlice } from '../gridWindow'
+import { columnsForWidth } from '../gridWindow'
+import { groupFeatures, buildRowModel, type Granularity } from '../dateGroups'
+import { filterByCategories, MEDIA_CATEGORIES, type MediaCategory } from '../mediaFilter'
 import { useIsMobile } from '../useMediaQuery'
 import { clampFraction, nearestSnap, cycleSnap, SHEET_SNAPS } from '../sheet'
 import type { LibraryFeature } from '../types'
@@ -9,30 +11,73 @@ import LoadingImage from './LoadingImage'
 
 interface Props {
   files: LibraryFeature[]
-  onOpen: (index: number) => void
+  // The panel groups + filters its files, so the displayed order differs from the raw
+  // viewport list. onOpen receives the EXACT displayed-ordered list it opened against
+  // (so the lightbox prev/next walks what the user sees) plus the clicked index.
+  onOpen: (files: LibraryFeature[], index: number) => void
   // Admin-only re-tag (m-implement-view-only-admin-auth): undefined for a non-admin
   // (view-only) viewer, in which case the per-file "Re-tag location" button is hidden.
-  onRetag?: (index: number) => void
+  // Receives the clicked feature directly (the index would be ambiguous once filtered).
+  onRetag?: (file: LibraryFeature) => void
 }
 
 // Pixel pointer-move below which a sheet-handle gesture counts as a tap (cycle snaps)
 // rather than a drag (settle on the nearest snap).
 const TAP_THRESHOLD_PX = 6
 
+// Human labels for the media-filter chips.
+const CATEGORY_LABELS: Record<MediaCategory, string> = {
+  photo: 'Photos',
+  video: 'Videos',
+  panorama: 'Panoramas',
+  hyperlapse: 'Hyperlapse',
+}
+
+// Estimated height of a group-header row (corrected by measureElement after paint).
+const HEADER_PX = 34
+
 export default function FileListPanel({ files, onOpen, onRetag }: Props) {
   // Below 1024px the panel is a bottom sheet over a full-screen map; at desktop width it
   // stays the right rail (m-implement-mobile-responsive-ui).
   const mobile = useIsMobile()
 
-  const empty = files.length === 0
-  const place = files[0]?.properties.place_string ?? ''
-  const date = files[0]?.properties.local_date ?? ''
+  // Date-grouping granularity (default month, e.g. heading "April 2024") and the
+  // mutually-exclusive media-type filter (all four buckets enabled by default). Both are
+  // panel-local view state.
+  const [gran, setGran] = useState<Granularity>('month')
+  const [enabled, setEnabled] = useState<Set<MediaCategory>>(() => new Set(MEDIA_CATEGORIES))
+  const toggleCategory = (c: MediaCategory) =>
+    setEnabled((prev) => {
+      const next = new Set(prev)
+      if (next.has(c)) next.delete(c)
+      else next.add(c)
+      return next
+    })
+
+  // Apply the media filter, then group by date. The displayed list is the groups
+  // flattened in heading order — that is what the lightbox must walk, so we key an
+  // id→index map off it for the onOpen call.
+  const visibleFiles = useMemo(() => filterByCategories(files, enabled), [files, enabled])
+  const groups = useMemo(() => groupFeatures(visibleFiles, gran), [visibleFiles, gran])
+  const orderedFiles = useMemo(() => groups.flatMap((g) => g.files), [groups])
+  // id→display-index lookup for the onOpen call. Assumes feature ids are unique within
+  // the viewport (true for /api/library — each capture is one feature); a duplicate id
+  // would collapse to its last occurrence.
+  const idxById = useMemo(() => {
+    const m = new Map<number, number>()
+    orderedFiles.forEach((f, i) => m.set(f.properties.id, i))
+    return m
+  }, [orderedFiles])
+
+  const empty = visibleFiles.length === 0
+  const filteredOut = empty && files.length > 0
+  const place = visibleFiles[0]?.properties.place_string ?? ''
+  const date = visibleFiles[0]?.properties.local_date ?? ''
   // The viewport-driven list can span many places/dates, so only label it with the
-  // first file's place when every file shares that place (a co-located point or a
-  // tight cluster), and only append the date when they also share that date;
-  // otherwise show a neutral count header.
-  const onePlace = !empty && files.every((f) => f.properties.place_string === place)
-  const oneDate = onePlace && files.every((f) => f.properties.local_date === date)
+  // first file's place when every visible file shares that place (a co-located point or a
+  // tight cluster), and only append the date when they also share that date.
+  const onePlace = !empty && visibleFiles.every((f) => f.properties.place_string === place)
+  const oneDate = onePlace && visibleFiles.every((f) => f.properties.local_date === date)
 
   // Drag-to-resize (rail only): the panel is too narrow for long filenames at the
   // default width, so a left-edge handle lets the user widen it (clamped to a usable
@@ -93,15 +138,13 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
     setSheetFrac(d.movedFar ? nearestSnap(fracRef.current) : cycleSnap(fracRef.current))
   }
 
-  // Virtualize the thumbnail grid: a cluster can hold hundreds of files, and
-  // mounting every thumb would fire one /api/thumb request per file at once. We
-  // window by ROW (each row is `columns` files) so only viewport-visible rows
-  // mount their LoadingImage. Columns track the panel's content width — the
-  // (resizable) rail width on desktop, the live viewport width as a full-bleed
-  // sheet on mobile. The ROW grid uses 1fr columns so cells always fit regardless
-  // of the computed count (no horizontal overflow). The row-height estimate is the
-  // cell width (square thumb, aspect-ratio:1) plus the filename + retag button;
-  // `measureElement` corrects it from the real DOM height after first paint.
+  // Virtualize a flat row model: group HEADER rows interleaved with THUMB rows (each
+  // thumb row is up to `columns` files of one group, built by dateGroups.buildRowModel).
+  // Only viewport-visible thumb rows mount a LoadingImage, so a large cluster still
+  // issues only a bounded set of /api/thumb requests. Columns track the panel's content
+  // width — the (resizable) rail width on desktop, the live viewport width as a full-bleed
+  // sheet on mobile. measureElement corrects each row's height (headers are short) from
+  // the real DOM after first paint.
   const scrollRef = useRef<HTMLDivElement>(null)
   // Track the viewport width so the sheet's column count is responsive to rotation/resize.
   const [vw, setVw] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 768))
@@ -119,16 +162,32 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
   const PAD_PX = 8
   const panelWidth = mobile ? vw : width
   const columns = columnsForWidth(panelWidth, 120, GAP_PX)
-  const rows = rowCount(files.length, columns)
   const cellWidth = (panelWidth - 2 * PAD_PX - (columns - 1) * GAP_PX) / columns
   const estRow = Math.max(80, cellWidth + 46)
 
+  const rowItems = useMemo(() => buildRowModel(groups, columns), [groups, columns])
+
   const virtualizer = useVirtualizer({
-    count: rows,
+    count: rowItems.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => estRow,
-    overscan: 2,
+    // Key each row by its CONTENT identity, not its index. The virtualizer caches
+    // measured heights by item key; rows now have two very different heights (short
+    // header vs tall thumb row), so without a stable key a header that lands at an
+    // index previously occupied by a thumb row would inherit the thumb row's cached
+    // height for a frame when the granularity/filter/column-count changes. The row
+    // keys embed the bucket key + column-dependent offset, so they change whenever the
+    // row's content does (incl. a column change reshuffling thumb-row boundaries).
+    getItemKey: (index) => rowItems[index]?.key ?? index,
+    estimateSize: (index) => (rowItems[index]?.kind === 'header' ? HEADER_PX : estRow),
+    overscan: 4,
   })
+
+  // When the displayed set changes (granularity toggle or media filter), reset the
+  // scroll to the top so filtering down to fewer rows doesn't strand the user scrolled
+  // past the (now shorter) content.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [gran, enabled])
 
   const rootClass = `panel ${mobile ? 'panel--sheet' : 'panel--rail'}`
   const rootStyle = mobile ? { height: `${sheetFrac * 100}vh` } : { width }
@@ -166,25 +225,69 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
             <>
               <strong>{place}</strong>
               <br />
-              <small>{oneDate ? `${date} · ` : ''}{files.length} file(s)</small>
+              <small>{oneDate ? `${date} · ` : ''}{visibleFiles.length} file(s)</small>
             </>
           ) : (
             <>
               <strong>In view</strong>
               <br />
-              <small>{files.length} file(s)</small>
+              <small>{visibleFiles.length} file(s)</small>
             </>
           )}
         </div>
       </div>
-      {empty && <div className="panel-empty">No captures in view</div>}
+      <div className="panel-controls">
+        <div className="seg" role="group" aria-label="Group by">
+          {(['day', 'month', 'year'] as Granularity[]).map((g) => (
+            <button
+              key={g}
+              className={`seg-btn${gran === g ? ' seg-btn--active' : ''}`}
+              onClick={() => setGran(g)}
+              aria-pressed={gran === g}
+            >
+              {g === 'day' ? 'Day' : g === 'month' ? 'Month' : 'Year'}
+            </button>
+          ))}
+        </div>
+        <div className="chips" role="group" aria-label="Filter by media type">
+          {MEDIA_CATEGORIES.map((c) => (
+            <button
+              key={c}
+              className={`chip${enabled.has(c) ? ' chip--on' : ''}`}
+              onClick={() => toggleCategory(c)}
+              aria-pressed={enabled.has(c)}
+            >
+              {CATEGORY_LABELS[c]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {empty && (
+        <div className="panel-empty">
+          {filteredOut ? 'No captures match the filter' : 'No captures in view'}
+        </div>
+      )}
       <div className="grid" ref={scrollRef}>
         <div className="grid-sizer" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((vrow) => {
-            const { start, end } = rowSlice(vrow.index, columns, files.length)
+            const item = rowItems[vrow.index]
+            if (!item) return null
+            if (item.kind === 'header') {
+              return (
+                <div
+                  key={item.key}
+                  data-index={vrow.index}
+                  ref={virtualizer.measureElement}
+                  className="group-header"
+                  style={{ transform: `translateY(${vrow.start}px)` }}
+                >
+                  {item.label}
+                </div>
+              )
+            }
             return (
               <div
-                key={vrow.key}
+                key={item.key}
                 data-index={vrow.index}
                 ref={virtualizer.measureElement}
                 className="grid-row"
@@ -193,49 +296,49 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
                   gridTemplateColumns: `repeat(${columns}, 1fr)`,
                 }}
               >
-                {files.slice(start, end).map((f, j) => {
-                  const i = start + j
-                  return (
-                    <div key={f.properties.id} className="thumb">
-                      <button className="thumb-open" onClick={() => onOpen(i)}>
-                        <span className="thumb-img">
-                          <LoadingImage
-                            key={f.properties.path}
-                            src={listThumb(f.properties.media_type, f.properties.path)}
-                            alt={f.properties.filename}
-                          />
-                          {f.properties.capture_kind === 'hyperlapse' && (f.properties.frame_count ?? 0) > 0 && (
-                            <span className="badge badge--hyperlapse" title="Hyperlapse render">
-                              ⊞ ×{f.properties.frame_count}
-                            </span>
-                          )}
-                          {f.properties.capture_kind === 'panorama' && (f.properties.frame_count ?? 0) > 0 && (
-                            <span className="badge badge--panorama" title="Panorama">
-                              ▦ ×{f.properties.frame_count}
-                            </span>
-                          )}
-                          {f.properties.capture_kind === 'panorama' && f.properties.stitch_status === 'failed' && (
-                            <span className="badge badge--stitch-failed" title="Panorama stitch failed">
-                              ⚠ stitch
-                            </span>
-                          )}
-                        </span>
-                        <span className="thumb-name">
-                          {f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}
-                        </span>
+                {item.files.map((f) => (
+                  <div key={f.properties.id} className="thumb">
+                    <button
+                      className="thumb-open"
+                      onClick={() => onOpen(orderedFiles, idxById.get(f.properties.id) ?? 0)}
+                    >
+                      <span className="thumb-img">
+                        <LoadingImage
+                          key={f.properties.path}
+                          src={listThumb(f.properties.media_type, f.properties.path)}
+                          alt={f.properties.filename}
+                        />
+                        {f.properties.capture_kind === 'hyperlapse' && (f.properties.frame_count ?? 0) > 0 && (
+                          <span className="badge badge--hyperlapse" title="Hyperlapse render">
+                            ⊞ ×{f.properties.frame_count}
+                          </span>
+                        )}
+                        {f.properties.capture_kind === 'panorama' && (f.properties.frame_count ?? 0) > 0 && (
+                          <span className="badge badge--panorama" title="Panorama">
+                            ▦ ×{f.properties.frame_count}
+                          </span>
+                        )}
+                        {f.properties.capture_kind === 'panorama' && f.properties.stitch_status === 'failed' && (
+                          <span className="badge badge--stitch-failed" title="Panorama stitch failed">
+                            ⚠ stitch
+                          </span>
+                        )}
+                      </span>
+                      <span className="thumb-name">
+                        {f.properties.media_type === 'video' ? '▶ ' : ''}{f.properties.filename}
+                      </span>
+                    </button>
+                    {onRetag && (
+                      <button
+                        className="retag"
+                        onClick={() => onRetag(f)}
+                        title="Re-tag this file's location by clicking the map"
+                      >
+                        ⌖ Re-tag location
                       </button>
-                      {onRetag && (
-                        <button
-                          className="retag"
-                          onClick={() => onRetag(i)}
-                          title="Re-tag this file's location by clicking the map"
-                        >
-                          ⌖ Re-tag location
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
+                    )}
+                  </div>
+                ))}
               </div>
             )
           })}
