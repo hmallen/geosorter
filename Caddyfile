@@ -1,0 +1,11 @@
+http://127.0.0.1:8182 {
+	basic_auth {
+		penjamin $2a$14$Lb65TH4ldJ1SXrSDHMaAS.G1j46LirH4iaWSh0U373jm.LnAMoqO.
+		hunter $2a$14$TGlRgLRBqngY5jlSwkJM7ey6gex7PlgTsQE.vhLf7bMSgliteGeie
+	}
+
+	reverse_proxy 127.0.0.1:8181 {
+		header_up -Authorization
+		header_up X-Remote-User {http.auth.user.id}
+	}
+}
