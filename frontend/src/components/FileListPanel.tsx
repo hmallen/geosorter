@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { listThumb } from '../api'
 import { columnsForWidth } from '../gridWindow'
-import { groupFeatures, buildRowModel, type Granularity } from '../dateGroups'
+import { groupFeatures, buildRowModel, type Granularity, type SortDir } from '../dateGroups'
 import { filterByCategories, MEDIA_CATEGORIES, type MediaCategory } from '../mediaFilter'
 import { useIsMobile } from '../useMediaQuery'
 import { clampFraction, nearestSnap, cycleSnap, SHEET_SNAPS } from '../sheet'
@@ -45,6 +45,8 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
   // mutually-exclusive media-type filter (all four buckets enabled by default). Both are
   // panel-local view state.
   const [gran, setGran] = useState<Granularity>('month')
+  // Date sort direction: descending (newest-first) by default, matching prior behavior.
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [enabled, setEnabled] = useState<Set<MediaCategory>>(() => new Set(MEDIA_CATEGORIES))
   const toggleCategory = (c: MediaCategory) =>
     setEnabled((prev) => {
@@ -58,7 +60,7 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
   // flattened in heading order — that is what the lightbox must walk, so we key an
   // id→index map off it for the onOpen call.
   const visibleFiles = useMemo(() => filterByCategories(files, enabled), [files, enabled])
-  const groups = useMemo(() => groupFeatures(visibleFiles, gran), [visibleFiles, gran])
+  const groups = useMemo(() => groupFeatures(visibleFiles, gran, sortDir), [visibleFiles, gran, sortDir])
   const orderedFiles = useMemo(() => groups.flatMap((g) => g.files), [groups])
   // id→display-index lookup for the onOpen call. Assumes feature ids are unique within
   // the viewport (true for /api/library — each capture is one feature); a duplicate id
@@ -187,7 +189,7 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
   // past the (now shorter) content.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 })
-  }, [gran, enabled])
+  }, [gran, enabled, sortDir])
 
   const rootClass = `panel ${mobile ? 'panel--sheet' : 'panel--rail'}`
   const rootStyle = mobile ? { height: `${sheetFrac * 100}vh` } : { width }
@@ -249,6 +251,14 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
             </button>
           ))}
         </div>
+        <button
+          className="seg-btn sort-toggle"
+          onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+          aria-pressed={sortDir === 'asc'}
+          title="Toggle date sort order"
+        >
+          {sortDir === 'desc' ? 'Newest first ↓' : 'Oldest first ↑'}
+        </button>
         <div className="chips" role="group" aria-label="Filter by media type">
           {MEDIA_CATEGORIES.map((c) => (
             <button
