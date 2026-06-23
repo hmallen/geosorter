@@ -70,7 +70,8 @@ describe('groupFeatures', () => {
     )
     expect(groups).toHaveLength(1)
     expect(groups[0].label).toBe('April 2024')
-    expect(groups[0].files.map((f) => f.properties.id)).toEqual([1, 2])
+    // Default desc sorts within-group newest-first, so the 28th (id 2) precedes the 12th.
+    expect(groups[0].files.map((f) => f.properties.id)).toEqual([2, 1])
   })
 
   it('buckets by day with a "Month D, YYYY" label', () => {
@@ -101,6 +102,59 @@ describe('groupFeatures', () => {
     expect(groups.map((g) => g.label)).toEqual(['June 2024', 'January 2024', 'December 2023'])
   })
 
+  it('orders files within a group newest-first by default (desc)', () => {
+    const groups = groupFeatures(
+      [
+        feat(1, '2024-04-12T10:00:00-06:00'),
+        feat(2, '2024-04-28T10:00:00-06:00'),
+        feat(3, '2024-04-05T10:00:00-06:00'),
+      ],
+      'month',
+    )
+    expect(groups[0].files.map((f) => f.properties.id)).toEqual([2, 1, 3])
+  })
+
+  it("dir='asc' orders groups oldest-first", () => {
+    const groups = groupFeatures(
+      [
+        feat(1, '2024-01-15T10:00:00-06:00'),
+        feat(2, '2024-06-15T10:00:00-06:00'),
+        feat(3, '2023-12-15T10:00:00-06:00'),
+      ],
+      'month',
+      'asc',
+    )
+    expect(groups.map((g) => g.label)).toEqual(['December 2023', 'January 2024', 'June 2024'])
+  })
+
+  it("dir='asc' orders files within a group oldest-first", () => {
+    const groups = groupFeatures(
+      [
+        feat(1, '2024-04-12T10:00:00-06:00'),
+        feat(2, '2024-04-28T10:00:00-06:00'),
+        feat(3, '2024-04-05T10:00:00-06:00'),
+      ],
+      'month',
+      'asc',
+    )
+    expect(groups[0].files.map((f) => f.properties.id)).toEqual([3, 1, 2])
+  })
+
+  it('sorts within-group by the validated date when capture_ts_local is unparseable', () => {
+    const groups = groupFeatures(
+      [
+        feat(1, '2024-04-25T10:00:00-06:00'),
+        feat(2, 'corrupt-ts', '2024-04-10'),
+      ],
+      'month',
+    )
+    // id 2 is bucketed into April 2024 via the local_date fallback (parseParts), so its
+    // within-group sort must use that same validated date — desc puts the 25th (id 1)
+    // before the 10th (id 2), NOT ordered by the raw 'corrupt-ts' string.
+    expect(groups).toHaveLength(1)
+    expect(groups[0].files.map((f) => f.properties.id)).toEqual([1, 2])
+  })
+
   it('collects undated captures into a trailing "Unknown date" group', () => {
     const groups = groupFeatures(
       [feat(1, '2024-04-12T10:00:00-06:00'), feat(2, null, null), feat(3, null, null)],
@@ -108,6 +162,15 @@ describe('groupFeatures', () => {
     )
     expect(groups.map((g) => g.label)).toEqual(['April 2024', 'Unknown date'])
     expect(groups[1].files.map((f) => f.properties.id)).toEqual([2, 3])
+  })
+
+  it("keeps the 'Unknown date' group trailing in ascending order", () => {
+    const groups = groupFeatures(
+      [feat(1, '2024-06-15T10:00:00-06:00'), feat(2, null, null), feat(3, '2024-01-15T10:00:00-06:00')],
+      'month',
+      'asc',
+    )
+    expect(groups.map((g) => g.label)).toEqual(['January 2024', 'June 2024', 'Unknown date'])
   })
 
   it('returns an empty array for no files', () => {
@@ -119,9 +182,10 @@ describe('buildRowModel', () => {
   it('emits one header row per group then ceil(n/columns) thumb rows, never spanning groups', () => {
     const groups = groupFeatures(
       [
-        feat(1, '2024-04-01T10:00:00-06:00'),
+        // Newest-first within April (desc default) keeps ids 1,2,3 in row order.
+        feat(1, '2024-04-03T10:00:00-06:00'),
         feat(2, '2024-04-02T10:00:00-06:00'),
-        feat(3, '2024-04-03T10:00:00-06:00'),
+        feat(3, '2024-04-01T10:00:00-06:00'),
         feat(4, '2024-03-01T10:00:00-06:00'),
       ],
       'month',

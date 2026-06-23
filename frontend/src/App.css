@@ -353,6 +353,15 @@
   color: var(--accent-contrast);
 }
 
+/* Standalone date-sort toggle: sits outside the .seg group, so it needs its own pill
+   border/radius and shrink-to-content sizing to match the segmented control in the
+   column-flex .panel-controls (where a bare button would otherwise stretch full width). */
+.sort-toggle {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
 /* Mutually-exclusive media-type filter chips (multi-select). */
 .chips {
   display: flex;

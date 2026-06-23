@@ -16,6 +16,9 @@ const MONTHS = [
 
 export type Granularity = 'day' | 'month' | 'year'
 
+// File-list sort direction: 'desc' = newest-first (the default), 'asc' = oldest-first.
+export type SortDir = 'asc' | 'desc'
+
 export interface DateParts {
   year: number
   month: number // 1..12
@@ -65,10 +68,31 @@ function bucketLabel(p: DateParts, gran: Granularity): string {
   return `${month} ${p.day}, ${p.year}`
 }
 
-// Group the files into dated buckets at the given granularity, ordered newest-first.
-// Undated captures (parseParts === null) collect into a single trailing 'Unknown date'
-// group. Files keep their incoming order within a group.
-export function groupFeatures(files: LibraryFeature[], gran: Granularity): DateGroup[] {
+// Within-group sort key: the capture's local wall-clock instant as an ISO string. ISO
+// strings sort correctly lexicographically (YYYY-MM-DDThh:mm:ss), and comparing them as
+// strings is timezone-stable — never `new Date()`, same discipline as parseParts above.
+// Mirror parseParts' source selection so the within-group order is consistent with the
+// bucket the file landed in: use capture_ts_local only when it is a parseable date
+// (keeping its full time-of-day precision), else fall back to the validated local_date.
+// A raw `capture_ts_local ?? local_date` would sort a corrupt-but-non-null timestamp by
+// its garbage string while parseParts had bucketed it via local_date.
+function sortKey(f: LibraryFeature): string {
+  const p = f.properties
+  if (partsFrom(p.capture_ts_local)) return p.capture_ts_local as string
+  if (partsFrom(p.local_date)) return p.local_date as string
+  return ''
+}
+
+// Group the files into dated buckets at the given granularity. `dir` ('desc' default =
+// newest-first, 'asc' = oldest-first) orders BOTH the groups and the files within each
+// group by capture date; the within-group sort is stable, so equal timestamps keep their
+// incoming order. Undated captures (parseParts === null) collect into a single 'Unknown
+// date' group that always trails, regardless of `dir`.
+export function groupFeatures(
+  files: LibraryFeature[],
+  gran: Granularity,
+  dir: SortDir = 'desc',
+): DateGroup[] {
   const dated = new Map<string, DateGroup>()
   const undated: LibraryFeature[] = []
 
@@ -84,8 +108,17 @@ export function groupFeatures(files: LibraryFeature[], gran: Granularity): DateG
     else dated.set(key, { key, label: bucketLabel(parts, gran), files: [f] })
   }
 
-  // Zero-padded keys sort lexicographically, so descending key === newest-first.
-  const groups = [...dated.values()].sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0))
+  // sign flips the comparator: desc puts the larger (newer) key/timestamp first.
+  const sign = dir === 'desc' ? -1 : 1
+  const groups = [...dated.values()].sort((a, b) => (a.key < b.key ? -sign : a.key > b.key ? sign : 0))
+  for (const g of groups) {
+    g.files.sort((a, b) => {
+      const ka = sortKey(a)
+      const kb = sortKey(b)
+      return ka < kb ? -sign : ka > kb ? sign : 0
+    })
+  }
+  // Appended after sorting so the Unknown-date group always trails, in both directions.
   if (undated.length > 0) groups.push({ key: '', label: 'Unknown date', files: undated })
   return groups
 }
