@@ -1149,3 +1149,46 @@ def test_clear_local_cache_spares_proxies_stitch(tmp_path):
     assert seeded["proxies"].exists()  # expensive proxy spared
     assert seeded["stitch"].exists()  # expensive Hugin hero spared
     assert n == 4
+
+
+# --- Graceful handling of corrupt / unrenderable media (m-fix-corrupt-media-graceful) ---
+
+def test_is_ffmpeg_decode_error_classifies():
+    # High-confidence corruption markers -> permanent.
+    assert derived._is_ffmpeg_decode_error("[mov] moov atom not found")
+    assert derived._is_ffmpeg_decode_error("Invalid data found when processing input")
+    assert derived._is_ffmpeg_decode_error("Does not contain any stream")
+    # Transient-ambiguous ACCESS failures stay un-classified (-> retryable 503), so a
+    # flaky-SMB read of a HEALTHY file is never wrongly cached as a placeholder.
+    assert not derived._is_ffmpeg_decode_error("Error opening input file x.mp4")
+    assert not derived._is_ffmpeg_decode_error("End of file")
+    assert not derived._is_ffmpeg_decode_error("Connection timed out")
+    assert not derived._is_ffmpeg_decode_error("")
+
+
+def test_poster_unrenderable_source_returns_placeholder(tmp_path):
+    bad = tmp_path / "bad.mp4"
+    bad.write_bytes(b"\x00not a real mp4")
+    out = derived.poster(tmp_path / "cache", "bad.mp4", bad)
+    assert out.exists()
+    with Image.open(out) as img:  # a valid JPEG placeholder, not a crash
+        assert img.format == "JPEG"
+    # Second call is a fresh cache hit -> no re-decode, no exception.
+    again = derived.poster(tmp_path / "cache", "bad.mp4", bad)
+    assert again == out and again.exists()
+
+
+def test_thumbnail_unrenderable_source_returns_placeholder(tmp_path):
+    bad = tmp_path / "bad.jpg"
+    bad.write_bytes(b"not an image")
+    out = derived.thumbnail(tmp_path / "cache", "bad.jpg", bad)
+    assert out.exists()
+    with Image.open(out) as img:
+        assert img.format == "JPEG"
+
+
+def test_proxy_unrenderable_source_raises(tmp_path):
+    bad = tmp_path / "bad.mp4"
+    bad.write_bytes(b"\x00not a real mp4")
+    with pytest.raises(derived.SourceUnrenderable):
+        derived.proxy(tmp_path / "cache", "bad.mp4", bad, "h265")

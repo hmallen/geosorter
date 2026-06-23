@@ -1192,3 +1192,24 @@ def test_all_mutating_routes_open_without_password(client_and_lib, route):
     # With no password configured, none of them 401 (the guard is a no-op).
     client, _ = client_and_lib
     assert client.post(route).status_code != 401
+
+
+# --- Corrupt / unrenderable media -> graceful response (m-fix-corrupt-media-graceful) ---
+
+def test_poster_unrenderable_serves_placeholder(client_and_lib):
+    client, library = client_and_lib
+    bad = library / "clips" / "v.mp4"  # fixture seeds this as an h265 video row
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_bytes(b"\x00not a real mp4")
+    resp = client.get("/api/poster/clips/v.mp4")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/jpeg")
+
+
+def test_video_unrenderable_returns_422(client_and_lib):
+    client, library = client_and_lib
+    bad = library / "clips" / "v.mp4"
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_bytes(b"\x00not a real mp4")
+    resp = client.get("/api/video/clips/v.mp4")
+    assert resp.status_code == 422

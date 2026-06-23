@@ -20,6 +20,7 @@ ffmpeg/ffprobe are invoked as list-form subprocesses (mirroring
 from __future__ import annotations
 
 import functools
+import io
 import logging
 import math
 import os
@@ -34,7 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from stat import S_ISREG
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 
 logger = logging.getLogger("geosorter.derived")
 
@@ -204,6 +205,86 @@ def _touch_to_source(cache_file: Path, source: Path) -> None:
         pass
 
 
+class SourceUnrenderable(RuntimeError):
+    """The source media could not be decoded (corrupt/truncated/not media).
+
+    A PERMANENT failure (e.g. a DJI clip whose recording was interrupted before the
+    ``moov`` atom was written), distinct from a transient I/O error worth retrying.
+    Image-kind callers (:func:`thumbnail`/:func:`preview`/:func:`poster`) catch it and
+    cache a placeholder so a re-request is a cheap hit and the ``/api`` route serves a
+    200 (no retry storm); the video :func:`proxy` lets it propagate (the route maps it
+    to a permanent 422). A genuine network blip stays a bare ``RuntimeError``/``OSError``
+    instead, so the route returns a retryable 503.
+    """
+
+
+# ffmpeg stderr signatures of a STRUCTURALLY/content-undecodable input (a permanent
+# failure). Kept deliberately NARROW: only high-confidence corruption markers, since
+# this tool targets a flaky SMB share where a transient ACCESS failure (a locked/missing
+# file, a half-read clip → "Error opening input", "End of file", "I/O error") would
+# otherwise be misread as permanent and cache a placeholder for a HEALTHY file. Those
+# ambiguous signatures are intentionally EXCLUDED so they stay a transient RuntimeError
+# → retryable 503. A genuinely corrupt DJI clip still emits "moov atom not found".
+_FFMPEG_DECODE_ERROR_RE = re.compile(
+    r"moov atom not found|invalid data found"
+    r"|does not contain any stream|could not find codec parameters",
+    re.IGNORECASE,
+)
+# Pillow OSError messages of a corrupt/truncated image. NARROW (a bare network OSError
+# must stay transient); "cannot identify" is excluded — that is UnidentifiedImageError's
+# own message, caught by its dedicated except branch, not the OSError branch.
+_PIL_DECODE_ERROR_RE = re.compile(
+    r"truncated|broken data|decompression", re.IGNORECASE,
+)
+
+
+def _is_ffmpeg_decode_error(stderr: str) -> bool:
+    """True when ffmpeg stderr indicates the input is undecodable (not transient)."""
+    return bool(_FFMPEG_DECODE_ERROR_RE.search(stderr or ""))
+
+
+def _is_pil_decode_error(msg: str) -> bool:
+    """True when a Pillow ``OSError`` message indicates a corrupt/truncated image."""
+    return bool(_PIL_DECODE_ERROR_RE.search(msg or ""))
+
+
+# The "media unavailable" placeholder: a small neutral tile with a warning glyph, drawn
+# once (no font dependency) and served in place of a thumbnail/poster for an unrenderable
+# source. Small — the frontend scales it to the tile/lightbox size.
+PLACEHOLDER_MAX = 320
+
+
+@functools.lru_cache(maxsize=1)
+def _placeholder_jpeg_bytes() -> bytes:
+    """A neutral 'media unavailable' JPEG (dark tile + warning triangle), drawn once."""
+    img = Image.new("RGB", (PLACEHOLDER_MAX, PLACEHOLDER_MAX), (40, 40, 40))
+    d = ImageDraw.Draw(img)
+    fg = (150, 150, 150)
+    mid = PLACEHOLDER_MAX // 2
+    top, bottom = int(PLACEHOLDER_MAX * 0.22), int(PLACEHOLDER_MAX * 0.78)
+    left, right = int(PLACEHOLDER_MAX * 0.18), int(PLACEHOLDER_MAX * 0.82)
+    d.polygon([(mid, top), (left, bottom), (right, bottom)], outline=fg, width=8)
+    d.line([(mid, int(PLACEHOLDER_MAX * 0.42)), (mid, int(PLACEHOLDER_MAX * 0.60))],
+           fill=fg, width=10)
+    dot = int(PLACEHOLDER_MAX * 0.66)
+    d.ellipse([mid - 6, dot, mid + 6, dot + 12], fill=fg)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=70)
+    return buf.getvalue()
+
+
+def _write_placeholder(out: Path, source: Path) -> None:
+    """Cache the 'unavailable' placeholder for an unrenderable ``source``.
+
+    Pinned to the source's mtime + size sidecar exactly like a real asset, so a
+    re-request is a fresh :func:`_is_fresh` hit (no re-decode) and a later content swap
+    to VALID bytes (different size/mtime) regenerates the real asset.
+    """
+    _atomic_write(out, lambda dest: dest.write_bytes(_placeholder_jpeg_bytes()))
+    _touch_to_source(out, source)
+    _write_size_sidecar(out, source)
+
+
 def _run_ffmpeg(cmd: list[str], *, timeout: int = FFMPEG_TIMEOUT_S,
                 verbose: bool = False) -> None:
     """Run an ffmpeg subprocess (list-form) with a hard timeout.
@@ -226,7 +307,12 @@ def _run_ffmpeg(cmd: list[str], *, timeout: int = FFMPEG_TIMEOUT_S,
     if proc.returncode != 0:
         if verbose:  # output already streamed to the terminal — no captured stderr
             raise RuntimeError(f"ffmpeg failed ({proc.returncode})")
-        raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {proc.stderr.strip()}")
+        stderr = proc.stderr.strip()
+        if _is_ffmpeg_decode_error(stderr):
+            raise SourceUnrenderable(
+                f"ffmpeg cannot decode source ({proc.returncode}): {stderr}"
+            )
+        raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {stderr}")
 
 
 def _atomic_write(out: Path, produce: Callable[[Path], None]) -> None:
@@ -314,18 +400,28 @@ def _resize_jpeg(cache_root: Path | str, rel_key: str, source: Path, kind: str,
         return out
 
     def _produce(dest: Path) -> None:
-        with Image.open(source) as img:
-            if source.suffix.lower() in (".jpg", ".jpeg"):
-                # DCT-downscale the JPEG decode toward the target (4-8x faster on
-                # large DJI JPEGs, fewer SMB bytes read). Must precede any pixel
-                # access — exif_transpose/thumbnail below load the image. No-op for
-                # non-JPEG, but guard by suffix so the intent is explicit.
-                img.draft("RGB", (max_px, max_px))
-            img = ImageOps.exif_transpose(img)  # honour camera orientation
-            img.thumbnail((max_px, max_px))  # downscale only; never upscales
-            img.convert("RGB").save(dest, "JPEG", quality=quality)
+        try:
+            with Image.open(source) as img:
+                if source.suffix.lower() in (".jpg", ".jpeg"):
+                    # DCT-downscale the JPEG decode toward the target (4-8x faster on
+                    # large DJI JPEGs, fewer SMB bytes read). Must precede any pixel
+                    # access — exif_transpose/thumbnail below load the image. No-op for
+                    # non-JPEG, but guard by suffix so the intent is explicit.
+                    img.draft("RGB", (max_px, max_px))
+                img = ImageOps.exif_transpose(img)  # honour camera orientation
+                img.thumbnail((max_px, max_px))  # downscale only; never upscales
+                img.convert("RGB").save(dest, "JPEG", quality=quality)
+        except UnidentifiedImageError as exc:  # not an image at all
+            raise SourceUnrenderable(str(exc)) from exc
+        except OSError as exc:  # truncated/broken image vs a transient I/O error
+            if _is_pil_decode_error(str(exc)):
+                raise SourceUnrenderable(str(exc)) from exc
+            raise
 
-    _generate(out, source, _produce)
+    try:
+        _generate(out, source, _produce)
+    except SourceUnrenderable:
+        _write_placeholder(out, source)  # cache the 'unavailable' tile, served at 200
     return out
 
 
@@ -345,13 +441,16 @@ def poster(cache_root: Path | str, rel_key: str, source: Path | str) -> Path:
     out = _cache_path(cache_root, rel_key, "posters", ".jpg")
     if _is_fresh(out, source):
         return out
-    _generate(
-        out, source,
-        lambda dest: _run_ffmpeg(
-            ["ffmpeg", "-v", "error", "-y", "-ss", "0", "-i", str(source),
-             "-frames:v", "1", str(dest)]
-        ),
-    )
+    try:
+        _generate(
+            out, source,
+            lambda dest: _run_ffmpeg(
+                ["ffmpeg", "-v", "error", "-y", "-ss", "0", "-i", str(source),
+                 "-frames:v", "1", str(dest)]
+            ),
+        )
+    except SourceUnrenderable:
+        _write_placeholder(out, source)  # cache the 'unavailable' tile, served at 200
     return out
 
 
@@ -436,6 +535,8 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
                 _run_ffmpeg(_proxy_cmd(source, dest, nvenc=True, verbose=verbose),
                             verbose=verbose)
                 return
+            except SourceUnrenderable:
+                raise  # a bad INPUT won't transcode on any encoder — don't retry
             except RuntimeError:
                 if not allow_fallback:
                     raise  # explicit 'nvenc' is strict — surface the failure
