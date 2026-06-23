@@ -1023,6 +1023,26 @@
   text-align: left;
 }
 
+/* Relocated "Stitch all" action bar — a sub-header below the panel head. */
+.stitch-all-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stitch-all-progress {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.stitch-all-failed {
+  color: var(--danger);
+  font-size: 13px;
+}
+
 .stitch-list {
   list-style: none;
   margin: 0;

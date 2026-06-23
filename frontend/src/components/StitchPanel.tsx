@@ -2,6 +2,7 @@ import { listThumb } from '../api'
 import { captionInfo } from '../captionInfo'
 import LoadingImage from './LoadingImage'
 import type { StitchState } from '../stitchJob'
+import type { StitchAllProgress, StitchAllSummary } from '../stitchAllJob'
 import type { LibraryFeature } from '../types'
 
 interface Props {
@@ -13,6 +14,14 @@ interface Props {
   // Admin-only: start a stitch for one panorama. Undefined for a view-only viewer
   // (the list is still visible, but without the Stitch button).
   onStartStitch?: (fileId: number) => void
+  // Admin-only: stitch every panorama in this list (the relocated "Stitch all"
+  // action). Undefined for a view-only viewer — the bar then doesn't render. The run
+  // state below is owned by App so it survives this panel unmounting on close.
+  onStitchAll?: () => void
+  onCancelStitchAll: () => void
+  stitchAllRunning: boolean
+  stitchAllProgress: StitchAllProgress | null
+  stitchAllResult: StitchAllSummary | null
   // Open this panorama in the lightbox (e.g. to inspect the tiles / collage hero).
   onView: (feature: LibraryFeature) => void
   onClose: () => void
@@ -49,6 +58,11 @@ export default function StitchPanel({
   panoramas,
   stitchByFile,
   onStartStitch,
+  onStitchAll,
+  onCancelStitchAll,
+  stitchAllRunning,
+  stitchAllProgress,
+  stitchAllResult,
   onView,
   onClose,
 }: Props) {
@@ -58,6 +72,30 @@ export default function StitchPanel({
         <strong>Unstitched panoramas ({panoramas.length})</strong>
         <button onClick={onClose} aria-label="Close">×</button>
       </div>
+
+      {onStitchAll && panoramas.length > 0 && (
+        <div className="stitch-all-bar">
+          {stitchAllRunning ? (
+            <>
+              <button onClick={onCancelStitchAll}>Cancel stitch-all</button>
+              <span className="stitch-all-progress">
+                {stitchAllProgress
+                  ? `stitching ${stitchAllProgress.done}/${stitchAllProgress.total}`
+                  : 'stitching…'}
+              </span>
+            </>
+          ) : (
+            <button onClick={onStitchAll}>
+              Stitch all panoramas ({panoramas.length})
+            </button>
+          )}
+          {!stitchAllRunning && stitchAllResult && stitchAllResult.failed > 0 && (
+            <span className="stitch-all-failed">
+              ⚠ {stitchAllResult.failed} stitch(es) failed
+            </span>
+          )}
+        </div>
+      )}
 
       {panoramas.length === 0 ? (
         <p className="inbox-note">No panoramas waiting to be stitched.</p>
@@ -88,7 +126,11 @@ export default function StitchPanel({
                   <button
                     className="stitch-go"
                     onClick={() => onStartStitch(f.properties.id)}
-                    disabled={isBusy(st)}
+                    // Also disabled during a stitch-all run: the batch drives stitches
+                    // through runStitchAll (not the per-file useStitch hook), so `st`
+                    // stays empty for batch items — without this gate the per-item
+                    // button would invite a duplicate stitch for a file already queued.
+                    disabled={isBusy(st) || stitchAllRunning}
                     title="Stitch this panorama"
                   >
                     {isBusy(st) ? '…' : 'Stitch'}

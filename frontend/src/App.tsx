@@ -12,6 +12,7 @@ import { useRetagJob } from './useRetagJob'
 import { useAssignLocation } from './useAssignLocation'
 import { useQuarantine } from './useQuarantine'
 import { useStitch } from './useStitch'
+import { useStitchAll } from './useStitchAll'
 import { useAuthContext } from './useAuth'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
@@ -74,6 +75,10 @@ export default function App() {
   // progress survives the lightbox closing/reopening; reload on success so the hero
   // + stitch_status persist on the map and in the panel.
   const { byFile: stitchByFile, start: startStitch } = useStitch(reload)
+  // The "Stitch all panoramas" batch action lives here (not in the unmounting
+  // StitchPanel) so an in-flight run survives the panel closing/reopening; reload
+  // the library on completion so finished panoramas drop out of the target set.
+  const stitchAll = useStitchAll(reload)
 
   // Panel contents: every capture inside the current map viewport. A pure in-memory
   // filter over the already-loaded features — no /api refetch on pan/zoom. Memoized
@@ -157,11 +162,10 @@ export default function App() {
         admin={isAdmin}
         onDone={handleChanged}
         stitchTargets={panoramaTargets}
-        onReload={reload}
-        onOpenNoGps={() => setShowNoGps(true)}
+        onOpenNoGps={() => setShowNoGps((v) => !v)}
         noGpsCount={quarantineCount}
-        onOpenLocations={() => setShowLocations(true)}
-        onOpenStitch={() => setShowStitch(true)}
+        onOpenLocations={() => setShowLocations((v) => !v)}
+        onOpenStitch={() => setShowStitch((v) => !v)}
       />
       <MapView
         features={features}
@@ -233,6 +237,11 @@ export default function App() {
           panoramas={panoramaTargetFeatures}
           stitchByFile={stitchByFile}
           onStartStitch={isAdmin ? startStitch : undefined}
+          onStitchAll={isAdmin ? () => stitchAll.start(panoramaTargets) : undefined}
+          onCancelStitchAll={stitchAll.cancel}
+          stitchAllRunning={stitchAll.running}
+          stitchAllProgress={stitchAll.progress}
+          stitchAllResult={stitchAll.result}
           onView={(f) => {
             // Open the unstitched-panorama list at this capture so prev/next walks them.
             const idx = panoramaTargetFeatures.findIndex(
