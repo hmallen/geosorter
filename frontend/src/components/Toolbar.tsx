@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useOrganizeJob } from '../useOrganizeJob'
 import { useUndoJob } from '../useUndoJob'
 import { useRescanJob } from '../useRescanJob'
-import { useStitchAll } from '../useStitchAll'
 import { useInboxCount } from '../useInboxCount'
 import { useInboxList } from '../useInboxList'
 import { progressLabel, loadProgressLabel, resultLabel } from '../organizeJob'
@@ -16,11 +15,8 @@ interface ToolbarProps {
   admin: boolean
   onDone: () => void
   // file_ids of panoramas that still want a stitch (capture_kind panorama, has
-  // tiles, stitch_status !== 'ok'); the "Stitch all" button targets exactly these.
+  // tiles, stitch_status !== 'ok'); labels the "Unstitched panoramas (N)" button.
   stitchTargets: number[]
-  // Reload just the library feed after a stitch-all completes (so finished
-  // panoramas drop out of stitchTargets) without clearing the open selection.
-  onReload: () => void
   // Open the No-GPS panel (owned by App, which holds the assign hook + map
   // placement). `noGpsCount` labels the button so the user sees the backlog.
   onOpenNoGps: () => void
@@ -37,7 +33,6 @@ export default function Toolbar({
   admin,
   onDone,
   stitchTargets,
-  onReload,
   onOpenNoGps,
   noGpsCount,
   onOpenLocations,
@@ -71,9 +66,6 @@ export default function Toolbar({
   const { job, running, total, start } = useOrganizeJob(afterRun)
   const { undo, undoing, startUndo } = useUndoJob(afterRun)
   const { rescan, rescanning, startRescan } = useRescanJob(afterRun)
-  // Stitch-all runs on the independent stitch pool, so it is NOT gated by `busy`
-  // (organize/undo/rescan) — only by its own running flag.
-  const stitchAll = useStitchAll(onReload)
   const busy = running || undoing || rescanning
   // Write the ref in an effect (not during render — react-hooks/refs) so the inbox poll
   // suspends while a destructive job runs OR while the viewer is not admin (the badge is
@@ -89,7 +81,14 @@ export default function Toolbar({
     <div className="toolbar">
       {admin && (
         <>
-          <button onClick={() => { setPicking(true); loadInbox() }} disabled={busy}>
+          <button
+            onClick={() => {
+              const next = !picking
+              setPicking(next)
+              if (next) loadInbox()
+            }}
+            disabled={busy}
+          >
             {running ? 'Processing…' : 'Process Inbox'}
           </button>
           {picking && (
@@ -130,26 +129,6 @@ export default function Toolbar({
         <button onClick={onOpenStitch} title="See exactly which panorama sets are waiting to be stitched">
           Unstitched panoramas ({stitchTargets.length})
         </button>
-      )}
-      {admin &&
-        (stitchAll.running ? (
-          <span className="job job--progress">
-            <button onClick={stitchAll.cancel}>Cancel stitch-all</button>
-            {stitchAll.progress
-              ? ` stitching ${stitchAll.progress.done}/${stitchAll.progress.total}`
-              : ' stitching…'}
-          </span>
-        ) : (
-          stitchTargets.length > 0 && (
-            <button onClick={() => stitchAll.start(stitchTargets)}>
-              Stitch all panoramas ({stitchTargets.length})
-            </button>
-          )
-        ))}
-      {admin && !stitchAll.running && stitchAll.result && stitchAll.result.failed > 0 && (
-        <span className="job" title="See the ⚠ stitch badges in the file list">
-          ⚠ {stitchAll.result.failed} stitch(es) failed
-        </span>
       )}
       {job && job.state === 'running' && total !== null && (
         <span className="job job--progress" title={progressLabel(job)}>
