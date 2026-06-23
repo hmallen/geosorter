@@ -44,6 +44,7 @@ import gzip
 import json
 import logging
 import sqlite3
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -75,6 +76,29 @@ def _safe_cache_path(path: Path, *roots: Path) -> Path:
     if not any(resolved.is_relative_to(Path(r).resolve()) for r in roots):
         raise HTTPException(status_code=403, detail="derived path outside cache")
     return path
+
+
+def _gen_or_http(produce: Callable[[], Path]) -> Path:
+    """Run a derived-asset generation, mapping its failure to a clean HTTP status.
+
+    Corrupt/truncated media would otherwise surface a ``derived`` exception as an
+    unhandled 500 with a full ASGI traceback (and the frontend retries each broken
+    ``<img>``, multiplying the ffmpeg runs + spam). Instead:
+    a :class:`derived.SourceUnrenderable` (the source can never be decoded) -> a
+    permanent **422**; any other generation error (a transient I/O blip) -> a retryable
+    **503**. Both log ONE concise ``geosorter.api`` warning, never a traceback. Compute
+    ``_safe_path`` OUTSIDE the ``produce`` thunk — its own 403/404 must not be remapped.
+    For the image kinds, ``derived`` returns a cached placeholder rather than raising
+    :class:`~derived.SourceUnrenderable`, so they only ever reach the 503 branch.
+    """
+    try:
+        return produce()
+    except derived.SourceUnrenderable as exc:
+        logger.warning("unrenderable source media: %s", exc)
+        raise HTTPException(status_code=422, detail="source media is unreadable")
+    except (RuntimeError, OSError) as exc:
+        logger.warning("derived asset generation failed: %s", exc)
+        raise HTTPException(status_code=503, detail="derived asset generation failed")
 
 
 def _submit_or_409(submit) -> dict:
@@ -641,24 +665,28 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
 
     @app.get("/api/thumb/{relpath:path}")
     def thumb(relpath: str) -> FileResponse:
-        out = derived.thumbnail(cache_dir, relpath, _safe_path(relpath))
+        src = _safe_path(relpath)
+        out = _gen_or_http(lambda: derived.thumbnail(cache_dir, relpath, src))
         return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
 
     @app.get("/api/preview/{relpath:path}")
     def preview(relpath: str) -> FileResponse:
-        out = derived.preview(cache_dir, relpath, _safe_path(relpath))
+        src = _safe_path(relpath)
+        out = _gen_or_http(lambda: derived.preview(cache_dir, relpath, src))
         return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
 
     @app.get("/api/poster/{relpath:path}")
     def poster(relpath: str) -> FileResponse:
-        out = derived.poster(cache_dir, relpath, _safe_path(relpath))
+        src = _safe_path(relpath)
+        out = _gen_or_http(lambda: derived.poster(cache_dir, relpath, src))
         return FileResponse(_safe_cache_path(out, cache_dir), media_type="image/jpeg")
 
     @app.get("/api/video/{relpath:path}")
     def video(relpath: str) -> FileResponse:
         source = _safe_path(relpath)
-        out = derived.proxy(proxy_cache_dir, relpath, source, _lookup_codec(relpath),
-                            hwaccel=cfg.proxy_hwaccel)
+        out = _gen_or_http(lambda: derived.proxy(proxy_cache_dir, relpath, source,
+                                                 _lookup_codec(relpath),
+                                                 hwaccel=cfg.proxy_hwaccel))
         # An h264 source is returned unchanged (under library_root); a proxy lives
         # under proxy_cache_dir — allow either.
         return FileResponse(_safe_cache_path(out, proxy_cache_dir, library_root))
