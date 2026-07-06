@@ -1,6 +1,8 @@
 // Pure driver for the B6 background organize job: POST /api/organize then poll
 // /api/organize/status/{id} to a terminal state. `fetchFn` is injectable for tests.
 
+import { pollJob } from './pollJob'
+
 export interface JobState {
   job_id?: string
   state: 'pending' | 'running' | 'done' | 'error' | 'cancelled'
@@ -59,15 +61,11 @@ export function resultLabel(job: JobState): string {
   return label
 }
 
-const TERMINAL = new Set(['done', 'error', 'cancelled'])
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
-
 export async function runOrganize(
   fetchFn: typeof fetch = fetch,
   opts: { onProgress?: (s: JobState) => void; intervalMs?: number } = {},
   primaries?: string[] | null,
 ): Promise<JobState> {
-  const { onProgress, intervalMs = 500 } = opts
   // A partial import sends the chosen capture-group ids; a full import (select-all,
   // the default) sends no body so the backend imports the whole inbox.
   const init: RequestInit =
@@ -78,16 +76,11 @@ export async function runOrganize(
           body: JSON.stringify({ primaries }),
         }
       : { method: 'POST' }
-  const started = await fetchFn('/api/organize', init)
-  if (!started.ok) throw new Error(`organize start failed: ${started.status}`)
-  const { job_id } = (await started.json()) as { job_id: string }
-
-  for (;;) {
-    const resp = await fetchFn(`/api/organize/status/${job_id}`)
-    if (!resp.ok) throw new Error(`organize status failed: ${resp.status}`)
-    const state = (await resp.json()) as JobState
-    onProgress?.(state)
-    if (TERMINAL.has(state.state)) return state
-    await sleep(intervalMs)
-  }
+  // No timeout: a bulk import legitimately scales with inbox size.
+  return pollJob<JobState>(fetchFn, {
+    kind: 'organize',
+    startUrl: '/api/organize',
+    startInit: init,
+    statusUrl: (id) => `/api/organize/status/${id}`,
+  }, opts)
 }

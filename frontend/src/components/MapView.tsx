@@ -38,6 +38,9 @@ export default function MapView({
 }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const mapRef = useRef<MapLibreMap | null>(null)
+  // The loaded map as STATE (not just a ref) so the moveend-listener effect
+  // below re-runs when the map instance appears.
+  const [mapObj, setMapObj] = useState<MapLibreMap | null>(null)
   const [view, setView] = useState({ longitude: -98, latitude: 39, zoom: 3 })
   const [bbox, setBbox] = useState<BBox>(WORLD)
   const [satellite, setSatellite] = useState(false)
@@ -52,8 +55,25 @@ export default function MapView({
     onBoundsChange?.(next)
   }, [onBoundsChange])
 
+  // Subscribe to maplibre's `moveend` DIRECTLY on the map, not via react-map-gl's
+  // `onMoveEnd` prop. In controlled mode react-map-gl suppresses its own camera
+  // callbacks while it applies a programmatic view change (its `_internalUpdate`
+  // guard), so `onMoveEnd` never fires for a cluster-click zoom and the panel
+  // would stay stale. A direct listener is not gated by that flag, so it fires for
+  // BOTH user gestures and programmatic moves — and `getBounds()` is already
+  // current because the move has finished. Registered in an effect (with cleanup)
+  // so it never leaks and always closes over the CURRENT syncBounds.
+  useEffect(() => {
+    if (!mapObj) return
+    const handler = () => syncBounds(mapObj)
+    mapObj.on('moveend', handler)
+    return () => {
+      mapObj.off('moveend', handler)
+    }
+  }, [mapObj, syncBounds])
+
   // Fly to a picked place's bounding box. fitBounds drives onMove -> the direct
-  // `moveend` listener (wired in onLoad) -> syncBounds, so the panel + clusters
+  // `moveend` listener (wired above) -> syncBounds, so the panel + clusters
   // refresh for the new viewport. maxZoom caps a single-pin (degenerate) bbox.
   useEffect(() => {
     const map = mapRef.current
@@ -80,17 +100,10 @@ export default function MapView({
         })
       }
       onLoad={(e: MapEvent) => {
-        // Subscribe to maplibre's `moveend` DIRECTLY on the map, not via react-map-gl's
-        // `onMoveEnd` prop. In controlled mode react-map-gl suppresses its own camera
-        // callbacks while it applies a programmatic view change (its `_internalUpdate`
-        // guard), so `onMoveEnd` never fires for a cluster-click zoom and the panel
-        // would stay stale. A direct listener is not gated by that flag, so it fires for
-        // BOTH user gestures and programmatic moves — and `getBounds()` is already
-        // current because the move has finished. This replaces the `onMoveEnd` prop.
         const map = e.target
         mapRef.current = map
+        setMapObj(map) // arms the moveend-listener effect above
         syncBounds(map)
-        map.on('moveend', () => syncBounds(map))
       }}
       onClick={(e: MapLayerMouseEvent) => onMapClick?.(e.lngLat.lng, e.lngLat.lat)}
       cursor={onMapClick ? 'crosshair' : undefined}

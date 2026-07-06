@@ -30,7 +30,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from . import db
+from . import db, pathing
 
 
 @dataclass
@@ -45,9 +45,8 @@ class RescanReport:
     orphaned: list[str] = field(default_factory=list)    # primary missing, companion left on disk
 
 
-def _strip(dest_path: str) -> str:
-    r"""Drop the Windows ``\\?\`` long-path prefix if present."""
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 def run_rescan(cfg, *, dry_run: bool = False, progress=None) -> RescanReport:

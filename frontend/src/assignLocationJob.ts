@@ -3,6 +3,8 @@
 // state. Mirrors retagJob.ts; `fetchFn` is injectable for tests. Promotes one or
 // more no-GPS (quarantined) captures to organized at a user-picked coordinate.
 
+import { pollJob } from './pollJob'
+
 export interface AssignState {
   job_id?: string
   state: 'pending' | 'running' | 'done' | 'error'
@@ -16,9 +18,6 @@ export interface AssignState {
   failures: string[]
 }
 
-const TERMINAL = new Set(['done', 'error'])
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
-
 export async function runAssignLocation(
   fetchFn: typeof fetch,
   fileIds: number[],
@@ -26,21 +25,16 @@ export async function runAssignLocation(
   lon: number,
   opts: { onProgress?: (s: AssignState) => void; intervalMs?: number } = {},
 ): Promise<AssignState> {
-  const { onProgress, intervalMs = 500 } = opts
-  const started = await fetchFn('/api/assign-location', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_ids: fileIds, lat, lon }),
-  })
-  if (!started.ok) throw new Error(`assign start failed: ${started.status}`)
-  const { job_id } = (await started.json()) as { job_id: string }
-
-  for (;;) {
-    const resp = await fetchFn(`/api/assign-location/status/${job_id}`)
-    if (!resp.ok) throw new Error(`assign status failed: ${resp.status}`)
-    const state = (await resp.json()) as AssignState
-    onProgress?.(state)
-    if (TERMINAL.has(state.state)) return state
-    await sleep(intervalMs)
-  }
+  // Bounded by the selection size (each file is one re-file); an hour is generous.
+  return pollJob<AssignState>(fetchFn, {
+    kind: 'assign',
+    startUrl: '/api/assign-location',
+    startInit: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_ids: fileIds, lat, lon }),
+    },
+    statusUrl: (id) => `/api/assign-location/status/${id}`,
+    terminal: new Set(['done', 'error']),
+  }, { timeoutMs: 60 * 60_000, ...opts })
 }

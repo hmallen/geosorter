@@ -2,6 +2,8 @@
 // then poll /api/stitch/status/{job_id} to a terminal state. `fetchFn` is
 // injectable. A stitch is ~7 min, so polling is deliberately slow by default.
 
+import { pollJob } from './pollJob'
+
 export interface StitchState {
   job_id?: string
   state: 'pending' | 'running' | 'done' | 'error'
@@ -19,9 +21,6 @@ export interface StitchState {
   projection?: string
   error: string | null
 }
-
-const TERMINAL = new Set(['done', 'error'])
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 export async function runStitch(
   fetchFn: typeof fetch,
@@ -46,16 +45,13 @@ export async function runStitch(
           body: JSON.stringify({ force, projection }),
         }
       : { method: 'POST' }
-  const started = await fetchFn(`/api/stitch/${fileId}`, post)
-  if (!started.ok) throw new Error(`stitch start failed: ${started.status}`)
-  const { job_id } = (await started.json()) as { job_id: string }
-
-  for (;;) {
-    const resp = await fetchFn(`/api/stitch/status/${job_id}`)
-    if (!resp.ok) throw new Error(`stitch status failed: ${resp.status}`)
-    const state = (await resp.json()) as StitchState
-    onProgress?.(state)
-    if (TERMINAL.has(state.state)) return state
-    await sleep(intervalMs)
-  }
+  // A stitch is ~7 min; an hour covers slow machines with a wide margin while a
+  // wedged Hugin pipeline can't keep the client polling forever.
+  return pollJob<StitchState>(fetchFn, {
+    kind: 'stitch',
+    startUrl: `/api/stitch/${fileId}`,
+    startInit: post,
+    statusUrl: (id) => `/api/stitch/status/${id}`,
+    terminal: new Set(['done', 'error']),
+  }, { timeoutMs: 60 * 60_000, onProgress, intervalMs })
 }

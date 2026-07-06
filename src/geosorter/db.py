@@ -156,10 +156,19 @@ _RTREE_DDL = (
 _COLUMNAR_DDL = "CREATE INDEX IF NOT EXISTS idx_geonames_latlon ON geonames(lat, lon)"
 
 
+#: How long a writer waits for a competing write lock before SQLITE_BUSY.
+#: WAL allows readers alongside one writer, but a SECOND writer still gets
+#: "database is locked" — and background jobs (organize/retag/rescan/...) do
+#: write the index DB concurrently with request-path writes (geocode_cache).
+BUSY_TIMEOUT_MS = 10_000
+
+
 def connect(path: str | Path, *, integrity_check: bool = True) -> sqlite3.Connection:
     """Open a SQLite connection with the project's standard PRAGMAs.
 
-    Sets WAL journaling, ``synchronous=NORMAL`` and ``foreign_keys=ON``. When
+    Sets WAL journaling, ``synchronous=NORMAL``, ``foreign_keys=ON`` and a
+    ``busy_timeout`` (without it a second concurrent writer fails with
+    ``database is locked`` immediately instead of waiting its turn). When
     ``integrity_check`` is true (default) runs ``PRAGMA integrity_check`` and
     raises :class:`sqlite3.DatabaseError` if the result is not ``ok``.
 
@@ -172,6 +181,7 @@ def connect(path: str | Path, *, integrity_check: bool = True) -> sqlite3.Connec
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     if integrity_check:
         result = conn.execute("PRAGMA integrity_check").fetchone()[0]
         if result != "ok":

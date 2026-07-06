@@ -1192,3 +1192,36 @@ def test_proxy_unrenderable_source_raises(tmp_path):
     bad.write_bytes(b"\x00not a real mp4")
     with pytest.raises(derived.SourceUnrenderable):
         derived.proxy(tmp_path / "cache", "bad.mp4", bad, "h265")
+
+
+# --- Heavy/light generation-tier split ------------------------------------- #
+
+
+def test_proxy_generation_uses_heavy_tier_semaphore(tmp_path, monkeypatch):
+    # proxy() must run its transcode under the HEAVY-tier permit so a slow
+    # HEVC transcode never occupies a light (thumbnail/preview) permit.
+    seen = {}
+
+    def fake_generate(out, source, produce, *, semaphore=None):
+        seen["semaphore"] = semaphore
+
+    monkeypatch.setattr(derived, "_generate", fake_generate)
+    src = tmp_path / "v.mp4"
+    src.write_bytes(b"x")
+    derived.proxy(tmp_path / "cache", "v.mp4", src, "h265", hwaccel="none")
+    assert seen["semaphore"] is derived._PROXY_SEMAPHORE
+
+
+def test_light_generation_proceeds_while_proxy_tier_exhausted(tmp_path):
+    # With every heavy permit held (as during concurrent long transcodes),
+    # thumbnail generation must still complete — the viewer never hangs on it.
+    for _ in range(derived.PROXY_MAX_CONCURRENCY):
+        assert derived._PROXY_SEMAPHORE.acquire(timeout=1)
+    try:
+        src = tmp_path / "s.jpg"
+        Image.new("RGB", (64, 64), "red").save(src, "JPEG")
+        out = derived.thumbnail(tmp_path / "cache", "k.jpg", src)
+        assert out.exists()
+    finally:
+        for _ in range(derived.PROXY_MAX_CONCURRENCY):
+            derived._PROXY_SEMAPHORE.release()

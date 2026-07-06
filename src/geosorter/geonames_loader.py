@@ -78,17 +78,24 @@ def _to_int(value: str) -> int:
 def _parse_geonames_row(f: list[str]) -> tuple | None:
     """Map one GeoNames TSV field list to a ``geonames`` row tuple.
 
-    Returns ``None`` for short/malformed lines (the standard dump has 19 columns).
-    Shared by the cities and the feature loaders — both consume the same layout.
+    Returns ``None`` for short/malformed lines (the standard dump has 19 columns)
+    and for rows whose lat/lon fields aren't numeric — one corrupt line in a
+    ~12M-row dump must skip that row, never abort the whole bootstrap. Shared by
+    the cities and the feature loaders — both consume the same layout.
     """
     if len(f) < 18:
+        return None
+    try:
+        lat = float(f[4])
+        lon = float(f[5])
+    except (TypeError, ValueError):
         return None
     return (
         _to_int(f[0]),  # geonameid
         f[1],  # name
         f[2],  # ascii_name
-        float(f[4]),  # lat
-        float(f[5]),  # lon
+        lat,
+        lon,
         f[6] or None,  # feature_class
         f[7] or None,  # feature_code
         f[8] or None,  # country_code

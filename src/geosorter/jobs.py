@@ -38,9 +38,8 @@ from .warm import warm_library
 logger = logging.getLogger("geosorter.jobs")
 
 
-def _strip(dest_path: str) -> str:
-    """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 def _compute_eta(total_bytes: int, done_bytes: int, elapsed_s: float) -> float | None:
@@ -248,9 +247,19 @@ class JobManager:
 
         ``selected_primaries`` (None = import everything) is forwarded to
         :func:`run_organize` so the map UI can import a chosen subset of the inbox.
+
+        Raises :class:`WorkerBusy` if an undo/retag/assign/rescan is in flight:
+        without the guard an organize POSTed mid-undo silently queues and runs
+        (destructive, ``assume_yes=True``) the moment the worker frees up — e.g.
+        re-importing the very files that undo just restored to the inbox. A
+        second *organize* still queues behind the first (deliberate; the map
+        UI's Process-Inbox flow).
         """
         job_id = uuid.uuid4().hex
         with self._lock:
+            busy = self._active_destructive_job(include_organize=False)
+            if busy is not None:
+                raise WorkerBusy(busy)
             self._jobs[job_id] = JobState(job_id=job_id)
             self._cancels[job_id] = threading.Event()
         self._executor.submit(self._run, job_id, selected_primaries)
@@ -294,16 +303,22 @@ class JobManager:
         event.set()
         return True
 
-    def _active_destructive_job(self) -> str | None:
+    def _active_destructive_job(self, *, include_organize: bool = True) -> str | None:
         """Id of an in-flight (pending/running) organize/undo/retag/rescan job, else None.
 
         The four kinds share the single destructive worker, so at most one runs at a
         time and the rest would queue. Caller must hold ``self._lock``. The stitch pool
         is independent and deliberately excluded. ``_jobs`` (organize) is scanned first
-        so a long bulk import is reported as the blocker.
+        so a long bulk import is reported as the blocker. ``include_organize=False``
+        skips the organize table — used by :meth:`submit` itself, where a second
+        organize queuing behind the first is the documented behavior but queueing
+        behind a different destructive kind is not.
         """
-        for table in (self._jobs, self._undo_jobs, self._retag_jobs,
-                      self._assign_jobs, self._rescan_jobs):
+        tables = (self._undo_jobs, self._retag_jobs, self._assign_jobs,
+                  self._rescan_jobs)
+        if include_organize:
+            tables = (self._jobs, *tables)
+        for table in tables:
             for jid, st in table.items():
                 if st.state in ("pending", "running"):
                     return jid

@@ -29,7 +29,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import db, metadata, move_engine, organize
+from . import db, metadata, move_engine, organize, pathing
 
 _RECOVER_SUBDIR = "_recovered_collisions"
 _REPORT_NAME = "recovery-report.txt"
@@ -67,9 +67,8 @@ class RecoveryReport:
     report_path: str | None = None
 
 
-def _strip(dest_path: str) -> str:
-    r"""Drop the Windows ``\\?\`` long-path prefix (mirror :func:`organize._strip`)."""
-    return organize._strip(dest_path)
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 def find_collisions(index: sqlite3.Connection) -> list[Collision]:

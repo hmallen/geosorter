@@ -85,8 +85,9 @@ def is_first_run(conn) -> bool:
     return conn.execute("SELECT NOT EXISTS(SELECT 1 FROM moves)").fetchone()[0] == 1
 
 
-def _strip(dest_path: str) -> str:
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling lives in pathing (single implementation,
+# UNC-aware); the module-local name is kept for the many call sites below.
+_strip = pathing.strip_long_prefix
 
 
 def _quarantine_date(md, primary: Path) -> str:
@@ -107,7 +108,7 @@ def _companion_dest(primary_dest: str, primary_src: Path, companion_src: Path) -
     companions to unique names too (in both the organize and quarantine branches).
     The primary's ``\\?\`` long-path prefix, if any, is preserved.
     """
-    prefix = "\\\\?\\" if primary_dest.startswith("\\\\?\\") else ""
+    prefixed = primary_dest.startswith("\\\\?\\")
     final = _strip(primary_dest)
     folder = os.path.dirname(final)
     primary_stem = Path(final).stem
@@ -115,7 +116,9 @@ def _companion_dest(primary_dest: str, primary_src: Path, companion_src: Path) -
         extra = companion_src.stem[len(primary_src.stem):]
     else:
         extra = "_" + companion_src.stem
-    return prefix + os.path.join(folder, primary_stem + extra + companion_src.suffix)
+    dest = os.path.join(folder, primary_stem + extra + companion_src.suffix)
+    # Re-prefix via the UNC-aware helper (a bare "\\?\" + "\\server\..." is invalid).
+    return pathing.add_long_prefix(dest) if prefixed else dest
 
 
 def _frame_dest(primary_dest: str, primary_src: Path, frame_src: Path) -> str:
@@ -127,11 +130,12 @@ def _frame_dest(primary_dest: str, primary_src: Path, frame_src: Path) -> str:
     the primary's (possibly suffix-resolved) final stem. The primary's ``\\?\``
     long-path prefix, if any, is preserved. ``move_engine`` creates the subfolder.
     """
-    prefix = "\\\\?\\" if primary_dest.startswith("\\\\?\\") else ""
+    prefixed = primary_dest.startswith("\\\\?\\")
     final = _strip(primary_dest)
     folder = os.path.dirname(final)
     primary_stem = Path(final).stem
-    return prefix + os.path.join(folder, primary_stem + "_frames", frame_src.name)
+    dest = os.path.join(folder, primary_stem + "_frames", frame_src.name)
+    return pathing.add_long_prefix(dest) if prefixed else dest
 
 
 def _borrow_frame_gps(group, md, extractor):

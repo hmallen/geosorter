@@ -137,6 +137,9 @@ def test_connect_sets_pragmas(tmp_path):
         assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
         assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1  # NORMAL
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1  # ON
+        # A second concurrent writer must wait instead of failing immediately
+        # with "database is locked" (background jobs + request-path writes).
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == db.BUSY_TIMEOUT_MS
     finally:
         conn.close()
 

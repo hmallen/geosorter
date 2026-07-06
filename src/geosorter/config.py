@@ -25,7 +25,7 @@ APP_NAME = "geosorter"
 _STARTER_TEMPLATE = """\
 # geosorter configuration
 
-# Set these before running `geosorter organize` (added in a later task):
+# Set these before running `geosorter organize`:
 # inbox_path = 'D:\\drone\\inbox'
 # library_root = 'Z:\\DroneLibrary'
 
@@ -103,7 +103,7 @@ spatial_index = 'rtree'
 # Tier for HEVC proxies + panorama stitches (large, written-once). Defaults to
 # library_root; point it at an SSD-backed share to relocate. Absolute when set.
 # proxy_cache_dir = 'Z:\\DroneLibrary'
-# Local-tier eviction cap (GB); the sweep that honours it lands in a later task.
+# Local-tier eviction cap (GB), honoured by the post-organize warm pass's sweep.
 # cache_max_gb = 10.0
 
 # Pre-generate HEVC->H.264 playback proxies during the post-organize warm pass, so

@@ -50,9 +50,8 @@ class RestitchReport:
     errors: list[str] = field(default_factory=list)
 
 
-def _strip(dest_path: str) -> str:
-    r"""Drop the Windows ``\\?\`` long-path prefix if present."""
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 def run_restitch(

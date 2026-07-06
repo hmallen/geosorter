@@ -64,3 +64,61 @@ def test_tokenstore_issues_unique_tokens():
 def test_valid_none_token_false():
     store = auth.TokenStore()
     assert store.valid(None) is False
+
+
+# --- LoginThrottle ---------------------------------------------------------- #
+
+
+def _throttle(**kw):
+    """A LoginThrottle on a controllable fake clock; returns (throttle, tick)."""
+    now = {"t": 1000.0}
+    th = auth.LoginThrottle(clock=lambda: now["t"], **kw)
+
+    def tick(seconds: float) -> None:
+        now["t"] += seconds
+
+    return th, tick
+
+
+def test_throttle_allows_below_failure_cap():
+    th, _ = _throttle(max_failures=3, lockout_s=30.0)
+    th.record_failure("ip")
+    th.record_failure("ip")
+    assert th.retry_after("ip") == 0.0  # 2 < 3: still allowed
+
+
+def test_throttle_locks_out_at_cap_and_expires():
+    th, tick = _throttle(max_failures=3, lockout_s=30.0)
+    for _ in range(3):
+        th.record_failure("ip")
+    assert th.retry_after("ip") > 0.0
+    tick(31.0)
+    assert th.retry_after("ip") == 0.0  # lockout expired
+    # One more failure after expiry re-arms a FULL lockout immediately.
+    th.record_failure("ip")
+    assert th.retry_after("ip") > 0.0
+
+
+def test_throttle_success_clears_slate():
+    th, _ = _throttle(max_failures=3, lockout_s=30.0)
+    for _ in range(3):
+        th.record_failure("ip")
+    th.record_success("ip")
+    assert th.retry_after("ip") == 0.0
+
+
+def test_throttle_is_per_key():
+    th, _ = _throttle(max_failures=3, lockout_s=30.0)
+    for _ in range(3):
+        th.record_failure("attacker")
+    assert th.retry_after("attacker") > 0.0
+    assert th.retry_after("owner") == 0.0
+
+
+def test_throttle_prunes_expired_entries_at_capacity():
+    th, tick = _throttle(max_failures=1, lockout_s=10.0)
+    for i in range(th._MAX_ENTRIES):
+        th.record_failure(f"ip{i}")
+    tick(100.0)  # everything long expired
+    th.record_failure("fresh")  # triggers the prune at capacity
+    assert len(th._state) < th._MAX_ENTRIES

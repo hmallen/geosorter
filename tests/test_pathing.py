@@ -145,3 +145,62 @@ def test_library_rel_key_outside_root_uses_full_path_not_bare_name():
     assert key.endswith("DJI_0001.JPG")
     assert "/" in key  # not a bare filename
     assert key != "DJI_0001.JPG"
+
+
+def test_strip_long_prefix_drive_and_unc_forms():
+    # Drive-letter form: the 4-char prefix drops cleanly.
+    assert pathing.strip_long_prefix("\\\\?\\Z:\\Lib\\A\\f.JPG") == "Z:\\Lib\\A\\f.JPG"
+    # UNC form: \\?\UNC\server\share -> \\server\share (a naive 4-char strip
+    # would leave the broken "UNC\server\share").
+    assert (
+        pathing.strip_long_prefix("\\\\?\\UNC\\nas\\media\\Lib\\f.JPG")
+        == "\\\\nas\\media\\Lib\\f.JPG"
+    )
+    # Unprefixed paths pass through untouched.
+    assert pathing.strip_long_prefix("Z:\\Lib\\f.JPG") == "Z:\\Lib\\f.JPG"
+    assert pathing.strip_long_prefix("\\\\nas\\media\\f.JPG") == "\\\\nas\\media\\f.JPG"
+
+
+def test_add_long_prefix_drive_and_unc_forms():
+    assert pathing.add_long_prefix("Z:\\Lib\\f.JPG") == "\\\\?\\Z:\\Lib\\f.JPG"
+    # UNC paths need the \\?\UNC\ form — "\\?\" + "\\server\..." is rejected by Windows.
+    assert (
+        pathing.add_long_prefix("\\\\nas\\media\\Lib\\f.JPG")
+        == "\\\\?\\UNC\\nas\\media\\Lib\\f.JPG"
+    )
+    # Already-prefixed paths (either form) pass through unchanged.
+    assert pathing.add_long_prefix("\\\\?\\Z:\\f.JPG") == "\\\\?\\Z:\\f.JPG"
+    assert (
+        pathing.add_long_prefix("\\\\?\\UNC\\nas\\media\\f.JPG")
+        == "\\\\?\\UNC\\nas\\media\\f.JPG"
+    )
+
+
+def test_strip_add_round_trip():
+    for original in ("Z:\\Lib\\A\\f.JPG", "\\\\nas\\media\\Lib\\A\\f.JPG"):
+        assert pathing.strip_long_prefix(pathing.add_long_prefix(original)) == original
+
+
+def test_compute_dest_path_unc_library_root():
+    # A UNC library_root (documented in config) must produce the valid
+    # \\?\UNC\server\share\... long form, not the malformed \\?\\\server\...
+    geocode = GeocodeResult(
+        geonameid=1,
+        ascii_name="Boulder",
+        place_string="Boulder, Colorado, United States",
+        feature_class="P",
+        geocode_confidence="nearest_city",
+    )
+    local = LocalTime(
+        iana_zone="America/Denver",
+        capture_ts_utc="2024-04-12T20:30:05+00:00",
+        capture_ts_local="2024-04-12T14:30:05-06:00",
+        local_date="2024-04-12",
+        local_time_hms="14-30-05",
+        tz_ambiguous=False,
+    )
+    dest = pathing.compute_dest_path(
+        Path("\\\\nas\\media\\Library"), geocode, local, "DJI_0001", ".JPG"
+    )
+    assert dest.startswith("\\\\?\\UNC\\nas\\media\\Library")
+    assert pathing.strip_long_prefix(dest).startswith("\\\\nas\\media\\Library")

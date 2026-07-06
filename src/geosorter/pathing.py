@@ -75,9 +75,42 @@ def _place_folder(geocode: GeocodeResult) -> str:
     return f"{city}, {remainder}" if remainder else city
 
 
-def _strip_long_prefix(path: str) -> str:
-    r"""Drop the Windows ``\\?\`` long-path prefix if present."""
-    return path[4:] if path.startswith("\\\\?\\") else path
+_LONG_PREFIX = "\\\\?\\"
+_UNC_LONG_PREFIX = "\\\\?\\UNC\\"
+
+
+def strip_long_prefix(path: str) -> str:
+    r"""Drop the Windows long-path prefix, restoring the plain path form.
+
+    Handles both prefix shapes: ``\\?\C:\...`` → ``C:\...`` and
+    ``\\?\UNC\server\share\...`` → ``\\server\share\...`` (a UNC library root
+    is a documented configuration; the naive 4-char strip would leave a broken
+    ``UNC\server\...``). The single shared implementation for every module —
+    do not re-copy this locally.
+    """
+    if path[: len(_UNC_LONG_PREFIX)].upper() == _UNC_LONG_PREFIX:
+        return "\\\\" + path[len(_UNC_LONG_PREFIX):]
+    if path.startswith(_LONG_PREFIX):
+        return path[len(_LONG_PREFIX):]
+    return path
+
+
+def add_long_prefix(path: str) -> str:
+    r"""Prepend the correct Windows long-path prefix to an absolute path.
+
+    ``C:\...`` → ``\\?\C:\...``; a UNC path ``\\server\share\...`` needs the
+    ``\\?\UNC\server\share\...`` form (``\\?\\\server\...`` is rejected by
+    Windows). Already-prefixed paths pass through unchanged.
+    """
+    if path.startswith(_LONG_PREFIX):
+        return path
+    if path.startswith("\\\\"):
+        return _UNC_LONG_PREFIX + path[2:]
+    return _LONG_PREFIX + path
+
+
+# Backwards-compatible private alias for existing internal callers.
+_strip_long_prefix = strip_long_prefix
 
 
 def library_rel_key(library_root: str | Path, dest_path: str | Path) -> str:
@@ -121,4 +154,4 @@ def compute_dest_path(
     place_folder = _place_folder(geocode)
     filename = f"{local.local_date}_{local.local_time_hms}_{dji_orig}{ext}"
     joined = os.path.join(str(library_root), place_folder, local.local_date, filename)
-    return "\\\\?\\" + os.path.abspath(joined)
+    return add_long_prefix(os.path.abspath(joined))

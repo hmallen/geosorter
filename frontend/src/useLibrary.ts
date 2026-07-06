@@ -11,19 +11,29 @@ export function useLibrary() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const etagRef = useRef<string | null>(null)
+  // Monotonic reload counter: only the LATEST in-flight reload may commit its
+  // response, so overlapping reloads (organize onDone racing an earlier reload)
+  // can't resolve out of order and overwrite newer features with stale ones.
+  const seqRef = useRef(0)
 
   const reload = useCallback(() => {
+    const seq = ++seqRef.current
     setLoading(true)
     fetchLibrary(fetch, etagRef.current)
       .then((res) => {
+        if (seq !== seqRef.current) return // superseded by a newer reload
         // 304: keep the existing features (stale-while-revalidate); only replace
         // them when the server sent a fresh FeatureCollection.
         if (!res.notModified && res.fc) setFeatures(res.fc.features)
         etagRef.current = res.etag
         setError(null)
       })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false))
+      .catch((e) => {
+        if (seq === seqRef.current) setError(String(e))
+      })
+      .finally(() => {
+        if (seq === seqRef.current) setLoading(false)
+      })
   }, [])
 
   useEffect(() => reload(), [reload])

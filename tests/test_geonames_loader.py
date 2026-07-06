@@ -187,3 +187,21 @@ def test_features_covered_by_spatial_index(tmp_path):
     # cities (3) + allowlisted features (3); the rtree covers every row 1:1.
     assert n_rows == 6
     assert n_rtree == 6
+
+
+def test_parse_row_skips_malformed_coordinates():
+    # One corrupt lat/lon line in a ~12M-row dump must drop THAT row, never
+    # raise out of load() and abort the whole bootstrap.
+    from geosorter.geonames_loader import _parse_geonames_row
+
+    good = ["1", "Boulder", "Boulder", "", "40.01", "-105.27", "P", "PPL", "US",
+            "", "CO", "013", "", "", "108250", "", "1655", "America/Denver", ""]
+    assert _parse_geonames_row(good) is not None
+
+    bad_lat = list(good)
+    bad_lat[4] = "not-a-number"
+    assert _parse_geonames_row(bad_lat) is None
+
+    bad_lon = list(good)
+    bad_lon[5] = ""
+    assert _parse_geonames_row(bad_lon) is None

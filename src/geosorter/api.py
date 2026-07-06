@@ -19,10 +19,23 @@ Exposes the organized library over HTTP for the B7 frontend:
   on-disk state, pruning rows for files no longer in the library, as a background
   job (see :mod:`geosorter.rescan`). Shares the single-worker pool with
   organize/undo/retag; no cancel route (it is a fast index-only pass).
+* ``POST /api/assign-location`` (``{file_ids, lat, lon}``) / ``GET
+  /api/assign-location/status/{id}`` — bulk-file no-GPS captures to a picked
+  location (see :mod:`geosorter.setloc`). Shares the single destructive worker.
+* ``GET  /api/quarantine`` — the no-GPS (quarantined) captures list.
+* ``GET  /api/inbox/list`` — the inbox as a selectable capture-group tree.
+* ``GET  /api/place-search?q=`` — forward GeoNames search for assign-by-name.
+* ``POST /api/stitch/{id}`` / ``GET /api/stitch/status/{job}`` — panorama hero
+  stitch on its own worker pool; ``GET /api/stitch/{id}`` serves the hero and
+  ``GET /api/collage/{id}`` the instant raw-tile collage.
+* ``GET  /api/frames/{id}`` — a hyperlapse/panorama's source-frame list.
+* ``GET  /api/auth`` / ``POST /api/login`` / ``POST /api/logout`` — admin-auth
+  probe + bearer-token session management (throttled on failed logins).
 * ``GET  /api/media/{relpath}`` — original file, range-capable (video seek),
-  path-traversal-guarded.
-* ``GET  /api/thumb/{relpath}`` / ``GET /api/poster/{relpath}`` — lazily generated,
-  cached derived images (see :mod:`geosorter.derived`).
+  path-traversal-guarded (cache internals excluded).
+* ``GET  /api/thumb/{relpath}`` / ``GET /api/poster/{relpath}`` /
+  ``GET /api/preview/{relpath}`` — lazily generated, cached derived images
+  (see :mod:`geosorter.derived`).
 * ``GET  /api/video/{relpath}`` — a browser-playable video: H.264 originals served
   directly, HEVC served as a cached H.264 proxy.
 
@@ -43,6 +56,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import math
 import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict
@@ -187,9 +201,8 @@ def _bearer(authorization: str | None) -> str | None:
     return token.strip()
 
 
-def _strip(dest_path: str) -> str:
-    """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 def _etag_matches(if_none_match: str, etag: str) -> bool:
@@ -269,6 +282,10 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     # the live bearer tokens issued by /api/login (in-memory; reset on restart).
     tokens = auth.TokenStore()
     auth_configured = bool(cfg.admin_password_hash)
+    # Failed-login throttle: after a burst of consecutive wrong passwords from one
+    # address, /api/login answers 429 for a cooldown instead of letting an online
+    # brute-force run at PBKDF2 speed.
+    login_throttle = auth.LoginThrottle()
 
     def require_admin(authorization: str | None = Header(default=None)) -> None:
         """FastAPI dependency: 401 unless a valid admin token is presented.
@@ -305,6 +322,14 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         # by design (B11), so this is belt-and-suspenders against any .db under it.
         if candidate.suffix.lower() == ".db":
             raise HTTPException(status_code=403, detail="forbidden type")
+        # Never serve derived-cache internals (proxies, .src sidecars, stitch
+        # heroes) through the original-media routes: with proxy_cache_dir ==
+        # library_root (the default) the cache tree lives under the library and
+        # would otherwise be reachable. NTFS is case-insensitive, so compare
+        # case-folded parts.
+        cache_dirname = derived.CACHE_DIRNAME.lower()
+        if any(part.lower() == cache_dirname for part in candidate.parts):
+            raise HTTPException(status_code=403, detail="path inside cache")
         if not candidate.is_file():
             raise HTTPException(status_code=404, detail="not found")
         return candidate
@@ -497,12 +522,22 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         return {"auth_required": auth_configured}
 
     @app.post("/api/login")
-    def login(req: LoginRequest) -> dict:
-        """Exchange the admin password for a bearer token."""
+    def login(req: LoginRequest, request: Request) -> dict:
+        """Exchange the admin password for a bearer token (429 while throttled)."""
         if not auth_configured:
             raise HTTPException(status_code=400, detail="admin auth not configured")
+        client_key = request.client.host if request.client else "unknown"
+        wait = login_throttle.retry_after(client_key)
+        if wait > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="too many failed login attempts; try again later",
+                headers={"Retry-After": str(math.ceil(wait))},
+            )
         if not auth.verify_password(req.password, cfg.admin_password_hash):
+            login_throttle.record_failure(client_key)
             raise HTTPException(status_code=401, detail="invalid password")
+        login_throttle.record_success(client_key)
         return {"token": tokens.issue()}
 
     @app.post("/api/logout")
@@ -514,7 +549,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     @app.post("/api/organize", dependencies=[Depends(require_admin)])
     def organize_start(req: OrganizeRequest = OrganizeRequest()) -> dict:
         selected = set(req.primaries) if req.primaries is not None else None
-        return {"job_id": jobs.submit(selected_primaries=selected)}
+        return _submit_or_409(lambda: jobs.submit(selected_primaries=selected))
 
     @app.get("/api/organize/status/{job_id}")
     def organize_status(job_id: str) -> dict:
@@ -703,7 +738,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             row = conn.execute(
                 "SELECT codec FROM files WHERE media_type='video' "
                 "AND dest_path IN (?, ?)",
-                (candidate, "\\\\?\\" + candidate),
+                (candidate, pathing.add_long_prefix(candidate)),
             ).fetchone()
         finally:
             conn.close()

@@ -33,6 +33,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import pathing
+
 
 def sha256_file(
     path: str | Path, *, chunk: int = 1 << 20, on_bytes: Callable[[int], None] | None = None
@@ -82,13 +84,11 @@ class MoveOutcome:
     error: str | None = None
 
 
-def _strip_prefix(dest_path: str) -> str:
-    r"""Drop the Windows ``\\?\`` long-path prefix for ``os.path`` string work.
-
-    The os/shutil calls accept the prefixed form directly, but ``os.path``
-    manipulation is clearer without it; the prefixed string is what we store.
-    """
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Drop the Windows long-path prefix for ``os.path`` string work. The os/shutil
+# calls accept the prefixed form directly, but ``os.path`` manipulation is
+# clearer without it; the prefixed string is what we store. Shared UNC-aware
+# implementation lives in pathing.
+_strip_prefix = pathing.strip_long_prefix
 
 
 def is_already_moved(conn: sqlite3.Connection, source_path: str | Path) -> bool:
