@@ -70,10 +70,14 @@ from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
-from . import auth, config, db, derived, geocoder, inbox, pathing
+from . import auth, config, db, derived, geocoder, inbox, pathing, srt_parser
 from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
+
+# Ceiling on /api/track points: an SRT has one fix per frame (30-60/s — tens of
+# thousands for a long clip); a map polyline reads the same at a few hundred.
+_TRACK_MAX_POINTS = 500
 
 
 def _safe_cache_path(path: Path, *roots: Path) -> Path:
@@ -367,11 +371,11 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchone()
             max_id, count, max_created = (ver[0] or 0), ver[1], ver[2]
-            # The `lib2-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
-            # `properties` shape changes (here: `capture_ts_local` was added) so a client
+            # The `lib3-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
+            # `properties` shape changes (v3: `has_track` was added) so a client
             # holding a `no-cache`-revalidated response from the previous build gets a
             # one-time 200 with the new field instead of a 304 serving the old body.
-            etag = f'W/"lib2-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}"'
+            etag = f'W/"lib3-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}"'
             inm = request.headers.get("if-none-match")
             if inm is not None and _etag_matches(inm, etag):
                 return Response(
@@ -389,6 +393,15 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "stitch_projection, dest_path, lat, lon "
                 "FROM files WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
+            # Videos with an SRT telemetry sidecar have a drawable flight track
+            # (GET /api/track/{id}); the UI shows its button only when this is set.
+            srt_ids = {
+                r["primary_file_id"]
+                for r in conn.execute(
+                    "SELECT DISTINCT primary_file_id FROM file_companions "
+                    "WHERE companion_type='srt'"
+                )
+            }
         finally:
             conn.close()
         features = [
@@ -409,6 +422,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                     "star_rating": r["star_rating"],
                     "stitch_status": r["stitch_status"],
                     "stitch_projection": r["stitch_projection"],
+                    "has_track": r["media_type"] == "video" and r["id"] in srt_ids,
                     "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
@@ -456,6 +470,39 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         finally:
             conn.close()
         return {"frames": [_relpath(r["dest_path"], url_root, library_root) for r in rows]}
+
+    @app.get("/api/track/{file_id}")
+    def track(file_id: int) -> dict:
+        """A video's GPS flight track, parsed from its SRT telemetry sidecar.
+
+        Returns ``{"points": [[lon, lat], ...]}`` in GeoJSON coordinate order,
+        evenly downsampled to at most ``_TRACK_MAX_POINTS`` (an SRT carries one
+        fix per frame — tens of thousands for a long clip; a map polyline needs
+        far fewer). ``points`` is empty when the file has no SRT companion or
+        the sidecar holds no valid fixes — the UI treats that as "no track",
+        not an error. 404 only for an unknown file id.
+        """
+        conn = _index()
+        try:
+            if conn.execute(
+                "SELECT 1 FROM files WHERE id=?", (file_id,)
+            ).fetchone() is None:
+                raise HTTPException(status_code=404, detail="unknown file")
+            row = conn.execute(
+                "SELECT dest_path FROM file_companions "
+                "WHERE primary_file_id=? AND companion_type='srt' LIMIT 1",
+                (file_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return {"points": []}
+        fixes = srt_parser.parse_srt_track(_strip(row["dest_path"]))
+        if len(fixes) > _TRACK_MAX_POINTS:
+            # Even stride, but always keep the final fix (the landing point).
+            step = len(fixes) / _TRACK_MAX_POINTS
+            fixes = [fixes[int(i * step)] for i in range(_TRACK_MAX_POINTS - 1)] + [fixes[-1]]
+        return {"points": [[lon, lat] for lat, lon in fixes]}
 
     @app.get("/api/inbox")
     def inbox_count() -> dict:

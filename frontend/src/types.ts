@@ -19,6 +19,10 @@ export interface FeatureProps {
   // 'equirectangular' -> 360 PanoSphere viewer; 'flat' -> flat zoomable image; null on a
   // legacy hero stitched before this feature (treated as equirectangular by default).
   stitch_projection: 'equirectangular' | 'flat' | null
+  // True for a video with an SRT telemetry sidecar — its GPS flight track is
+  // drawable via GET /api/track/{id}. Optional: absent on quarantine previews
+  // and payloads predating the field.
+  has_track?: boolean
   path: string // library-relative POSIX path used to build media URLs
 }
 

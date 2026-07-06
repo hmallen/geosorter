@@ -112,3 +112,41 @@ def parse_srt(path: str | Path) -> SrtResult:
     if saw_gps_tokens:
         return SrtResult(None, None, "srt_partial", None, None, len(cues))
     return SrtResult(None, None, "none", None, None, len(cues))
+
+
+def parse_srt_track(path: str | Path) -> list[tuple[float, float]]:
+    """Return every valid GPS fix in cue order — the video's flight track.
+
+    Each element is ``(lat, lon)``. Invalid and pre-lock null-island frames are
+    skipped (a track legitimately starts mid-file once GPS locks). The probe
+    family is pinned by the first cue that matches one, so a pathological file
+    mixing both formats cannot interleave transposed fixes. Missing/unreadable
+    file or no valid fixes -> ``[]`` (never an exception), mirroring
+    :func:`parse_srt`'s opportunistic contract.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    cues = [c for c in re.split(r"\r?\n[ \t]*\r?\n", text) if c.strip()]
+    track: list[tuple[float, float]] = []
+    pinned: re.Pattern[str] | None = None
+    for cue in cues:
+        if pinned is not None:
+            match = pinned.search(cue)
+        else:
+            match = None
+            for _, probe in _PROBES:
+                match = probe.search(cue)
+                if match is not None:
+                    pinned = probe
+                    break
+        if match is None:
+            continue
+        lat = float(match.group("lat"))
+        lon = float(match.group("lon"))
+        if _valid(lat, lon):
+            track.append((lat, lon))
+    return track

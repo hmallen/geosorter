@@ -54,6 +54,20 @@ export async function fetchFrames(
   return ((await resp.json()) as { frames: string[] }).frames
 }
 
+// Flight track: a video's GPS path parsed from its SRT telemetry sidecar,
+// as [lon, lat] pairs (GeoJSON order), downsampled server-side. Empty when the
+// video has no sidecar or the sidecar holds no valid fixes.
+export const trackUrl = (id: number): string => `/api/track/${id}`
+
+export async function fetchTrack(
+  id: number,
+  fetchFn: typeof fetch = fetch,
+): Promise<[number, number][]> {
+  const resp = await fetchFn(trackUrl(id))
+  if (!resp.ok) throw new Error(`track fetch failed: ${resp.status}`)
+  return ((await resp.json()) as { points: [number, number][] }).points
+}
+
 // Panorama stitched hero (B13): the cached 360 equirectangular for a panorama
 // primary. 404 until generated (the lightbox falls back to the tile gallery).
 export const stitchUrl = (id: number): string => `/api/stitch/${id}`
