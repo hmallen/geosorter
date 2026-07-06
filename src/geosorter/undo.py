@@ -28,7 +28,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import db, move_engine
+from . import db, move_engine, pathing
 
 
 @dataclass
@@ -44,9 +44,8 @@ class UndoReport:
     nothing_to_undo: bool = False
 
 
-def _strip(dest_path: str) -> str:
-    r"""Drop the Windows ``\\?\`` long-path prefix if present."""
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 def latest_batch_id(index) -> str | None:

@@ -743,6 +743,18 @@ def test_media_db_extension_blocked(client_and_lib):
     assert resp.status_code == 403
 
 
+def test_media_cache_internals_blocked(client_and_lib):
+    # With proxy_cache_dir == library_root (the default) the derived cache lives
+    # under the library; /api/media must never serve its payload (proxies, .src
+    # sidecars, stitch heroes) — including via a case-shifted dirname (NTFS).
+    client, library = client_and_lib
+    proxies = library / ".geosorter-cache" / "proxies"
+    proxies.mkdir(parents=True)
+    (proxies / "k.mp4").write_bytes(b"proxy-bytes")
+    assert client.get("/api/media/.geosorter-cache/proxies/k.mp4").status_code == 403
+    assert client.get("/api/media/.GEOSORTER-CACHE/proxies/k.mp4").status_code == 403
+
+
 def test_media_range_request_returns_206(client_and_lib):
     client, library = client_and_lib
     (library / "clip.bin").write_bytes(b"0123456789")
@@ -1002,9 +1014,17 @@ def test_undo_retag_rescan_return_409_while_organize_running(tmp_path):
 
 def test_cancel_routes_are_partitioned_by_job_kind(client_and_lib):
     # A cancel route must not accept the other kind's job id (job ids never migrate
-    # between the organize and undo tables, so this is timing-independent).
+    # between the organize and undo tables).
     client, _ = client_and_lib
     undo_id = client.post("/api/undo").json()["job_id"]
+    # Wait for the undo to settle: organize-submit now 409s while another
+    # destructive kind is in flight (the cross-kind WorkerBusy guard).
+    for _ in range(300):
+        if client.get(f"/api/undo/status/{undo_id}").json()["state"] not in (
+            "pending", "running",
+        ):
+            break
+        time.sleep(0.02)
     org_id = client.post("/api/organize").json()["job_id"]
     assert client.post(f"/api/organize/cancel/{undo_id}").status_code == 404
     assert client.post(f"/api/undo/cancel/{org_id}").status_code == 404
@@ -1126,6 +1146,19 @@ def test_login_ok_returns_token(tmp_path):
 def test_login_when_not_configured_400(client_and_lib):
     client, _ = client_and_lib
     assert client.post("/api/login", json={"password": "x"}).status_code == 400
+
+
+def test_login_throttled_after_repeated_failures(tmp_path):
+    # A burst of wrong passwords flips /api/login from 401 to 429 (with a
+    # Retry-After hint), and the throttle also blocks the CORRECT password
+    # until the cooldown passes — online brute-force can't run at full speed.
+    client = _password_client(tmp_path)
+    for _ in range(5):
+        assert client.post("/api/login", json={"password": "nope"}).status_code == 401
+    resp = client.post("/api/login", json={"password": "nope"})
+    assert resp.status_code == 429
+    assert int(resp.headers["Retry-After"]) >= 1
+    assert client.post("/api/login", json={"password": "s3cret"}).status_code == 429
 
 
 def test_guarded_route_401_without_token(tmp_path):

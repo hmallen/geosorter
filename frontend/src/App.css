@@ -219,6 +219,20 @@
   font-size: 14px;
 }
 
+/* Failure variant: dark chip with danger text/border (the green banner is the
+   in-progress voice; red-on-surface reads clearly on any basemap). */
+.placement-banner--error {
+  background: var(--surface);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.placement-banner--error button {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: none;
+}
+
 .placement-banner button {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;

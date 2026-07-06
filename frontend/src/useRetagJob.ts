@@ -34,5 +34,11 @@ export function useRetagJob(onDone?: () => void) {
     }
   }
 
-  return { retag, retagging, placing: targetId !== null, beginRetag, cancelRetag, pickLocation }
+  // Lets the caller dismiss a surfaced failure banner.
+  const clearRetag = (): void => setRetag(null)
+
+  return {
+    retag, retagging, placing: targetId !== null,
+    beginRetag, cancelRetag, pickLocation, clearRetag,
+  }
 }

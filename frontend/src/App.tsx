@@ -118,8 +118,16 @@ export default function App() {
     reloadQuarantine()
   }
 
-  const { retagging, placing: retagPlacing, beginRetag, cancelRetag, pickLocation: retagPick } =
-    useRetagJob(handleChanged)
+  const {
+    retag, retagging, placing: retagPlacing,
+    beginRetag, cancelRetag, pickLocation: retagPick, clearRetag,
+  } = useRetagJob(handleChanged)
+  // A re-tag that failed (job error, or a terminal report that isn't 'retagged')
+  // must not vanish silently when the "Re-filing…" banner unmounts.
+  const retagFailed =
+    !retagging &&
+    retag !== null &&
+    (retag.state === 'error' || (retag.state === 'done' && retag.status !== 'retagged'))
   // Bulk assign-location for no-GPS captures: placement mode (a map click sets the
   // location for the selected captures) coexists with re-tag placement.
   const {
@@ -188,6 +196,12 @@ export default function App() {
         </div>
       )}
       {retagging && <div className="placement-banner">Re-filing…</div>}
+      {retagFailed && (
+        <div className="placement-banner placement-banner--error" role="alert">
+          Re-tag failed{retag.error ? ` — ${retag.error}` : retag.status === 'not_found' ? ' — capture not found' : ''}
+          <button onClick={clearRetag}>Dismiss</button>
+        </div>
+      )}
       {/* Initial-load status: without it a failed/slow /api/library read is
           indistinguishable from an empty library (blank world map). Shown only
           before the first successful load — reloads revalidate silently. */}

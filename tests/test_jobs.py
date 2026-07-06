@@ -263,9 +263,9 @@ def test_destructive_submits_raise_workerbusy_during_organize():
     _wait(mgr, org_id)  # drain so the worker is free for other tests
 
 
-def test_organize_submit_not_blocked_by_active_job():
-    # Organize-submit is deliberately NOT guarded (the map UI's Process-Inbox flow):
-    # a second organize queues behind the first rather than 409-ing.
+def test_organize_submit_not_blocked_by_active_organize():
+    # Organize-behind-ORGANIZE is deliberately unguarded (the map UI's Process-Inbox
+    # flow): a second organize queues behind the first rather than 409-ing.
     block = threading.Event()
 
     def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
@@ -280,6 +280,28 @@ def test_organize_submit_not_blocked_by_active_job():
     block.set()
     _wait(mgr, first)
     _wait(mgr, second)
+
+
+def test_organize_submit_raises_workerbusy_during_other_destructive_job():
+    # Organize-behind-a-DIFFERENT destructive kind must 409: an organize queued
+    # behind an undo would re-import (assume_yes=True) the very files the undo
+    # just restored to the inbox, without the user re-confirming.
+    block = threading.Event()
+
+    def slow_undo(cfg, *, batch_id, cancel, progress):
+        block.wait(2.0)
+        return UndoReport()
+
+    mgr = JobManager(None, undo_fn=slow_undo,
+                     organize_fn=lambda *a, **k: BatchReport(batch_id="x"))
+    undo_id = mgr.submit_undo()
+    try:
+        with pytest.raises(WorkerBusy) as ei:
+            mgr.submit()
+        assert ei.value.blocking_job_id == undo_id
+    finally:
+        block.set()
+    _wait_undo(mgr, undo_id)  # drain so the worker is free for other tests
 
 
 def test_undo_nothing_to_undo_maps_to_done():

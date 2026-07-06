@@ -44,10 +44,17 @@ PREVIEW_MAX = 1920
 CACHE_DIRNAME = ".geosorter-cache"
 # Cap on concurrent Pillow/ffmpeg generation (m-derived-at-scale): a cold-browse
 # storm over a 5-20k-file library would otherwise launch one generation per request
-# and saturate CPU/SSD. The semaphore is process-wide (single-process uvicorn, per
-# the brainstorm) and gates ONLY regeneration — a fresh cache hit never acquires it.
+# and saturate CPU/SSD. The semaphores are process-wide (single-process uvicorn, per
+# the brainstorm) and gate ONLY regeneration — a fresh cache hit never acquires one.
+#
+# Two tiers: the LIGHT tier (thumbs/previews/posters/collage — sub-second each)
+# and the HEAVY tier (HEVC->H.264 proxy transcodes, up to FFMPEG_TIMEOUT_S each).
+# Separate permits, or a handful of 30-minute transcodes would hold every light
+# permit and starve all thumbnail generation — the whole viewer looks hung.
 DERIVED_MAX_CONCURRENCY = 4
+PROXY_MAX_CONCURRENCY = 2
 _GEN_SEMAPHORE = threading.BoundedSemaphore(DERIVED_MAX_CONCURRENCY)
+_PROXY_SEMAPHORE = threading.BoundedSemaphore(PROXY_MAX_CONCURRENCY)
 # Local-tier kinds the eviction sweep manages (thumbs/previews/posters/collage live
 # on the local SSD cache_dir); proxies/stitch (proxy_cache_dir) are NEVER auto-evicted.
 # The panorama collage joins the local tier: it is small, shown on every panorama
@@ -336,15 +343,20 @@ def _atomic_write(out: Path, produce: Callable[[Path], None]) -> None:
         raise
 
 
-def _generate(out: Path, source: Path, produce: Callable[[Path], None]) -> None:
-    """Produce ``out`` under the shared generation cap, then pin its mtime to source.
+def _generate(
+    out: Path, source: Path, produce: Callable[[Path], None],
+    *, semaphore: threading.BoundedSemaphore | None = None,
+) -> None:
+    """Produce ``out`` under a generation cap, then pin its mtime to source.
 
-    Acquires :data:`_GEN_SEMAPHORE` (capping concurrent Pillow/ffmpeg work) and
-    re-checks freshness *under* the permit, so a request that lost the race to a
-    just-finished generator returns the fresh file instead of redoing the work. The
-    cache-hit fast path in the callers never reaches here, so a hit stays lock-free.
+    Acquires ``semaphore`` (default :data:`_GEN_SEMAPHORE`, the light Pillow/ffmpeg
+    tier; :func:`proxy` passes :data:`_PROXY_SEMAPHORE` so long transcodes never
+    hold light permits) and re-checks freshness *under* the permit, so a request
+    that lost the race to a just-finished generator returns the fresh file instead
+    of redoing the work. The cache-hit fast path in the callers never reaches
+    here, so a hit stays lock-free.
     """
-    with _GEN_SEMAPHORE:
+    with semaphore or _GEN_SEMAPHORE:
         if _is_fresh(out, source):
             return
         _atomic_write(out, produce)
@@ -546,7 +558,8 @@ def proxy(cache_root: Path | str, rel_key: str, source: Path | str, codec: str |
         _run_ffmpeg(_proxy_cmd(source, dest, nvenc=False, verbose=verbose),
                     verbose=verbose)
 
-    _generate(out, source, _produce)
+    # Heavy tier: a multi-minute transcode must never occupy a light permit.
+    _generate(out, source, _produce, semaphore=_PROXY_SEMAPHORE)
     return out
 
 

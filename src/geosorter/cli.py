@@ -1,12 +1,29 @@
-"""geosorter command-line interface (Phase 0a foundations).
+"""geosorter command-line interface.
 
-Verbs implemented in this task (B1):
+Setup / reference data:
 
-* ``init-config`` — write a starter ``geosorter.toml``.
-* ``bootstrap``   — load GeoNames reference data into the geonames DB.
-* ``version``     — print the package version.
+* ``init-config``         — write a starter ``geosorter.toml``.
+* ``set-admin-password``  — hash + store the web UI's admin password.
+* ``bootstrap``           — load GeoNames reference data into the geonames DB.
+* ``version``             — print the package version.
 
-Later tasks add ``organize`` / ``verify-library`` etc.
+Library pipeline:
+
+* ``organize``            — file the inbox into the library (the main pass).
+* ``undo``                — reverse an organize batch back into the inbox.
+* ``rescan``              — reconcile the index with on-disk state.
+* ``verify-library``      — read-only index-vs-disk consistency check.
+* ``diagnose-inbox``      — dry analysis of what organize would do.
+* ``recover-collisions``  — repair legacy collision-overwrite damage.
+* ``restitch``            — regenerate panorama heroes (projection-aware).
+* ``warm-proxies``        — pre-generate thumbnails/posters/HEVC proxies.
+* ``clear-derived-cache`` — wipe the derived-asset cache tiers.
+
+Serving / diagnostics:
+
+* ``serve``               — run the FastAPI map UI (loopback by default).
+* ``extract-test`` / ``geocode-test`` / ``stitch-bench`` / ``proxy-bench``
+                          — one-off inspection and benchmarking helpers.
 """
 
 from __future__ import annotations
@@ -753,9 +770,8 @@ def serve(config_path: str | None, host: str | None, port: int) -> None:
     uvicorn.run(api.create_app(cfg), host=bind, port=port)
 
 
-def _strip(dest_path: str) -> str:
-    """Drop the Windows ``\\\\?\\`` long-path prefix if present."""
-    return dest_path[4:] if dest_path.startswith("\\\\?\\") else dest_path
+# Shared long-path prefix handling (single UNC-aware implementation).
+_strip = pathing.strip_long_prefix
 
 
 @cli.command(name="stitch-bench")

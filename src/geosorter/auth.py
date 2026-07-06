@@ -23,6 +23,7 @@ import hashlib
 import hmac
 import secrets
 import threading
+import time
 
 _ALGORITHM = "pbkdf2_sha256"
 _DEFAULT_ITERATIONS = 200_000
@@ -68,6 +69,57 @@ def verify_password(password: str, stored: str) -> bool:
     except (ValueError, AttributeError, OverflowError):
         return False
     return hmac.compare_digest(actual, expected)
+
+
+class LoginThrottle:
+    """Per-client consecutive-failed-login throttle (in-memory).
+
+    After ``max_failures`` consecutive failures from one client key (the request's
+    remote address), further attempts are refused for ``lockout_s`` seconds — a
+    cheap guard against online brute-force (the PBKDF2 cost is the deeper
+    defence). A successful login clears the client's slate; each failure after an
+    expired lockout re-arms a full lockout. In-memory only, like
+    :class:`TokenStore` (reset on restart is fine for a single-owner LAN tool).
+    """
+
+    _MAX_ENTRIES = 1024  # memory bound; beyond it, expired entries are pruned
+
+    def __init__(self, *, max_failures: int = 5, lockout_s: float = 30.0,
+                 clock=time.monotonic) -> None:
+        self._max_failures = max_failures
+        self._lockout_s = lockout_s
+        self._clock = clock
+        self._state: dict[str, tuple[int, float]] = {}  # key -> (failures, last_ts)
+        self._lock = threading.Lock()
+
+    def retry_after(self, key: str) -> float:
+        """Seconds ``key`` must still wait, or ``0.0`` when attempts are allowed."""
+        with self._lock:
+            entry = self._state.get(key)
+            if entry is None:
+                return 0.0
+            failures, last = entry
+            if failures < self._max_failures:
+                return 0.0
+            return max(0.0, self._lockout_s - (self._clock() - last))
+
+    def record_failure(self, key: str) -> None:
+        """Count one failed attempt for ``key`` (arms the lockout at the cap)."""
+        now = self._clock()
+        with self._lock:
+            if len(self._state) >= self._MAX_ENTRIES:
+                # Prune entries whose lockout has long expired (2x window).
+                cutoff = now - 2 * self._lockout_s
+                self._state = {
+                    k: v for k, v in self._state.items() if v[1] > cutoff
+                }
+            failures, _ = self._state.get(key, (0, 0.0))
+            self._state[key] = (failures + 1, now)
+
+    def record_success(self, key: str) -> None:
+        """Clear ``key``'s failure slate after a successful login."""
+        with self._lock:
+            self._state.pop(key, None)
 
 
 class TokenStore:
