@@ -1,5 +1,5 @@
 // Typed helpers for the B6 HTTP API: media-URL builders + the library fetch.
-import type { LibraryFC, PlaceResult, QuarantineItem } from './types'
+import type { DuplicateItem, LibraryFC, PlaceResult, QuarantineItem } from './types'
 import type { InboxGroup } from './inboxTree'
 
 // Encode each path segment but preserve the separators, so a library-relative
@@ -104,6 +104,70 @@ export async function fetchQuarantine(
   const resp = await fetchFn('/api/quarantine')
   if (!resp.ok) throw new Error(`quarantine fetch failed: ${resp.status}`)
   return ((await resp.json()) as { features: QuarantineItem[] }).features
+}
+
+// Duplicate-review backlog: inbox captures skipped as duplicates while
+// relocate_duplicates is off (public read, mirrors fetchQuarantine).
+export async function fetchDuplicates(
+  fetchFn: typeof fetch = fetch,
+): Promise<DuplicateItem[]> {
+  const resp = await fetchFn('/api/duplicates')
+  if (!resp.ok) throw new Error(`duplicates fetch failed: ${resp.status}`)
+  return ((await resp.json()) as { items: DuplicateItem[] }).items
+}
+
+// Result of POST /api/duplicates/dismiss: rows moved to _duplicates/ and deleted.
+// Unknown ids are skipped silently (counted), per-row move errors come back in
+// failures so the panel can surface them.
+export interface DismissResult {
+  dismissed: number
+  skipped: number
+  failures: { id: number; error: string }[]
+}
+
+// Dismiss duplicate rows (admin-guarded: thread authFetch). Synchronous on the
+// server (renames are cheap — no job to poll). 409 while a destructive job runs;
+// the thrown Error carries the server's explanation when the body provides one
+// (FastAPI `detail` — either a bare string or `{message, ...}`), so the panel's
+// error line reads "a destructive job is already running" instead of just "409".
+export async function dismissDuplicates(
+  fetchFn: typeof fetch,
+  ids: number[],
+): Promise<DismissResult> {
+  const resp = await fetchFn('/api/duplicates/dismiss', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+  if (!resp.ok) {
+    let detail: string | null = null
+    try {
+      const body = (await resp.json()) as { detail?: string | { message?: unknown } }
+      const d = body?.detail
+      if (typeof d === 'string') detail = d
+      else if (d && typeof d.message === 'string') detail = d.message
+    } catch {
+      // no JSON body (or none at all) — fall back to the status-only message
+    }
+    throw new Error(`duplicates dismiss failed: ${resp.status}${detail ? ` — ${detail}` : ''}`)
+  }
+  return (await resp.json()) as DismissResult
+}
+
+// Toggle a capture's favorite flag (admin-guarded: thread authFetch). Idempotent
+// server-side (keyed by content hash, so it survives undo/re-import).
+export async function setFavorite(
+  fetchFn: typeof fetch,
+  id: number,
+  favorite: boolean,
+): Promise<{ file_id: number; favorite: boolean }> {
+  const resp = await fetchFn('/api/favorite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_id: id, favorite }),
+  })
+  if (!resp.ok) throw new Error(`favorite update failed: ${resp.status}`)
+  return (await resp.json()) as { file_id: number; favorite: boolean }
 }
 
 // Offline forward place-name search: resolve a place/feature name to ranked

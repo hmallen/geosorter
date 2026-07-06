@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import MapView from './components/MapView'
 import FileListPanel from './components/FileListPanel'
 import Lightbox from './components/Lightbox'
@@ -6,13 +6,21 @@ import Toolbar from './components/Toolbar'
 import QuarantinePanel from './components/QuarantinePanel'
 import LocationPanel from './components/LocationPanel'
 import StitchPanel from './components/StitchPanel'
+import DuplicatesPanel from './components/DuplicatesPanel'
+import TimelineScrubber from './components/TimelineScrubber'
 import { buildPlaces } from './locationFilter'
-import { fetchTrack } from './api'
+import { dismissDuplicates, fetchTrack } from './api'
 import { trackBBox } from './flightTrack'
+import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
+import { effectiveFavorite, filterFavorites } from './favorites'
+import { parseHash, type UrlState, type UrlView } from './urlState'
 import { useLibrary } from './useLibrary'
+import { useUrlState } from './useUrlState'
+import { useFavorites } from './useFavorites'
 import { useRetagJob } from './useRetagJob'
 import { useAssignLocation } from './useAssignLocation'
 import { useQuarantine } from './useQuarantine'
+import { useDuplicates } from './useDuplicates'
 import { useStitch } from './useStitch'
 import { useStitchAll } from './useStitchAll'
 import { useAuthContext } from './useAuth'
@@ -55,8 +63,13 @@ export default function App() {
   // Admin gate (m-implement-view-only-admin-auth): isAdmin is true when no password
   // is configured (open app) or the user has logged in. The management controls below
   // are passed down only when isAdmin, so a view-only viewer never sees them.
-  const { isAdmin } = useAuthContext()
+  const { isAdmin, authFetch } = useAuthContext()
   const { features, reload, loading: libraryLoading, error: libraryError } = useLibrary()
+  // Shareable URL state (feature 2): the load-time hash, parsed ONCE (lazy
+  // initializer) here in App because its fields seed the filter states below;
+  // view/place/cap are applied by useUrlState's restore-once effect after the
+  // first library load.
+  const [initialUrl] = useState<UrlState>(() => parseHash(window.location.hash))
   // Current map viewport bounds, lifted from MapView (null until the map's first
   // onLoad). The side panel always lists the captures inside these bounds.
   const [bounds, setBounds] = useState<BBox | null>(null)
@@ -72,7 +85,31 @@ export default function App() {
   // 360 stitch (the toolbar shows only the count).
   const [showStitch, setShowStitch] = useState(false)
   const [flyTo, setFlyTo] = useState<{ bbox: BBox; nonce: number } | null>(null)
+  // Fit the camera to a bbox; `nonce` makes each request a distinct value so
+  // re-flying to the same bbox re-fires MapView's fitBounds. Stable identity
+  // (useCallback) — useUrlState's restore effect depends on it.
+  const flyToBBox = useCallback(
+    (bbox: BBox) => setFlyTo((p) => ({ bbox, nonce: (p?.nonce ?? 0) + 1 })),
+    [],
+  )
   const places = useMemo(() => buildPlaces(features), [features])
+  // Duplicate-review panel + timeline scrubber visibility (toolbar toggles).
+  const [showDuplicates, setShowDuplicates] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
+  // App-level view filters (feature 3+4): unlike the panel-local media chips,
+  // these apply to BOTH the map and the file list, and are encoded in the hash.
+  const [dateRange, setDateRange] = useState<DateRange | null>(
+    initialUrl.from && initialUrl.to ? { from: initialUrl.from, to: initialUrl.to } : null,
+  )
+  const [favoritesOnly, setFavoritesOnly] = useState(initialUrl.fav === true)
+  // Optimistic favorite overrides + the heart toggle (see useFavorites).
+  const { favOverrides, toggleFavorite } = useFavorites(authFetch, features)
+  // URL-hash breadcrumb: the last place picked in the Locations panel. Never
+  // cleared by map gestures — `map=` always wins for camera restore anyway.
+  const [pickedPlace, setPickedPlace] = useState<string | null>(initialUrl.place ?? null)
+  // The settled camera (moveend cadence), mirrored into the hash. Seeded from
+  // the hash so the pre-first-move rewrites don't drop a shared `map=`.
+  const [mapView, setMapView] = useState<UrlView | null>(initialUrl.view ?? null)
   // Flight-track overlay: a video's GPS path (from its SRT sidecar) drawn on the
   // map. Empty points = "no track found" (parse failure or a fix-less sidecar),
   // surfaced in the chip rather than silently doing nothing.
@@ -92,7 +129,7 @@ export default function App() {
     }
     setTrack({ filename: f.properties.filename, points })
     const bbox = trackBBox(points)
-    if (bbox) setFlyTo((p) => ({ bbox, nonce: (p?.nonce ?? 0) + 1 }))
+    if (bbox) flyToBBox(bbox)
   }
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
   // progress survives the lightbox closing/reopening; reload on success so the hero
@@ -103,13 +140,21 @@ export default function App() {
   // the library on completion so finished panoramas drop out of the target set.
   const stitchAll = useStitchAll(reload)
 
+  // The app-level filter pipeline (spec §3): favorites first, then the date
+  // range. `visible` feeds BOTH the map and the viewport-filtered panel, so the
+  // two surfaces always agree; the media chips stay panel-local as before.
+  const visible = useMemo(() => {
+    const base = favoritesOnly ? filterFavorites(features, favOverrides) : features
+    return filterByDateRange(base, dateRange)
+  }, [features, favoritesOnly, favOverrides, dateRange])
+
   // Panel contents: every capture inside the current map viewport. A pure in-memory
   // filter over the already-loaded features — no /api refetch on pan/zoom. Memoized
   // so an unrelated re-render keeps a stable `files` identity for the virtualized
   // grid, and so a pan that doesn't move the settled bounds doesn't re-filter.
   const panelFiles = useMemo(
-    () => (bounds ? featuresInBounds(features, bounds) : []),
-    [features, bounds],
+    () => (bounds ? featuresInBounds(visible, bounds) : []),
+    [visible, bounds],
   )
 
   // Clicking a single map marker opens that capture in the lightbox against the
@@ -132,9 +177,16 @@ export default function App() {
     useQuarantine()
   const [showNoGps, setShowNoGps] = useState(false)
 
+  // Duplicate-review backlog: the count badges the toolbar button and the list
+  // feeds the Duplicates panel. Refreshed by handleChanged (an organize records
+  // new rows; an undo can make a former duplicate importable again).
+  const { items: duplicateItems, count: duplicatesCount, reload: reloadDuplicates } =
+    useDuplicates()
+
   // After a re-organize / re-tag / assign, close any open lightbox before reloading so
   // it can't keep rendering now-moved files (stale paths → broken media); also refresh
-  // the no-GPS list (an assign removes items; an organize may add some).
+  // the no-GPS list (an assign removes items; an organize may add some) and the
+  // duplicate backlog (an organize records rows; a dismiss/undo drains them).
   function handleChanged() {
     setLightbox(null)
     // Files may have moved/left the library; a drawn track could now belong to
@@ -142,6 +194,7 @@ export default function App() {
     setTrack(null)
     reload()
     reloadQuarantine()
+    reloadDuplicates()
   }
 
   const {
@@ -190,6 +243,48 @@ export default function App() {
     [panoramaTargetFeatures],
   )
 
+  // --- Shareable URL state + lightbox favorite ------------------------------
+
+  const lightboxFile = lightbox ? lightbox.files[lightbox.index] : null
+  // The open capture's LIVE library feature — undefined for quarantine previews
+  // (client-built features), stitch-panel snapshots of moved files, etc. Drives
+  // both the heart's state (the lightbox `files` are a snapshot whose
+  // is_favorite goes stale after a reload) and whether the heart is offered at
+  // all: favoriting a capture that never resurfaces in any payload (e.g. a
+  // quarantined one) would persist server-side as a phantom.
+  const lightboxLive = useMemo(
+    () =>
+      lightboxFile
+        ? features.find((f) => f.properties.id === lightboxFile.properties.id)
+        : undefined,
+    [lightboxFile, features],
+  )
+  // Effective favorite state for the heart: the live feature's server truth with
+  // any optimistic override winning on top.
+  const lightboxIsFavorite = useMemo(() => {
+    if (!lightboxFile) return false
+    return effectiveFavorite((lightboxLive ?? lightboxFile).properties, favOverrides)
+  }, [lightboxFile, lightboxLive, favOverrides])
+
+  // Solo lightbox for useUrlState's cap= restore: a shared link points at ONE
+  // capture, not a viewport list. Stable identity — the restore effect depends on it.
+  const openCapture = useCallback((f: LibraryFeature) => setLightbox({ files: [f], index: 0 }), [])
+
+  // Restore-once of the load-time hash's place/cap + the debounced hash rewrite.
+  useUrlState({
+    initialUrl,
+    features,
+    libraryLoading,
+    places,
+    mapView,
+    pickedPlace,
+    lightboxFileId: lightboxFile?.properties.id,
+    dateRange,
+    favoritesOnly,
+    onFlyTo: flyToBBox,
+    onOpenCapture: openCapture,
+  })
+
   return (
     <div className="app">
       <Toolbar
@@ -200,26 +295,53 @@ export default function App() {
         noGpsCount={quarantineCount}
         onOpenLocations={() => setShowLocations((v) => !v)}
         onOpenStitch={() => setShowStitch((v) => !v)}
+        onOpenDuplicates={() => setShowDuplicates((v) => !v)}
+        duplicatesCount={duplicatesCount}
+        onToggleTimeline={() => setShowTimeline((v) => !v)}
+        timelineOn={showTimeline}
+        onToggleFavorites={() => setFavoritesOnly((v) => !v)}
+        favoritesOn={favoritesOnly}
       />
       <MapView
-        features={features}
+        features={visible}
         onMarkerClick={placing ? undefined : openInLightbox}
         onMapClick={onMapClick}
         onBoundsChange={setBounds}
         flyTo={flyTo ?? undefined}
         track={track?.points}
+        initialView={initialUrl.view}
+        onViewChange={setMapView}
       />
-      {track && (
-        <div className="track-chip">
-          {track.points.length >= 2 ? (
-            <>
-              <span className="track-swatch" aria-hidden="true" />
-              Flight path — {track.filename}
-            </>
-          ) : (
-            <>No flight track found for {track.filename}</>
+      {/* Under-toolbar chip slot: the flight-track chip plus the active-filter
+          chips (date range, favorites) share one horizontal row so they can
+          coexist without stacking on top of each other. */}
+      {(track || dateRange || favoritesOnly) && (
+        <div className="chips-row">
+          {track && (
+            <div className="track-chip">
+              {track.points.length >= 2 ? (
+                <>
+                  <span className="track-swatch" aria-hidden="true" />
+                  Flight path — {track.filename}
+                </>
+              ) : (
+                <>No flight track found for {track.filename}</>
+              )}
+              <button onClick={() => setTrack(null)}>Clear</button>
+            </div>
           )}
-          <button onClick={() => setTrack(null)}>Clear</button>
+          {dateRange && (
+            <div className="filter-chip">
+              {formatRangeLabel(dateRange)}
+              <button onClick={() => setDateRange(null)}>Clear</button>
+            </div>
+          )}
+          {favoritesOnly && (
+            <div className="filter-chip">
+              ♥ Showing favorites
+              <button onClick={() => setFavoritesOnly(false)}>Clear</button>
+            </div>
+          )}
         </div>
       )}
       {retagPlacing && (
@@ -294,11 +416,33 @@ export default function App() {
         <LocationPanel
           places={places}
           onClose={() => setShowLocations(false)}
-          onPick={(bbox) => {
-            setFlyTo((p) => ({ bbox, nonce: (p?.nonce ?? 0) + 1 }))
+          onPick={(bbox, place) => {
+            setPickedPlace(place) // URL-hash breadcrumb (feature 2)
+            flyToBBox(bbox)
             setShowLocations(false)
           }}
         />
+      )}
+      {showDuplicates && (
+        <DuplicatesPanel
+          items={duplicateItems}
+          onClose={() => setShowDuplicates(false)}
+          onDismiss={async (ids) => {
+            const res = await dismissDuplicates(authFetch, ids)
+            // Dismissal moved inbox files: refresh the backlog (via the shared
+            // changed path, which also revalidates the library cheaply).
+            handleChanged()
+            if (res.failures.length > 0) {
+              throw new Error(
+                `${res.failures.length} of ${ids.length} could not be dismissed — ` +
+                  res.failures[0].error,
+              )
+            }
+          }}
+        />
+      )}
+      {showTimeline && (
+        <TimelineScrubber features={features} range={dateRange} onRange={setDateRange} />
       )}
       {showStitch && (
         <StitchPanel
@@ -342,6 +486,11 @@ export default function App() {
           stitchByFile={stitchByFile}
           onStartStitch={isAdmin ? startStitch : undefined}
           onShowTrack={showTrack}
+          isFavorite={lightboxIsFavorite}
+          // Heart only for captures that live in the organized library: a
+          // quarantine preview / stale snapshot would persist a favorite the UI
+          // could never resurface (see lightboxLive above).
+          onToggleFavorite={isAdmin && lightboxLive ? toggleFavorite : undefined}
         />
       )}
     </div>

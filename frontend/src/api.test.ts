@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch, fetchDuplicates, dismissDuplicates, setFavorite } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -136,6 +136,104 @@ describe('placeSearch', () => {
   it('throws on a non-OK response', async () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(placeSearch('Moab', fetchFn)).rejects.toThrow(/place search failed: 500/)
+  })
+})
+
+describe('fetchDuplicates', () => {
+  it('returns the parsed duplicate items', async () => {
+    const item = {
+      id: 3, filename: 'DJI_0001.MP4', source_path: 'card1/DJI_0001.MP4',
+      matched_path: 'Moab, Utah/2024-07-04/DJI_0001.MP4', matched_file_id: 12,
+      sha256: 'abc', first_seen_at: '2026-07-01 10:00:00', missing: false,
+    }
+    const fetchFn = (async () => ({
+      ok: true, status: 200, json: async () => ({ items: [item], count: 1 }),
+    })) as unknown as typeof fetch
+    expect(await fetchDuplicates(fetchFn)).toEqual([item])
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
+    await expect(fetchDuplicates(fetchFn)).rejects.toThrow(/duplicates fetch failed: 500/)
+  })
+})
+
+describe('dismissDuplicates', () => {
+  it('POSTs the ids and returns the parsed result', async () => {
+    let calledUrl: string | undefined
+    let sentInit: RequestInit | undefined
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      calledUrl = url
+      sentInit = init
+      return {
+        ok: true, status: 200,
+        json: async () => ({ dismissed: 2, skipped: 0, failures: [] }),
+      } as Response
+    }) as unknown as typeof fetch
+    expect(await dismissDuplicates(fetchFn, [3, 4])).toEqual({
+      dismissed: 2, skipped: 0, failures: [],
+    })
+    expect(calledUrl).toBe('/api/duplicates/dismiss')
+    expect(sentInit?.method).toBe('POST')
+    expect(JSON.parse(sentInit?.body as string)).toEqual({ ids: [3, 4] })
+  })
+
+  it('throws on a non-OK response (e.g. 409 while a job runs)', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 409 }) as Response) as unknown as typeof fetch
+    await expect(dismissDuplicates(fetchFn, [1])).rejects.toThrow(/duplicates dismiss failed: 409/)
+  })
+
+  it('surfaces the server detail.message on an error response', async () => {
+    const fetchFn = (async () => ({
+      ok: false, status: 409,
+      json: async () => ({
+        detail: { message: 'a destructive job is already running', blocking_job_id: 3 },
+      }),
+    })) as unknown as typeof fetch
+    await expect(dismissDuplicates(fetchFn, [1])).rejects.toThrow(
+      'duplicates dismiss failed: 409 — a destructive job is already running',
+    )
+  })
+
+  it('surfaces a bare-string detail', async () => {
+    const fetchFn = (async () => ({
+      ok: false, status: 400, json: async () => ({ detail: 'no inbox configured' }),
+    })) as unknown as typeof fetch
+    await expect(dismissDuplicates(fetchFn, [1])).rejects.toThrow(
+      'duplicates dismiss failed: 400 — no inbox configured',
+    )
+  })
+
+  it('falls back to the status-only message when the error body is not JSON', async () => {
+    const fetchFn = (async () => ({
+      ok: false, status: 502, json: async () => { throw new Error('not json') },
+    })) as unknown as typeof fetch
+    await expect(dismissDuplicates(fetchFn, [1])).rejects.toThrow(
+      'duplicates dismiss failed: 502',
+    )
+  })
+})
+
+describe('setFavorite', () => {
+  it('POSTs the file id + desired state and returns the echo', async () => {
+    let calledUrl: string | undefined
+    let sentInit: RequestInit | undefined
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      calledUrl = url
+      sentInit = init
+      return {
+        ok: true, status: 200, json: async () => ({ file_id: 7, favorite: true }),
+      } as Response
+    }) as unknown as typeof fetch
+    expect(await setFavorite(fetchFn, 7, true)).toEqual({ file_id: 7, favorite: true })
+    expect(calledUrl).toBe('/api/favorite')
+    expect(sentInit?.method).toBe('POST')
+    expect(JSON.parse(sentInit?.body as string)).toEqual({ file_id: 7, favorite: true })
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 404 }) as Response) as unknown as typeof fetch
+    await expect(setFavorite(fetchFn, 999, false)).rejects.toThrow(/favorite update failed: 404/)
   })
 })
 

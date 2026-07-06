@@ -25,6 +25,13 @@ interface Props {
   // Flight-track overlay: offered for a video with an SRT sidecar (has_track).
   // App closes the lightbox and draws the path on the map.
   onShowTrack?: (f: LibraryFeature) => void
+  // Video favorites: the CURRENT file's effective favorite state, computed in App
+  // (effectiveFavorite over the live features + optimistic overrides — this
+  // component stays dumb; its `files` are a stale snapshot).
+  isFavorite?: boolean
+  // Admin-gated heart toggle (like re-tag): undefined hides the control. Only
+  // offered on videos per the feature request; `next` is the desired state.
+  onToggleFavorite?: (id: number, next: boolean) => void
 }
 
 export default function Lightbox({
@@ -35,6 +42,8 @@ export default function Lightbox({
   stitchByFile,
   onStartStitch,
   onShowTrack,
+  isFavorite,
+  onToggleFavorite,
 }: Props) {
   const f = files[index]
   // Source-frame gallery: a hyperlapse render's frames (B10) or a panorama's tiles
@@ -246,14 +255,28 @@ export default function Lightbox({
           </div>
         )}
 
-        {onShowTrack && f.properties.media_type === 'video' && f.properties.has_track && (
-          <button
-            className="frames-toggle"
-            onClick={() => onShowTrack(f)}
-            title="Close the viewer and draw this flight's GPS path on the map"
-          >
-            ✈ Show flight path on map
-          </button>
+        {f.properties.media_type === 'video' && (onToggleFavorite || (onShowTrack && f.properties.has_track)) && (
+          <div className="lightbox-actions">
+            {onToggleFavorite && (
+              <button
+                className={`frames-toggle fav-toggle${isFavorite ? ' fav-toggle--on' : ''}`}
+                onClick={() => onToggleFavorite(f.properties.id, !isFavorite)}
+                aria-pressed={!!isFavorite}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {isFavorite ? '♥ Favorited' : '♡ Favorite'}
+              </button>
+            )}
+            {onShowTrack && f.properties.has_track && (
+              <button
+                className="frames-toggle"
+                onClick={() => onShowTrack(f)}
+                title="Close the viewer and draw this flight's GPS path on the map"
+              >
+                ✈ Show flight path on map
+              </button>
+            )}
+          </div>
         )}
 
         {isFrameGallery && (

@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from geosorter import api, db, derived, pathing
+from geosorter import api, db, derived, duplicates, pathing
 from geosorter.config import Config
 from geosorter.jobs import JobManager
 from geosorter.organize import BatchReport
@@ -34,14 +34,14 @@ def _probe_codec(path: Path) -> str:
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
           gps_source="exif", capture_kind=None, frame_count=None, star_rating=None,
           stitch_status=None, stitch_projection=None,
-          capture_ts_local="2024-07-04T13:05:00-06:00"):
+          capture_ts_local="2024-07-04T13:05:00-06:00", sha256="deadbeef"):
     cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
         "local_date, capture_ts_local, lat, lon, codec, gps_source, sha256, status, "
         "capture_kind, frame_count, star_rating, stitch_status, stitch_projection) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
-         "2024-07-04", capture_ts_local, lat, lon, codec, gps_source, "deadbeef",
+         "2024-07-04", capture_ts_local, lat, lon, codec, gps_source, sha256,
          status, capture_kind, frame_count, star_rating, stitch_status,
          stitch_projection),
     )
@@ -504,6 +504,196 @@ def test_library_has_track_false_without_srt(tmp_path):
     fc = client.get("/api/library").json()
     feat = next(f for f in fc["features"] if f["properties"]["filename"] == "v.MP4")
     assert feat["properties"]["has_track"] is False
+
+
+# --- Duplicate review (GET /api/duplicates, POST /api/duplicates/dismiss) ---
+
+
+def _duplicates_client(tmp_path):
+    """A client with one on-disk pending duplicate and one whose source is gone."""
+    library = tmp_path / "library"
+    library.mkdir()
+    inbox = tmp_path / "inbox"
+    present = inbox / "card" / "DJI_0002.JPG"
+    present.parent.mkdir(parents=True)
+    present.write_bytes(b"dup-bytes")
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+        cache_dir=tmp_path / "cache",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    fid = _seed(conn, dest_path=str(library / "A" / "a.JPG"), filename="a.JPG",
+                media_type="photo", status="organized", lat=40.0, lon=-105.0)
+    duplicates.record(conn, source_path=str(present), sha256="deadbeef",
+                      companion_paths=[], matched_file_id=fid,
+                      matched_dest_path=str(library / "A" / "a.JPG"), batch_id="B1")
+    duplicates.record(conn, source_path=str(inbox / "gone.JPG"), sha256="feedface",
+                      companion_paths=[], matched_file_id=None,
+                      matched_dest_path=None, batch_id=None)
+    conn.commit()
+    conn.close()
+    return TestClient(api.create_app(cfg)), inbox, fid
+
+
+def test_duplicates_list_shape(tmp_path):
+    client, _inbox, fid = _duplicates_client(tmp_path)
+    body = client.get("/api/duplicates").json()
+    assert body["count"] == 2
+    first, second = body["items"]
+    assert first["filename"] == "DJI_0002.JPG"
+    assert first["source_path"] == "card/DJI_0002.JPG"  # inbox-relative POSIX
+    assert first["matched_path"] == "A/a.JPG"  # library-relative, like media URLs
+    assert first["matched_file_id"] == fid
+    assert first["sha256"] == "deadbeef"
+    assert first["first_seen_at"]
+    assert first["missing"] is False
+    assert second["missing"] is True  # source gone from disk
+    assert second["matched_path"] is None
+
+
+def test_duplicates_dismiss_moves_files(tmp_path):
+    client, inbox, _fid = _duplicates_client(tmp_path)
+    ids = [i["id"] for i in client.get("/api/duplicates").json()["items"]]
+    resp = client.post("/api/duplicates/dismiss", json={"ids": ids})
+    assert resp.status_code == 200
+    assert resp.json() == {"dismissed": 2, "skipped": 0, "failures": []}
+    # The on-disk duplicate really moved (subpath preserved); the missing one
+    # was drained by row deletion alone.
+    assert (inbox / "_duplicates" / "card" / "DJI_0002.JPG").exists()
+    assert not (inbox / "card" / "DJI_0002.JPG").exists()
+    assert client.get("/api/duplicates").json()["count"] == 0
+    # An unknown id is skipped, not an error; an empty list is a 422 client bug.
+    assert client.post("/api/duplicates/dismiss", json={"ids": [999]}).json() == {
+        "dismissed": 0, "skipped": 1, "failures": [],
+    }
+    assert client.post("/api/duplicates/dismiss", json={"ids": []}).status_code == 422
+
+
+def test_duplicates_dismiss_409_while_organize_running(tmp_path):
+    # Moving inbox files under a live organize is racy: the dismiss route answers
+    # 409 + the blocking job id (same shape as the destructive-job submits).
+    library = tmp_path / "library"
+    library.mkdir()
+    cfg = Config(
+        inbox_path=tmp_path / "inbox",
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    block = threading.Event()
+
+    def slow_organize(cfg, *, assume_yes, cancel, progress, byte_progress,
+                      selected_primaries=None, on_plan=None, invalidate=None):
+        block.wait(3.0)
+        return BatchReport(batch_id="x")
+
+    jm = JobManager(cfg, organize_fn=slow_organize)
+    client = TestClient(api.create_app(cfg, job_manager=jm))
+    try:
+        org_id = client.post("/api/organize").json()["job_id"]
+        resp = client.post("/api/duplicates/dismiss", json={"ids": [1]})
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["blocking_job_id"] == org_id
+    finally:
+        block.set()
+
+
+def test_duplicates_dismiss_409_without_inbox(tmp_path):
+    # No inbox_path configured -> a clean 409 (same detail shape as the busy 409,
+    # null blocking_job_id), not a 500 from Path(None).
+    library = tmp_path / "library"
+    library.mkdir()
+    cfg = Config(
+        inbox_path=None,
+        library_root=library,
+        index_db_path=tmp_path / "index.db",
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+        cache_dir=tmp_path / "cache",
+    )
+    client = TestClient(api.create_app(cfg))
+    resp = client.post("/api/duplicates/dismiss", json={"ids": [1]})
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["message"] == "no inbox_path configured; cannot relocate duplicates"
+    assert detail["blocking_job_id"] is None
+
+
+# --- Favorites (POST /api/favorite, /api/library is_favorite) ---
+
+
+def _first_feature(client):
+    return client.get("/api/library").json()["features"][0]["properties"]
+
+
+def test_favorite_toggle_lifecycle(tmp_path):
+    client, _index_db, _library = _library_client(tmp_path)
+    props = _first_feature(client)
+    fid = props["id"]
+    assert props["is_favorite"] is False
+    resp = client.post("/api/favorite", json={"file_id": fid, "favorite": True})
+    assert resp.status_code == 200
+    assert resp.json() == {"file_id": fid, "favorite": True}
+    assert _first_feature(client)["is_favorite"] is True
+    # Idempotent: favoriting an already-favorited file is a clean no-op.
+    assert client.post(
+        "/api/favorite", json={"file_id": fid, "favorite": True}
+    ).status_code == 200
+    assert _first_feature(client)["is_favorite"] is True
+    resp = client.post("/api/favorite", json={"file_id": fid, "favorite": False})
+    assert resp.json() == {"file_id": fid, "favorite": False}
+    assert _first_feature(client)["is_favorite"] is False
+
+
+def test_favorite_unknown_file_404(tmp_path):
+    client, _index_db, _library = _library_client(tmp_path)
+    resp = client.post("/api/favorite", json={"file_id": 999999, "favorite": True})
+    assert resp.status_code == 404
+
+
+def test_library_etag_flips_on_favorite_toggle(tmp_path):
+    # A favorite toggle changes no files row (it is a favorites row), so the ETag
+    # must fold in the favorites signal or the reload would wrongly 304.
+    client, _index_db, _library = _library_client(tmp_path)
+    first = client.get("/api/library")
+    etag1 = first.headers["etag"]
+    assert etag1.startswith('W/"lib4-')  # payload-schema token (v4: is_favorite)
+    fid = first.json()["features"][0]["properties"]["id"]
+    client.post("/api/favorite", json={"file_id": fid, "favorite": True})
+    changed = client.get("/api/library", headers={"If-None-Match": etag1})
+    assert changed.status_code == 200  # favorite toggle is NOT a 304
+    assert changed.headers["etag"] != etag1
+    assert changed.json()["features"][0]["properties"]["is_favorite"] is True
+
+
+def test_library_etag_ignores_favorite_outside_payload(tmp_path):
+    # The favorites fold ranges over the exact payload predicate (organized +
+    # GPS): favoriting a quarantined file leaves the payload byte-identical, so
+    # the ETag must NOT flip (a flip would bust every client's cache for
+    # nothing) — while favoriting a payload file still must.
+    client, index_db, library = _library_client(tmp_path)
+    conn = db.connect(index_db, integrity_check=False)
+    qid = _seed(conn, dest_path=str(library / "_no-gps" / "q.JPG"), filename="q.JPG",
+                media_type="photo", status="quarantined", lat=None, lon=None,
+                sha256="quarantined-sha")
+    conn.commit()
+    conn.close()
+    etag1 = client.get("/api/library").headers["etag"]
+    client.post("/api/favorite", json={"file_id": qid, "favorite": True})
+    same = client.get("/api/library", headers={"If-None-Match": etag1})
+    assert same.status_code == 304  # quarantined favorite is invisible to the map
+    fid = client.get("/api/library").json()["features"][0]["properties"]["id"]
+    client.post("/api/favorite", json={"file_id": fid, "favorite": True})
+    changed = client.get("/api/library", headers={"If-None-Match": etag1})
+    assert changed.status_code == 200  # payload favorite still flips the ETag
+    assert changed.headers["etag"] != etag1
 
 
 def _panorama_client(tmp_path):
@@ -1276,30 +1466,34 @@ def test_guarded_route_open_when_no_password(client_and_lib):
 
 
 # Every mutating route is guarded (the require_admin dependency runs before body
-# validation, so even body-required routes 401 cleanly without a token).
+# validation, so even body-required routes 401 cleanly without a token). Each
+# entry pairs the route with a valid JSON body (None = no body) so the
+# open-without-password probe exercises the real handler, not just a 422.
 _MUTATING_ROUTES = [
-    "/api/organize",
-    "/api/organize/cancel/x",
-    "/api/undo",
-    "/api/undo/cancel/x",
-    "/api/retag",
-    "/api/assign-location",
-    "/api/rescan",
-    "/api/stitch/1",
+    ("/api/organize", None),
+    ("/api/organize/cancel/x", None),
+    ("/api/undo", None),
+    ("/api/undo/cancel/x", None),
+    ("/api/retag", None),
+    ("/api/assign-location", None),
+    ("/api/rescan", None),
+    ("/api/stitch/1", None),
+    ("/api/duplicates/dismiss", {"ids": [1]}),
+    ("/api/favorite", {"file_id": 1, "favorite": True}),
 ]
 
 
-@pytest.mark.parametrize("route", _MUTATING_ROUTES)
-def test_all_mutating_routes_guarded(tmp_path, route):
+@pytest.mark.parametrize("route,body", _MUTATING_ROUTES)
+def test_all_mutating_routes_guarded(tmp_path, route, body):
     client = _password_client(tmp_path)
-    assert client.post(route).status_code == 401
+    assert client.post(route, json=body).status_code == 401
 
 
-@pytest.mark.parametrize("route", _MUTATING_ROUTES)
-def test_all_mutating_routes_open_without_password(client_and_lib, route):
+@pytest.mark.parametrize("route,body", _MUTATING_ROUTES)
+def test_all_mutating_routes_open_without_password(client_and_lib, route, body):
     # With no password configured, none of them 401 (the guard is a no-op).
     client, _ = client_and_lib
-    assert client.post(route).status_code != 401
+    assert client.post(route, json=body).status_code != 401
 
 
 # --- Corrupt / unrenderable media -> graceful response (m-fix-corrupt-media-graceful) ---

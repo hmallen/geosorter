@@ -9,8 +9,9 @@ import type { LibraryFeature } from './types'
 // OUTSIDE that range when the map renders repeated world copies (panning east/west
 // past the antimeridian), e.g. west=190 east=210. Feature coordinates are always
 // normalized, so the bounds must be normalized too — otherwise the raw comparison
-// would match nothing in every world copy but the primary one.
-function normalizeLon(lon: number): number {
+// would match nothing in every world copy but the primary one. Exported: urlState's
+// formatHash reuses it to keep a world-copy camera longitude hash-parseable.
+export function normalizeLon(lon: number): number {
   return ((((lon + 180) % 360) + 360) % 360) - 180
 }
 

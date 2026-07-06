@@ -5,8 +5,9 @@ import type { BBox } from '../clusters'
 interface Props {
   places: Place[]
   onClose: () => void
-  // Move the map to fit this place's captures (its bounding box).
-  onPick: (bbox: BBox) => void
+  // Move the map to fit this place's captures (its bounding box). The name rides
+  // along so App can record the picked place as the URL-hash breadcrumb.
+  onPick: (bbox: BBox, place: string) => void
 }
 
 // A text filter over every distinct place in the library. Typing narrows the list;
@@ -42,7 +43,7 @@ export default function LocationPanel({ places, onClose, onPick }: Props) {
                 <li key={p.place_string}>
                   <button
                     className="location-row"
-                    onClick={() => onPick(p.bbox)}
+                    onClick={() => onPick(p.bbox, p.place_string)}
                     title={`Fly to ${p.place_string}`}
                   >
                     <span className="location-name">{p.place_string}</span>

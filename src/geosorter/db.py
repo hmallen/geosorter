@@ -4,7 +4,8 @@ Two databases, both kept on local disk (never inside a possibly-NAS
 ``library_root``):
 
 * **index DB** — ``files``, ``file_companions``, ``moves``, ``geocode_cache``,
-  ``codec_stats`` (the operational index + crash-safe move log).
+  ``codec_stats``, ``duplicates``, ``favorites`` (the operational index +
+  crash-safe move log + duplicate-review backlog + content-hash favorites).
 * **geonames DB** — ``geonames`` (+ optional ``geonames_rtree``),
   ``admin1_codes``, ``admin2_codes``, ``country_info`` (static reference data).
 
@@ -17,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 4  # v3->v4: files.stitch_projection (m-fix-panorama-projection-autodetect)
+SCHEMA_VERSION = 5  # v4->v5: duplicates + favorites tables (new tables only, no ALTERs)
 
 _INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -98,6 +99,22 @@ CREATE TABLE IF NOT EXISTS codec_stats (
     h265_count    INTEGER NOT NULL DEFAULT 0,
     unknown_count INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS duplicates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_path TEXT NOT NULL UNIQUE,      -- absolute inbox path of the primary
+    sha256 TEXT NOT NULL,
+    companion_paths TEXT NOT NULL DEFAULT '[]',  -- JSON array of absolute paths
+    matched_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+    matched_dest_path TEXT,                -- snapshot for display if the row dies
+    batch_id TEXT,
+    first_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS favorites (
+    sha256 TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS schema_version (

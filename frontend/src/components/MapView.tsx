@@ -31,6 +31,13 @@ interface Props {
   // Flight-track overlay: a video's GPS path as [lon, lat] points (App owns the
   // fetch + the dismiss chip). Rendered as a teal line under the markers.
   track?: [number, number][] | null
+  // Shareable-URL camera restore: seeds the INITIAL view state only (read once
+  // on mount); later prop changes are deliberately ignored — the camera is
+  // driven by gestures/flyTo after that.
+  initialView?: { longitude: number; latitude: number; zoom: number }
+  // Report the settled camera (same moveend/onLoad cadence as onBoundsChange)
+  // so App can mirror it into the URL hash.
+  onViewChange?: (v: { longitude: number; latitude: number; zoom: number }) => void
 }
 
 export default function MapView({
@@ -40,13 +47,19 @@ export default function MapView({
   onBoundsChange,
   flyTo,
   track,
+  initialView,
+  onViewChange,
 }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const mapRef = useRef<MapLibreMap | null>(null)
   // The loaded map as STATE (not just a ref) so the moveend-listener effect
   // below re-runs when the map instance appears.
   const [mapObj, setMapObj] = useState<MapLibreMap | null>(null)
-  const [view, setView] = useState({ longitude: -98, latitude: 39, zoom: 3 })
+  // Camera state, seeded from a shared URL's `map=` hash when present (the
+  // initializer runs once — later initialView changes are ignored by design).
+  const [view, setView] = useState(
+    initialView ?? { longitude: -98, latitude: 39, zoom: 3 },
+  )
   const [bbox, setBbox] = useState<BBox>(WORLD)
   const [satellite, setSatellite] = useState(false)
   const [heatmap, setHeatmap] = useState(false)
@@ -58,7 +71,12 @@ export default function MapView({
     const next: BBox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
     setBbox(next)
     onBoundsChange?.(next)
-  }, [onBoundsChange])
+    // Same settled cadence for the URL-hash camera mirror: read the CAMERA off
+    // the map (not the controlled `view` state, which react-map-gl may not have
+    // round-tripped yet for programmatic moves like fitBounds).
+    const c = map.getCenter()
+    onViewChange?.({ longitude: c.lng, latitude: c.lat, zoom: map.getZoom() })
+  }, [onBoundsChange, onViewChange])
 
   // Subscribe to maplibre's `moveend` DIRECTLY on the map, not via react-map-gl's
   // `onMoveEnd` prop. In controlled mode react-map-gl suppresses its own camera
