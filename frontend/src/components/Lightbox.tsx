@@ -135,12 +135,32 @@ export default function Lightbox({
     }
   }, [showFrames, frames, fileId])
 
+  // Keyboard operation: Escape closes, arrow keys page prev/next. Skipped while a
+  // form control has focus (the projection <select> uses the arrow keys itself).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft') onIndex((index - 1 + files.length) % files.length)
+      else if (e.key === 'ArrowRight') onIndex((index + 1) % files.length)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [index, files.length, onIndex, onClose])
+
   if (!f) return null
   const prev = () => onIndex((index - 1 + files.length) % files.length)
   const next = () => onIndex((index + 1) % files.length)
 
   return (
-    <div className="lightbox" onClick={onClose}>
+    <div
+      className="lightbox"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={f.properties.filename}
+    >
       <button className="lightbox-close" onClick={onClose} aria-label="Close">×</button>
       <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
         <div className="lightbox-caption">{captionInfo(f.properties)}</div>

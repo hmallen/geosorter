@@ -12,12 +12,33 @@
   background: var(--surface);
   color: var(--text);
   padding: 6px 10px;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
   display: flex;
   gap: 10px;
   align-items: center;
   font-size: 14px;
+}
+
+/* Brand wordmark: the one piece of identity in the chrome. The mark reuses the
+   favicon's cyan→green pin gradient so browser tab and app agree on the brand. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  user-select: none;
+}
+
+.brand svg {
+  display: block;
 }
 
 .toolbar button {
@@ -26,11 +47,16 @@
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 
-.toolbar button:hover {
+.toolbar button:hover:not(:disabled) {
   background: var(--surface-3);
+}
+
+.toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Admin login control (m-implement-view-only-admin-auth) */
@@ -49,7 +75,7 @@
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   font-size: 14px;
 }
 
@@ -58,8 +84,11 @@
   font-size: 13px;
 }
 
-.toolbar .job {
+.toolbar .job,
+.toolbar .inbox {
   color: var(--text-muted);
+  /* Telemetry-style counts: digits keep their column as values tick up. */
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar .job--progress {
@@ -89,9 +118,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   border: 2px solid var(--accent-contrast);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   cursor: pointer;
 }
 
@@ -132,6 +164,43 @@
   background: #7c4dc4;
 }
 
+/* Initial library-load status chip: centered over the map so a slow or failed
+   /api/library read never reads as "empty library". */
+.library-status {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+}
+
+.library-status--error {
+  color: var(--danger);
+}
+
+.library-status button {
+  padding: 4px 12px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.library-status button:hover {
+  background: var(--surface-3);
+}
+
 /* Re-tag placement banner: shown while awaiting a map click (B8). */
 .placement-banner {
   position: absolute;
@@ -154,7 +223,7 @@
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 2px 8px;
   cursor: pointer;
 }
@@ -175,7 +244,7 @@
   font-size: 11px;
   padding: 2px 4px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
@@ -290,7 +359,7 @@
 }
 
 .panel-resize:hover {
-  background: rgba(25, 120, 200, 0.35);
+  background: rgba(94, 234, 212, 0.3); /* --accent-text at 30% */
 }
 
 .panel-head {
@@ -299,6 +368,17 @@
   align-items: flex-start;
   padding: 10px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Panel titles speak in the display face; counts/dates line up as telemetry. */
+.panel-head strong {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+.panel-head small {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .panel-head button {
@@ -394,8 +474,10 @@
   display: flex;
   align-items: center;
   padding: 8px 2px 4px;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--text);
   background: var(--surface);
 }
@@ -557,7 +639,7 @@
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 
 .lightbox-nav button:hover {
@@ -686,7 +768,8 @@
   z-index: 30;
   background: var(--surface);
   color: var(--text);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
@@ -758,7 +841,8 @@
 
 .inbox-kind {
   font-size: 11px;
-  color: var(--accent);
+  /* Text-tone teal: the fill teal is too dim for 11px text on a dark surface. */
+  color: var(--accent-text);
   border: 1px solid var(--accent);
   border-radius: 4px;
   padding: 0 4px;
@@ -781,7 +865,11 @@
   background: var(--accent);
   color: var(--accent-contrast);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius);
+}
+
+.inbox-actions button:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .inbox-actions button:disabled {
@@ -809,7 +897,8 @@
   z-index: 30;
   background: var(--surface);
   color: var(--text);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
@@ -924,7 +1013,11 @@
   background: var(--accent);
   color: var(--accent-contrast);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius);
+}
+
+.quarantine-actions button:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .quarantine-actions button:disabled {
@@ -997,7 +1090,8 @@
   z-index: 30;
   background: var(--surface);
   color: var(--text);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
@@ -1025,7 +1119,8 @@
   z-index: 30;
   background: var(--surface);
   color: var(--text);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
@@ -1118,7 +1213,8 @@
 
 .stitch-status {
   font-size: 11px;
-  color: var(--accent);
+  /* Text-tone teal — the fill teal fails contrast at this size (see .inbox-kind). */
+  color: var(--accent-text);
 }
 
 .stitch-go {
@@ -1126,10 +1222,14 @@
   background: var(--accent);
   color: var(--accent-contrast);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 4px 10px;
   font-size: 12px;
   cursor: pointer;
+}
+
+.stitch-go:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .stitch-go:disabled {

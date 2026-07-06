@@ -54,7 +54,7 @@ export default function App() {
   // is configured (open app) or the user has logged in. The management controls below
   // are passed down only when isAdmin, so a view-only viewer never sees them.
   const { isAdmin } = useAuthContext()
-  const { features, reload } = useLibrary()
+  const { features, reload, loading: libraryLoading, error: libraryError } = useLibrary()
   // Current map viewport bounds, lifted from MapView (null until the map's first
   // onLoad). The side panel always lists the captures inside these bounds.
   const [bounds, setBounds] = useState<BBox | null>(null)
@@ -188,6 +188,20 @@ export default function App() {
         </div>
       )}
       {retagging && <div className="placement-banner">Re-filing…</div>}
+      {/* Initial-load status: without it a failed/slow /api/library read is
+          indistinguishable from an empty library (blank world map). Shown only
+          before the first successful load — reloads revalidate silently. */}
+      {features.length === 0 && libraryLoading && !libraryError && (
+        <div className="library-status">
+          <span className="spinner" aria-hidden="true" /> Loading library…
+        </div>
+      )}
+      {features.length === 0 && libraryError && !libraryLoading && (
+        <div className="library-status library-status--error" role="alert">
+          Couldn't load the library.
+          <button onClick={reload}>Retry</button>
+        </div>
+      )}
       {assigning && (
         <div className="placement-banner">
           {assign && assign.total > 0 ? (

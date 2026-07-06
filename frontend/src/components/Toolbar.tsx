@@ -79,6 +79,24 @@ export default function Toolbar({
 
   return (
     <div className="toolbar">
+      <span className="brand" title="geosorter">
+        {/* Pin mark reusing the favicon's cyan→green gradient (see favicon.svg). */}
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-pin" x1="6" y1="2" x2="18" y2="22" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#67e8f9" />
+              <stop offset="1" stopColor="#22c55e" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M12 1.5a7.5 7.5 0 0 0-7.5 7.5c0 5.4 6.3 12.4 7 13.1a.7.7 0 0 0 1 0c.7-.7 7-7.7 7-13.1A7.5 7.5 0 0 0 12 1.5z"
+            fill="url(#brand-pin)"
+          />
+          <circle cx="12" cy="9" r="3.1" fill="#0f172a" />
+          <circle cx="12" cy="9" r="1.25" fill="#f8fafc" />
+        </svg>
+        geosorter
+      </span>
       {admin && (
         <>
           <button

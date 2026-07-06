@@ -1,5 +1,11 @@
+/* Self-hosted UI face (bundled by Vite from @fontsource — no network fetch, so the
+   app keeps working fully offline). Space Grotesk carries the app's identity in the
+   chrome (wordmark, buttons, headings, counts); dense body text stays on the system
+   stack below for maximum legibility at small sizes. */
+@import '@fontsource-variable/space-grotesk';
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
 
   /* Dark-theme tokens (dark-only default; m-implement-dark-theme-default).
      These are the single source of truth the rest of the SPA references via
@@ -11,13 +17,33 @@
   --text: #e6e9ef;
   --text-muted: #9aa3b2;
   --border: #323a4a;
-  --accent: #1978c8;        /* brand blue, kept */
+  /* Brand teal, pulled from the favicon mark (teal ground, cyan→green pin) — the
+     previous #1978c8 blue matched nothing in the brand. Solid fills carry white
+     text (contrast ≥ 4.5:1); --accent-text is the readable variant for teal TEXT
+     or thin strokes on dark surfaces, where the fill teal would be too dim. */
+  --accent: #0f766e;
+  --accent-hover: #0d8a80;
+  --accent-text: #5eead4;
   --accent-contrast: #ffffff;
   --danger: #ff6b6b;        /* replaces low-contrast #b00020 */
   --placeholder: #2a2f3a;   /* thumb-loading placeholder (was #eee) */
 
+  /* Type roles. The display face falls back to the body stack while the woff2
+     streams in on first paint. */
+  --font-display: 'Space Grotesk Variable', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-body: system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Corner radii: controls (buttons, inputs, chips-as-buttons) share --radius;
+     floating surfaces (panels, dropdowns) share --radius-lg. */
+  --radius: 6px;
+  --radius-lg: 10px;
+
   color: var(--text);
   background: var(--bg);
+
+  /* Dark-tinted NATIVE chrome: scrollbars, date pickers, form controls. Without
+     this, Windows renders bright-white scrollbars inside every dark panel. */
+  color-scheme: dark;
 }
 
 * {
@@ -42,4 +68,31 @@ body {
 input,
 progress {
   accent-color: var(--accent);
+}
+
+/* Buttons inherit the display face so every control shares the app's voice
+   (they default to the UA button font otherwise, not the :root font). */
+button {
+  font-family: var(--font-display);
+}
+
+/* Keyboard-visible focus for every interactive element. The teal text tone
+   reads on both dark panels and bright satellite imagery; box-shadow-free so
+   it composes with the pins' existing box-shadows. */
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* Collapse decorative motion for users who ask for it. Spinners stay (they are
+   the only signal an image/job is still loading) but slow to a calm cadence. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+  }
+
+  .spinner,
+  .img-spinner {
+    animation-duration: 2.5s;
+  }
 }

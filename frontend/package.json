@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/space-grotesk": "^5.2.10",
     "@photo-sphere-viewer/core": "^5.14.1",
     "@tanstack/react-virtual": "^3.14.2",
     "maplibre-gl": "^5.24.0",

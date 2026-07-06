@@ -274,7 +274,9 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
       </div>
       {empty && (
         <div className="panel-empty">
-          {filteredOut ? 'No captures match the filter' : 'No captures in view'}
+          {filteredOut
+            ? 'No captures match the current filters'
+            : 'No captures in this view — pan or zoom the map'}
         </div>
       )}
       <div className="grid" ref={scrollRef}>
