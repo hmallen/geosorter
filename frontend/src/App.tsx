@@ -7,6 +7,8 @@ import QuarantinePanel from './components/QuarantinePanel'
 import LocationPanel from './components/LocationPanel'
 import StitchPanel from './components/StitchPanel'
 import { buildPlaces } from './locationFilter'
+import { fetchTrack } from './api'
+import { trackBBox } from './flightTrack'
 import { useLibrary } from './useLibrary'
 import { useRetagJob } from './useRetagJob'
 import { useAssignLocation } from './useAssignLocation'
@@ -71,6 +73,27 @@ export default function App() {
   const [showStitch, setShowStitch] = useState(false)
   const [flyTo, setFlyTo] = useState<{ bbox: BBox; nonce: number } | null>(null)
   const places = useMemo(() => buildPlaces(features), [features])
+  // Flight-track overlay: a video's GPS path (from its SRT sidecar) drawn on the
+  // map. Empty points = "no track found" (parse failure or a fix-less sidecar),
+  // surfaced in the chip rather than silently doing nothing.
+  const [track, setTrack] = useState<{ filename: string; points: [number, number][] } | null>(
+    null,
+  )
+
+  // Opened from the lightbox: close it (the map is the surface the track lives
+  // on), fetch the path, and fit the camera to it via the existing flyTo channel.
+  async function showTrack(f: LibraryFeature) {
+    setLightbox(null)
+    let points: [number, number][] = []
+    try {
+      points = await fetchTrack(f.properties.id)
+    } catch {
+      // fall through to the "no track" chip — same UX as an empty sidecar
+    }
+    setTrack({ filename: f.properties.filename, points })
+    const bbox = trackBBox(points)
+    if (bbox) setFlyTo((p) => ({ bbox, nonce: (p?.nonce ?? 0) + 1 }))
+  }
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
   // progress survives the lightbox closing/reopening; reload on success so the hero
   // + stitch_status persist on the map and in the panel.
@@ -114,6 +137,9 @@ export default function App() {
   // the no-GPS list (an assign removes items; an organize may add some).
   function handleChanged() {
     setLightbox(null)
+    // Files may have moved/left the library; a drawn track could now belong to
+    // a re-filed capture, so drop it rather than risk a stale overlay.
+    setTrack(null)
     reload()
     reloadQuarantine()
   }
@@ -181,7 +207,21 @@ export default function App() {
         onMapClick={onMapClick}
         onBoundsChange={setBounds}
         flyTo={flyTo ?? undefined}
+        track={track?.points}
       />
+      {track && (
+        <div className="track-chip">
+          {track.points.length >= 2 ? (
+            <>
+              <span className="track-swatch" aria-hidden="true" />
+              Flight path — {track.filename}
+            </>
+          ) : (
+            <>No flight track found for {track.filename}</>
+          )}
+          <button onClick={() => setTrack(null)}>Clear</button>
+        </div>
+      )}
       {retagPlacing && (
         <div className="placement-banner">
           Click the map to set the new location
@@ -301,6 +341,7 @@ export default function App() {
           onClose={() => setLightbox(null)}
           stitchByFile={stitchByFile}
           onStartStitch={isAdmin ? startStitch : undefined}
+          onShowTrack={showTrack}
         />
       )}
     </div>

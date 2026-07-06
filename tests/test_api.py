@@ -431,6 +431,81 @@ def test_frames_unknown_id_404(tmp_path):
     assert client.get("/api/frames/999999").status_code == 404
 
 
+SRT_FIXTURES = Path(__file__).parent / "fixtures" / "srt"
+
+
+def _track_client(tmp_path, *, with_srt=True):
+    """A client whose library holds one video, optionally with an SRT sidecar."""
+    library = tmp_path / "library"
+    library.mkdir()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    index_db = tmp_path / "index.db"
+    cfg = Config(
+        inbox_path=inbox,
+        library_root=library,
+        index_db_path=index_db,
+        geonames_db_path=tmp_path / "geonames.db",
+        spatial_index="rtree",
+    )
+    conn = db.connect(index_db, integrity_check=False)
+    db.init_index_schema(conn)
+    fid = _seed(conn, dest_path=str(library / "P" / "v.MP4"), filename="v.MP4",
+                media_type="video", status="organized", lat=14.79, lon=-65.69,
+                gps_source="srt", codec="h264")
+    if with_srt:
+        srt_dest = library / "P" / "v.SRT"
+        srt_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(SRT_FIXTURES / "mini4pro_bracket.srt", srt_dest)
+        conn.execute(
+            "INSERT INTO file_companions(primary_file_id, dest_path, companion_type) "
+            "VALUES (?,?,?)",
+            (fid, str(srt_dest), "srt"),
+        )
+    conn.commit()
+    conn.close()
+    return TestClient(api.create_app(cfg)), fid
+
+
+def test_track_returns_lon_lat_points(tmp_path):
+    client, fid = _track_client(tmp_path)
+    resp = client.get(f"/api/track/{fid}")
+    assert resp.status_code == 200
+    points = resp.json()["points"]
+    # The fixture's first frame is pre-lock (0,0) and must be skipped; the valid
+    # fixes are around (lat 14.798, lon -65.691) — points are [lon, lat].
+    assert len(points) >= 2
+    for lon, lat in points:
+        assert -66.0 < lon < -65.0
+        assert 14.0 < lat < 15.0
+
+
+def test_track_video_without_srt_is_empty(tmp_path):
+    client, fid = _track_client(tmp_path, with_srt=False)
+    resp = client.get(f"/api/track/{fid}")
+    assert resp.status_code == 200
+    assert resp.json() == {"points": []}
+
+
+def test_track_unknown_id_404(tmp_path):
+    client, _ = _track_client(tmp_path)
+    assert client.get("/api/track/999999").status_code == 404
+
+
+def test_library_exposes_has_track(tmp_path):
+    client, _ = _track_client(tmp_path)
+    fc = client.get("/api/library").json()
+    feat = next(f for f in fc["features"] if f["properties"]["filename"] == "v.MP4")
+    assert feat["properties"]["has_track"] is True
+
+
+def test_library_has_track_false_without_srt(tmp_path):
+    client, _ = _track_client(tmp_path, with_srt=False)
+    fc = client.get("/api/library").json()
+    feat = next(f for f in fc["features"] if f["properties"]["filename"] == "v.MP4")
+    assert feat["properties"]["has_track"] is False
+
+
 def _panorama_client(tmp_path):
     """A client whose library holds one panorama primary + 2 tile companions."""
     library = tmp_path / "library"

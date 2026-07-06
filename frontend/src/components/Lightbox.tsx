@@ -22,6 +22,9 @@ interface Props {
   // non-admin viewer, which hides the stitch CONTROLS. A previously-stitched hero is
   // still VIEWED by everyone; only generating/re-stitching is gated.
   onStartStitch?: (fileId: number, opts?: { force?: boolean; projection?: string }) => void
+  // Flight-track overlay: offered for a video with an SRT sidecar (has_track).
+  // App closes the lightbox and draws the path on the map.
+  onShowTrack?: (f: LibraryFeature) => void
 }
 
 export default function Lightbox({
@@ -31,6 +34,7 @@ export default function Lightbox({
   onClose,
   stitchByFile,
   onStartStitch,
+  onShowTrack,
 }: Props) {
   const f = files[index]
   // Source-frame gallery: a hyperlapse render's frames (B10) or a panorama's tiles
@@ -240,6 +244,16 @@ export default function Lightbox({
               </>
             )}
           </div>
+        )}
+
+        {onShowTrack && f.properties.media_type === 'video' && f.properties.has_track && (
+          <button
+            className="frames-toggle"
+            onClick={() => onShowTrack(f)}
+            title="Close the viewer and draw this flight's GPS path on the map"
+          >
+            ✈ Show flight path on map
+          </button>
         )}
 
         {isFrameGallery && (

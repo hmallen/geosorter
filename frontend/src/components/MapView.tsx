@@ -5,6 +5,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { buildIndex, clustersFor, expansionZoom, type BBox } from '../clusters'
 import { VECTOR_STYLE, SATELLITE_STYLE, HEATMAP_LAYER, heatmapData } from '../basemaps'
+import { trackLine, TRACK_CASING_LAYER, TRACK_LINE_LAYER } from '../flightTrack'
 import type { LibraryFeature } from '../types'
 
 const WORLD: BBox = [-180, -85, 180, 85]
@@ -27,6 +28,9 @@ interface Props {
   // Done via map.fitBounds (a ref), NOT by lifting the controlled `view` state, so
   // the per-pan re-render stays inside MapView.
   flyTo?: { bbox: BBox; nonce: number }
+  // Flight-track overlay: a video's GPS path as [lon, lat] points (App owns the
+  // fetch + the dismiss chip). Rendered as a teal line under the markers.
+  track?: [number, number][] | null
 }
 
 export default function MapView({
@@ -35,6 +39,7 @@ export default function MapView({
   onMapClick,
   onBoundsChange,
   flyTo,
+  track,
 }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -138,6 +143,20 @@ export default function MapView({
         <Source id="library-heat" type="geojson" data={heatData}>
           <Layer {...HEATMAP_LAYER} />
         </Source>
+      )}
+      {track && track.length >= 2 && (
+        <Source id="flight-track" type="geojson" data={trackLine(track)}>
+          <Layer {...TRACK_CASING_LAYER} />
+          <Layer {...TRACK_LINE_LAYER} />
+        </Source>
+      )}
+      {/* Takeoff marker: the first GPS fix, echoing the manual-pin green. The
+          landing point is just where the line ends — no second marker to
+          confuse with the capture's own pin. */}
+      {track && track.length >= 2 && (
+        <Marker longitude={track[0][0]} latitude={track[0][1]} anchor="center">
+          <div className="track-start" title="Takeoff (first GPS fix)" />
+        </Marker>
       )}
       {!heatmap && clusters.map((c) => {
         const [lon, lat] = c.geometry.coordinates

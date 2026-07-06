@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from geosorter.srt_parser import SrtResult, parse_srt
+from geosorter.srt_parser import SrtResult, parse_srt, parse_srt_track
 
 SRT_DIR = Path(__file__).parent / "fixtures" / "srt"
 
@@ -92,3 +92,33 @@ def test_whitespace_only_separator_no_cross_frame_transpose(tmp_path):
     assert res.gps_source == "srt"
     assert res.lat == pytest.approx(14.798240)
     assert res.lon == pytest.approx(-65.691450)
+
+
+# --- parse_srt_track (flight-track overlay) --------------------------------- #
+
+
+def test_track_bracket_fixture_yields_ordered_fixes():
+    track = parse_srt_track(SRT_DIR / "mini4pro_bracket.srt")
+    # The first frame is a pre-lock (0,0) null-island fix and must be skipped.
+    assert len(track) >= 2
+    assert track[0] == pytest.approx((14.798240, -65.691450))
+    for lat, lon in track:
+        assert -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0
+        assert (lat, lon) != (0.0, 0.0)
+
+
+def test_track_paren_fixture_is_lon_first_safe():
+    # The paren family writes GPS(lon,lat,alt): the track must come back (lat, lon).
+    track = parse_srt_track(SRT_DIR / "phantom_paren_synthetic.srt")
+    assert len(track) >= 2
+    lat, lon = track[0]
+    assert lat == pytest.approx(37.774900)
+    assert lon == pytest.approx(-122.419400)
+
+
+def test_track_no_gps_fixture_is_empty():
+    assert parse_srt_track(SRT_DIR / "no_gps_synthetic.srt") == []
+
+
+def test_track_missing_file_is_empty(tmp_path):
+    assert parse_srt_track(tmp_path / "absent.SRT") == []
