@@ -297,7 +297,6 @@ export default function App() {
           ) : (
             <span className="track-sync-warning">Timeline synchronization unavailable</span>
           )}
-          <button onClick={closeViewer}>Close</button>
         </div>
       )}
       {retagPlacing && (

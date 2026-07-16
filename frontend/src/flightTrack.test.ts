@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { clampPipPosition, positionAtTime, trackBBox, trackLine } from './flightTrack'
+import {
+  clampPipPosition,
+  clampPipWidth,
+  positionAtTime,
+  trackBBox,
+  trackLine,
+} from './flightTrack'
 
 describe('trackBBox', () => {
   it('returns the [west, south, east, north] envelope of the points', () => {
@@ -80,5 +86,23 @@ describe('clampPipPosition', () => {
         { width: 1000, height: 700 },
       ),
     ).toEqual({ x: 200, y: 100 })
+  })
+})
+
+describe('clampPipWidth', () => {
+  it('allows an in-bounds resize and enforces the minimum width', () => {
+    const position = { x: 100, y: 100 }
+    const viewport = { width: 1200, height: 800 }
+    expect(clampPipWidth(500, position, viewport)).toBe(500)
+    expect(clampPipWidth(100, position, viewport)).toBe(280)
+  })
+
+  it('limits width by both the right and bottom viewport edges', () => {
+    expect(
+      clampPipWidth(900, { x: 500, y: 100 }, { width: 1000, height: 800 }),
+    ).toBe(488)
+    expect(
+      clampPipWidth(900, { x: 100, y: 500 }, { width: 1200, height: 800 }),
+    ).toBeCloseTo(423.111, 3)
   })
 })

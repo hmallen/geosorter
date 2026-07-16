@@ -763,6 +763,45 @@
   border-color: var(--border);
 }
 
+.pip-resize-handle {
+  position: relative;
+  flex: 0 0 12px;
+  width: 100%;
+  min-height: 12px;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.pip-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  background:
+    linear-gradient(135deg, transparent 45%, var(--text-muted) 46%, var(--text-muted) 55%, transparent 56%)
+    right bottom / 5px 5px no-repeat,
+    linear-gradient(135deg, transparent 45%, var(--text-muted) 46%, var(--text-muted) 55%, transparent 56%)
+    left top / 5px 5px no-repeat;
+  opacity: 0.8;
+}
+
+.pip-resize-handle:hover,
+.pip-resize-handle:focus-visible {
+  background: var(--surface-3);
+}
+
+.pip-resize-handle:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
+}
+
 /* Capture caption bar: location · date · time, left-aligned above the media.
    position:absolute (out of flow) so the nowrap text can NEVER drive the shrink-to-fit
    .lightbox-body width — the image stays the sole width driver (its full-size, stable
