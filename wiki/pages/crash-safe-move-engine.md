@@ -1,18 +1,17 @@
 ---
 title: Crash-Safe Move Engine & Organize Pipeline
-tags: [move-engine, organize, undo, retag, inference, crash-safety, sqlite, geosorter, phase-0a, phase-2]
+tags: [move-engine, organize, undo, retag, assignment, inference, crash-safety, sqlite, geosorter]
 created: 2026-05-31
-updated: 2026-06-01
-sources: [task:h-move-engine-cli, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location]
+updated: 2026-07-16
+sources: [src/geosorter/move_engine.py, src/geosorter/organize.py, src/geosorter/undo.py, src/geosorter/retag.py, src/geosorter/setloc.py, src/geosorter/rescan.py]
 ---
 
 # Crash-Safe Move Engine & Organize Pipeline
 
-The `organize` pipeline (task B4) is the one place geosorter does something
-irreversible: it **auto-deletes** each source file after copying it into the
-library (decision D14 — the user's chosen policy for disk efficiency). Everything
-below exists to make that delete survivable. This completes **Phase 0a**: a
-headless `extract → geocode → local-time → path → move` pipeline.
+The `organize` pipeline is the main place geosorter does something irreversible:
+it **deletes** a source only after a verified library copy exists. Everything
+below exists to make that operation survivable across local disks, NAS/SMB shares,
+interruptions, repeated runs, and capture groups with multiple physical files.
 
 ## The move state machine (`move_engine.py`)
 
@@ -53,7 +52,8 @@ from whatever row it finds:
 
 ## Group-atomic deletes (no split captures)
 
-A capture = a primary plus its `.DNG`/`.LRF`/`.SRT`/`_N` companions. The pipeline
+A capture = a primary plus its `.DNG`/`.LRF`/`.SRT` companions and, where
+applicable, hyperlapse source frames or panorama tiles. The pipeline
 **copies and verifies every file in the group first, and only then deletes the
 sources — companions first, the primary last.** Consequences:
 
@@ -66,17 +66,34 @@ sources — companions first, the primary last.** Consequences:
 
 ## Duplicates & collisions (dedup-then-suffix)
 
-`files.dest_path` is `UNIQUE`. The policy (user's choice):
+`files.dest_path` is `UNIQUE`. The current policy:
 
 - A source whose **content hash already exists** in `files` (from a *different*
-  source — a re-import) is **skipped and left in the inbox** (not deleted).
+  source — a re-import) is a duplicate. With the default
+  `relocate_duplicates=true`, the whole incoming group moves under
+  `<inbox>/_duplicates/<original-relative-path>` and an append-only TSV entry is
+  written to `_duplicates/duplicates.log`. Companions move first and the primary
+  last. The directory is excluded from future inbox scans. Setting the option
+  false restores skip-in-place behavior.
 - A *different-content* file that resolves to an occupied `dest_path` is given a
   `_2`/`_3` suffix (checked against both the `files` table and the filesystem).
 
 The dedup check excludes the file's own in-flight moves row, so a recovery run
 never mistakes its own partially-committed work for a duplicate.
 
-## Quarantine, codec stats, first-run gate
+Same-stem captures from different inbox directories are grouped independently.
+The move engine also refuses to publish onto a destination already associated
+with a different source, including stale-row retry paths, so recycled DJI
+filenames cannot silently overwrite unrelated bytes.
+
+## Resilience, quarantine, codec stats, first-run gate
+
+- **Capacity and transient IO protection**: organize checks required bytes plus
+  `disk_margin_gb`, retries transient copy errors with exponential backoff, and
+  re-checks free space while the batch is running.
+- **Extraction resilience**: large scans rotate the ExifTool daemon after
+  `extract_chunk_size` groups. A repeatedly unreadable file is quarantined after
+  `extract_max_failures` rather than aborting every later capture.
 
 - **Quarantine**: a file with no GPS (`lat`/`lon` None) *or* no resolvable local
   date routes to `library_root/_no-gps/<date>/`, where `<date>` is the capture
@@ -85,14 +102,14 @@ never mistakes its own partially-committed work for a duplicate.
   - Note: a video with no *embedded* GPS but a GPS-bearing `.SRT` sidecar
     **organizes** (B2 recovers GPS from the SRT) — it is not quarantined.
 - **Codec stats**: a per-batch `codec_stats` row tallies h264 / h265 / unknown
-  across **videos only** (photos have no codec). Feeds the eventual HEVC-handling
-  decision.
+  across **videos only** (photos have no codec). It supports proxy planning and
+  diagnostics; HEVC playback proxies are now implemented.
 - **First-run gate** (decision D22): the first destructive `organize` on a new
   library (detected by zero `moves` rows) prints source→dest→count and requires an
   explicit confirm defaulting to **No**; `--yes` bypasses it. `--dry-run` performs
   zero filesystem and zero DB writes but prints the identical summary.
 
-## Time-clustered neighbor-GPS inference (`inference.py`, task B8 — Phase 2)
+## Time-clustered neighbor-GPS inference (`inference.py`)
 
 To rescue captures that would otherwise quarantine for a missing GPS lock,
 `run_organize` runs in **two passes**:
@@ -127,7 +144,7 @@ the verified `moves.dest_sha256` (for `copy_verified`/`source_deleted` rows) to
 detect post-deletion bit-rot — the safety net for an archive whose only copy now
 lives in the library.
 
-## Undo a batch (`undo.py`, task B8 — Phase 2)
+## Undo a batch (`undo.py`)
 
 Undo reverses the most recent `organize` batch (or a given `--batch`): it moves
 each filed library file **back** to its original inbox `source_path` and removes
@@ -170,19 +187,20 @@ conflicted) correctly leaves the still-filed files indexed.
 Undo is exposed as the `undo` CLI verb (confirm-gated) and as a cancellable
 background job (`POST /api/undo`) that **shares the single-worker executor with
 `organize`**, so the two destructive passes are mutually exclusive. `cancel` is
-polled between files; remaining rows are left for a clean resume. Orphaned
-derived-cache entries (thumbs/previews/posters/proxies) are left as-is — they are
-mtime-keyed and regenerate on demand.
+polled between files; remaining rows are left for a clean resume. Derived assets
+are regenerable, and later writes invalidate the old/new cache keys so a reused
+path cannot retain stale content.
 
-## Manual re-tag (`retag.py`, task B8 — Phase 2)
+## Manual re-tag (`retag.py`)
 
 `retag_file(cfg, file_id, lat, lon)` re-files an already-**organized** capture to a
 map-clicked coordinate (the map UI's "Re-tag location" → click). It re-geocodes the
 coordinate, recomputes the local date/time from the file's **stored**
 `capture_ts_utc` against the *new* timezone (`tz_resolver.local_time_from_utc`),
 recomputes the destination, and physically relocates the primary + companions —
-then marks the `files` row `gps_source='manual'`. (Primary use: correcting a wrong
-or `inferred` pin. Organized files only; quarantined no-GPS rescue is deferred.)
+then marks the `files` row `gps_source='manual'`. This path corrects an already
+organized GPS or inferred pin. Quarantined captures use the assignment workflow
+below.
 
 The move is a **library→library** variant of the same crash-safe discipline — a
 *bespoke* path like undo's (not `move_engine`'s inbox→library primitives), and
@@ -204,6 +222,36 @@ each `file_companions.dest_path`, and each `moves.dest_path` (the verified
 `dest_sha256` is unchanged — the bytes did not). "No move needed" is decided by the
 recomputed destination equalling the current one, not by coordinate equality.
 
-Re-tag runs as a background job (`POST /api/retag`) on the **same single-worker
-executor** as organize/undo (the three are mutually exclusive). It has **no cancel**
-— a single-capture atomic move has nothing to interrupt.
+Re-tag runs as a background job (`POST /api/retag`) on the shared single-worker
+destructive executor. It has **no cancel** — a single-capture atomic move has
+nothing to interrupt. The move invalidates both the vacated and newly written
+derived-cache keys.
+
+## Assign a location to quarantined media (`setloc.py`)
+
+The No-GPS workflow promotes one or more `status='quarantined'` captures into the
+organized library:
+
+1. the UI obtains a coordinate from a map click or offline `/api/place-search`,
+2. `assign_locations` geocodes that coordinate once,
+3. each file's raw capture time is re-extracted (quarantined rows do not retain
+   enough timestamp data for this calculation),
+4. local time and the final destination are computed for the selected coordinate,
+5. the primary and companions move from `_no-gps` to the library using the same
+   group-atomic relocation primitives as re-tag,
+6. the row becomes `status='organized'` with `gps_source='manual'`.
+
+Undated captures fall back to file mtime. The operation runs through
+`POST /api/assign-location` on the shared destructive worker and reports progress
+per capture, not per physical companion file.
+
+## Rescan stale index rows (`rescan.py`)
+
+`rescan` reconciles the index with disk when media was moved out of the library by
+hand. A missing primary causes the capture's DB rows to be pruned; a missing
+companion with a present primary is warned about but retained. Stranded companions
+are reported and never deleted.
+
+Rescan mutates the index DB only. It does not delete/move media and does not
+discover files copied into the library outside organize. The CLI supports a dry
+run, and the web route uses the shared destructive worker.

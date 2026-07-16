@@ -2,6 +2,21 @@
 
 Chronological record of wiki operations.
 
+## [2026-07-16] update | Current shipped project state
+Added [Current Project State](pages/current-project-state.md) as the maintained
+entry point for the shipped product. It records the implemented ingest shapes,
+crash-safe move/correction workflows, current CLI and API surfaces, responsive and
+virtualized map browser, admin-gated management boundary, cache tiering and
+invalidation, NVENC proxy support, corrupt-media behavior, optional Hugin
+panoramas, and synchronized SRT flight-track picture-in-map playback.
+
+Refreshed the schema and index so pages are expected to describe current `main`
+behavior rather than historical phase labels. Corrected the backend and move-engine
+pages where they still said the server had no authentication, cache freshness was
+mtime-only, duplicates stayed in place, and quarantined captures could not be
+promoted. Recorded the verified test/build snapshot and the existing frontend lint
+failures so the wiki does not imply every listed check is currently green.
+
 ## [2026-06-01] update | Crash-Safe Move Engine & Phase 1 Backend (B8 undo)
 Documented the Phase 2 (B8) batch-undo feature from task h-undo-batch: added an
 "Undo a batch" section to [Crash-Safe Move Engine](pages/crash-safe-move-engine.md)

@@ -1,103 +1,95 @@
 ---
-title: Phase 1 Backend — HTTP API Contract & Derived Assets
-tags: [api, fastapi, geojson, hevc, architecture, phase-1, undo, phase-2]
+title: Backend, API, Web UI & Derived Assets
+tags: [api, fastapi, geojson, hevc, architecture, frontend, auth, jobs, geosorter]
 created: 2026-06-01
-updated: 2026-06-10
-sources: [dji-media-organizer.md, h-api-backend.md, task:h-undo-batch, task:h-neighbor-gps-inference, task:h-retag-location, task:m-basemap-heatmap-toggles, task:m-library-feed-scale, task:m-derived-at-scale]
+updated: 2026-07-16
+sources: [src/geosorter/api.py, src/geosorter/jobs.py, src/geosorter/derived.py, frontend/src, task:m-library-feed-scale, task:m-derived-at-scale]
 ---
 
-# Phase 1 Backend — HTTP API Contract & Derived Assets
+# Backend, API, Web UI & Derived Assets
 
-The B6 FastAPI backend (`geosorter.api`) exposes the organized library over HTTP
-for the B7 map-viewer frontend. It is built by `create_app(cfg, *, spa_dir=None)`
-and launched by the `geosorter serve` CLI verb. This page is the **contract** the
-frontend (and any other client) builds against.
+The FastAPI backend (`geosorter.api`) exposes the organized library over HTTP for
+the React map browser. It is built by `create_app(cfg, *, spa_dir=None)` and
+launched by `geosorter serve`. This page describes the current contract used by
+the frontend and other clients; historical B6/B7/B8 labels are no longer a
+statement about product completeness.
 
 ## Security posture
 
-- **Binds `127.0.0.1` by default.** The library's GeoJSON embeds *home GPS
-  coordinates* and there is **no authentication**. `serve --host <addr>` is an
-  explicit opt-in; any non-loopback host prints a no-auth/home-GPS exposure
-  warning (`cli._resolve_host`). Loopback values (`127.0.0.1`, `localhost`, `::1`)
-  do not warn.
-- **Path-traversal guard.** `/api/media`, `/api/thumb`, `/api/poster`, `/api/video`
-  resolve the request path under `library_root` and reject anything that escapes:
-  `(library_root / relpath).resolve()` must be `is_relative_to(library_root)`,
-  else HTTP 403. A missing file is 404.
+- **Binds `127.0.0.1` by default.** `serve --host <addr>` explicitly opts into
+  network exposure. A non-loopback bind warns because library reads include media
+  and GPS coordinates.
+- **Optional admin authentication.** Without `admin_password_hash`, the app and API
+  are open. With a password configured by `set-admin-password`, read routes remain
+  public but management controls are hidden until login and mutating routes require
+  an in-memory bearer token. Tokens reset on restart. Five failed passwords lock a
+  client out for 30 seconds; `/api/login` returns 429 with `Retry-After` while
+  throttled.
+- **The admin password does not protect read access.** A non-loopback bind still
+  exposes the map, GPS locations, originals, and derived media to that network.
+- **Traversal and cache guards.** Relpath-based media routes resolve under
+  `library_root`, reject escapes with HTTP 403, and also reject any
+  `.geosorter-cache` path component (case-insensitive). File-id-keyed panorama
+  routes derive cache paths server-side. Missing files return 404.
 
 ## Endpoints
 
-- `GET /api/library` → GeoJSON `FeatureCollection`, **loaded once** (no
-  bbox/viewport endpoint — clustering is the client's job, via supercluster in
-  B7). One `Point` feature per **organized, geolocated** file; quarantined/no-GPS
-  files are excluded (they have no coordinate to place). Feature `properties`:
-  `id`, `filename`, `place_string`, `local_date`, `media_type`, `codec`,
-  `gps_source` (`exif`|`srt`|`srt_partial`|`inferred`|`manual`|`none`|null — B8; the
-  map UI styles `inferred` (amber/dashed) and `manual` (green) markers distinctly),
-  and `path` (library-relative POSIX path used to build media URLs). Coordinates are
-  `[lon, lat]` (GeoJSON order). Supports **conditional GET**: emits a weak `ETag` +
-  `Last-Modified` and answers a matching `If-None-Match` with `304` (see *Scalable
-  library feed* below). The JSON body is **gzipped in-route** when the client accepts it.
-- `GET /api/inbox` → `{files, captures}` — how much is waiting for the next
-  `organize` run (B8). `files` = recursive file count under `inbox_path` (what
-  `organize` scans); `captures` = DJI capture-group count (`group_companions`, what
-  `organize` processes). Scan-on-request (no `watchdog` observer); the frontend polls
-  it for a toolbar badge. Returns `{0, 0}` when the inbox is unset/missing/empty.
-- `POST /api/organize` → `{job_id}`; `GET /api/organize/status/{id}` → the job
-  snapshot; `POST /api/organize/cancel/{id}` → sets the cancel flag. See
-  *Background jobs* below.
-- `POST /api/undo` → `{job_id}`; `GET /api/undo/status/{id}` → the undo-job
-  snapshot; `POST /api/undo/cancel/{id}` → sets the cancel flag (B8). Reverses the
-  most recent `organize` batch back to the inbox; see the
-  [undo section](crash-safe-move-engine.md) for the reverse-move model. The two
-  cancel routes are partitioned by job kind (a route 404s on the other kind's id).
-- `POST /api/retag` (body `{file_id, lat, lon}`, lat/lon WGS84-bounded) → `{job_id}`;
-  `GET /api/retag/status/{id}` → the re-tag-job snapshot (B8). Re-files an organized
-  capture to a map-clicked location; see the
-  [re-tag section](crash-safe-move-engine.md) for the move model. **No cancel route**
-  — a re-tag is a fast atomic single-capture op, unlike the long-running
-  organize/undo. Shares the single-worker pool, so organize, undo, and re-tag are
-  mutually exclusive.
-- `GET /api/media/{relpath}` → the original file via range-capable
-  `starlette.responses.FileResponse` (HTTP 206 for `Range` requests → video seek,
-  large-photo download). **Not** a bare `StreamingResponse`.
-- `GET /api/thumb/{relpath}` (512px grid thumbnail) / `GET /api/preview/{relpath}`
-  (1080p / 1920px long-edge, lightbox photo, B7) / `GET /api/poster/{relpath}`
-  (video poster frame) → lazily generated, cached derived JPEGs.
-- `GET /api/video/{relpath}` → a **browser-playable** video (range-capable). H.264
-  originals are served directly; HEVC is served as a cached H.264 proxy. The
-  frontend points every `<video>` here regardless of source codec.
-- Static SPA: when a build directory exists, `create_app` mounts it at `/` (after
-  the `/api` routes) so the frontend is served same-origin (no CORS). B6 ships the
-  mount point; B7 fills the directory.
+- `GET /api/library` → a whole-library GeoJSON `FeatureCollection` containing one
+  point per organized, geolocated capture. Properties are `id`, `filename`,
+  `place_string`, `local_date`, `capture_ts_local`, `media_type`, `codec`,
+  `gps_source`, `capture_kind`, `frame_count`, `star_rating`, `stitch_status`,
+  `stitch_projection`, `has_track`, and library-relative `path`. Coordinates are
+  `[lon, lat]`. The route supports conditional GET and route-scoped gzip.
+- `GET /api/inbox` → `{files, captures}`. `GET /api/inbox/list` → capture groups
+  for the selective Process Inbox panel. The scan excludes `_duplicates`.
+- `GET /api/quarantine` lists no-GPS captures. `GET /api/place-search?q=...`
+  performs offline GeoNames forward search for assignment.
+- `GET /api/frames/{file_id}` lists hyperlapse/panorama source frames.
+  `GET /api/track/{file_id}` returns downsampled route points and timestamped
+  samples from a video's SRT sidecar.
+- `GET /api/media/{relpath}` serves originals with HTTP Range support.
+  `GET /api/thumb`, `/api/preview`, and `/api/poster` serve lazy cached JPEGs.
+  `GET /api/video` serves H.264 directly or a cached H.264 proxy for HEVC.
+- `GET /api/collage/{file_id}` serves the instant panorama tile collage.
+  `GET /api/stitch/{file_id}` serves a generated Hugin hero.
+- `GET /api/auth`, `POST /api/login`, and `POST /api/logout` manage the optional
+  admin session.
+- Organize, undo, re-tag, assign-location, rescan, and stitch each have start and
+  status routes. Organize and undo also have cancel routes. Start/cancel mutations
+  require admin authentication when configured; status routes stay readable.
+- Static SPA: when the built frontend exists, `create_app` mounts it at `/` after
+  the API routes, so browser and API share an origin and need no CORS setup.
 
 The stored `files.dest_path` is an absolute Windows path with a `\\?\` long-path
 prefix; `api._strip`/`api._relpath` convert it to the library-relative POSIX
 `path` used in URLs, and `_safe_path` reverses that for serving.
 
-## HEVC strategy (the gating decision)
+## HEVC strategy
 
-DJI codec mix, probed from real footage: the **current drone (Mini 4 Pro) records
-HEVC/H.265**, an older drone records H.264 — ~60% HEVC and rising. Browsers
-(Chrome/Firefox on Windows) do **not** reliably play HEVC in a `<video>` element.
+DJI libraries commonly contain both H.264 and HEVC/H.265. Chrome and Firefox on
+Windows do not reliably play HEVC in a `<video>` element.
 
-Chosen strategy: **on-demand H.264 proxy transcode.** `/api/video` looks up the
-file's codec in the `files` table; H.264 streams the original, HEVC triggers an
-ffmpeg `libx264` transcode cached under `.geosorter-cache/proxies/`. Rejected
-alternatives: direct-stream (majority of videos silently fail) and
-poster-plus-"coming soon" (majority unplayable in Phase 1).
+Chosen strategy: **cached H.264 proxy transcode.** `/api/video` looks up the
+file's codec in the `files` table; H.264 streams the original, while HEVC triggers
+ffmpeg and caches the result in the proxy tier. `proxy_hwaccel` selects `auto`,
+`nvenc`, or `none`: auto uses NVIDIA NVENC when detected and retries once with
+libx264 if NVENC fails; strict NVENC surfaces a failure. `warm-proxies` can create
+these proxies before first playback and `proxy-bench` compares both encoders.
 
 ## Derived assets — lazy, cached, atomic
 
-`geosorter.derived` generates thumbnails (512px JPEG, Pillow
-`ImageOps.exif_transpose`), video poster frames (ffmpeg first frame), and HEVC
-proxies **on first request**, caching them under
-`library_root/.geosorter-cache/{thumbs,posters,proxies}/` (the source's
-library-relative path is mirrored under each kind dir). This keeps the crash-safe
-Phase 0 `organize` pipeline free of any Pillow/ffmpeg dependency.
+`geosorter.derived` generates thumbnails, 1920px-long-edge previews, video poster
+frames, panorama collages, and HEVC proxies. Cheap image assets live under the
+local `cache_dir`; proxies and stitches live under `proxy_cache_dir` (which
+defaults to the library root when unset). Relative source keys are mirrored under
+each cache kind.
 
-- **Freshness** is mtime-based (`_is_fresh` = cache mtime ≥ source mtime); no
-  hashing. A re-organized source regenerates.
+- **Freshness** requires cache mtime ≥ source mtime and, when a `.src` sidecar is
+  present, the same source byte size. Legacy sidecar-less assets retain the
+  mtime-only fallback.
+- **Invalidation** removes every cached kind for old/new relpaths when organize,
+  re-tag, or no-GPS assignment moves or replaces content. This prevents an older
+  source mtime from making a stale poster look fresh.
 - **Atomicity**: every asset is produced via `_atomic_write` — a unique
   `mkstemp` temp in the cache dir, then `os.replace` into place — so a concurrent
   first-request never observes a half-written file. This mirrors the
@@ -106,14 +98,14 @@ Phase 0 `organize` pipeline free of any Pillow/ffmpeg dependency.
 
 ### At scale — generation cap, warm pass, eviction (m-derived-at-scale)
 
-Three additions keep on-demand generation from falling over on a 5–20k-file library
+The current controls keep on-demand generation from falling over on a 5–20k-file library
 (the cache is tiered by `m-cache-tiering-safety`: thumbs/posters/previews on a local
 SSD `cache_dir`, proxies/stitch on `proxy_cache_dir`):
 
-- **Concurrency cap.** A process-wide `threading.BoundedSemaphore`
-  (`DERIVED_MAX_CONCURRENCY = 4`) gates a new `derived._generate(out, source, produce)`
-  through which `_resize_jpeg`/`poster`/`proxy` route their *regeneration* — so a
-  cold-browse request storm can launch at most 4 concurrent Pillow/ffmpeg jobs. A
+- **Concurrency caps.** A process-wide `DERIVED_MAX_CONCURRENCY = 4` semaphore
+  bounds general image generation. HEVC transcodes use a separate
+  `PROXY_MAX_CONCURRENCY = 2` semaphore, so long ffmpeg runs cannot occupy every
+  permit and starve thumbnails/previews/posters. A
   fresh **cache hit returns before acquiring**, so hits stay lock-free; `_generate`
   re-checks `_is_fresh` *under* the permit to drop a lost race. The cap is
   process-wide because `serve` is single-process uvicorn (a brainstorm decision — no
@@ -124,21 +116,23 @@ SSD `cache_dir`, proxies/stitch on `proxy_cache_dir`):
   thumbnails (photos) + posters (videos) for that batch on the local tier, skipping
   fresh/missing sources (resumable). Generation goes through the shared cap, so the
   warm pass **yields to foreground** requests. It is silent (no API route/UI) and
-  kept in its own module so `derived.py` stays DB-free. (Known trade-off: the warm
-  pool reads library originals concurrently with a possible undo/retag — recoverable
-  on Windows since those ops are crash-safe/idempotent/retryable; same pattern as the
-  stitch pool. Adding warm-vs-destructive cancellation is a recorded follow-up.)
+  kept in its own module so `derived.py` stays DB-free.
 - **Local-tier eviction** (`derived.evict_local_cache`). The warm job ends by
-  atime-sweeping the **local** tier (`thumbs`/`previews`/`posters`) down to
+  atime-sweeping the **local** tier (`thumbs`/`previews`/`posters`/`collage`) down to
   `cache_max_gb`, deleting least-recently-accessed first; a locked file
   (`PermissionError`) or one that raced away (`FileNotFoundError`) is tolerated, never
-  fatal. The proxy/stitch tier is **never** auto-evicted (large, written-once; manual
-  purge only).
+  fatal. When `proxy_cache_max_gb` is configured, proxies get their own LRU cap;
+  stitch heroes are never evicted. `clear-derived-cache` clears only the cheap
+  local kinds.
+- **Permanent corruption handling.** High-confidence ffmpeg/Pillow decode failures
+  cache and serve a neutral placeholder for image derivatives. Unrenderable video
+  returns 422, while transient generation failures return 503 and remain retryable.
 
 ## Background jobs (`geosorter.jobs`)
 
-`JobManager` runs `organize` off the request cycle on a `ThreadPoolExecutor(
-max_workers=1)` — only one destructive pass at a time. `submit()` returns a uuid4
+`JobManager` runs destructive/index-mutating work off the request cycle on a
+`ThreadPoolExecutor(max_workers=1)`. Organize, undo, re-tag, no-GPS assignment,
+and rescan therefore cannot execute concurrently. `submit()` returns a uuid4
 job id; per-job state is polled via `status()` (a `dataclasses.replace()` snapshot
 taken under lock). Cancellation is a per-job `threading.Event` wired into
 `run_organize`'s `cancel` predicate, which is polled **between capture groups**
@@ -148,32 +142,30 @@ unprocessed captures in the inbox. This is deliberately **not** FastAPI
 `BackgroundTasks` (those have no id, status, or cancellation). API-triggered jobs
 run with `assume_yes=True` (the interactive first-run gate cannot prompt over HTTP).
 
-The B8 **undo** job (`submit_undo`/`undo_status`/`_run_undo`, `UndoJobState`) is a
-second job kind on the **same** `JobManager` — it shares that one `max_workers=1`
-executor and the cancel-event table, so an organize and an undo can never run
-concurrently against the same library/inbox. Its `cancel` is polled **between
-files**.
+Undo cancellation is polled between files; organize cancellation is polled
+between capture groups. Re-tag, assignment, and rescan have no cancel route. The
+manager permits organize to queue behind organize for the Process Inbox flow, but
+rejects dangerous cross-kind submissions with `WorkerBusy`/HTTP 409.
 
-The B8 **re-tag** job (`submit_retag`/`retag_status`/`_run_retag`, `RetagJobState`)
-is the third kind on the same executor — so organize, undo, and re-tag are mutually
-exclusive (no concurrent index-DB writers). It has **no cancel** (a single-capture
-atomic move; nothing to interrupt). `retag_fn=retag.retag_file` is injectable for
-tests. See the [re-tag section](crash-safe-move-engine.md) for the move model.
+Panorama stitches use a dedicated `max_workers=1` pool, independent of the
+destructive worker. Post-organize warming uses a third single-worker pool.
 
 ## Scalable library feed (conditional GET + scoped gzip, m-library-feed-scale)
 
 The feed is **loaded whole** (no bbox/clustering on the server), so at 5–20k
-features it is an 8–12 MB JSON blob re-fetched on every reload (after
-organize/undo/retag/rescan). Two HTTP-level wins keep that cheap without
+features it can be a multi-megabyte JSON blob revalidated after management
+operations. Two HTTP-level wins keep that cheap without
 server-side pagination:
 
 - **Conditional GET.** `GET /api/library` runs a cheap version probe first and
   short-circuits a matching `If-None-Match` to **`304` before building the feature
-  list**. The weak `ETag` is `W/"lib-<MAX(id)>-<COUNT(*)>-<latsum>-<lonsum>-<stitchsum>"`
+  list**. The weak ETag includes a payload-schema token plus
+  `MAX(id)`, `COUNT(*)`, latitude/longitude sums, stitch status, and stitch projection
   over the organized+geolocated rows. `MAX(id)`+`COUNT(*)` catch add/prune, but the
   **in-place** UPDATEs (`retag.py` moves `lat`/`lon`; `jobs._mark_stitch_status`
-  flips `stitch_status`) leave both unchanged — so the key also folds in
-  microdegree lat/lon sums and a `stitch_status` code sum. **Lesson:** an ETag keyed
+  flips stitch state) leave both unchanged — so the key also folds in
+  microdegree lat/lon sums and stitch codes. The schema token was bumped when
+  `has_track` was added. **Lesson:** an ETag keyed
   only on row identity/count silently 304s in-place edits, leaving the map showing a
   stale marker after a retag; key it on the mutated content too. `idx_files_status_latlon
   (status, lat, lon)` (in `_INDEX_SCHEMA`) serves the probe's row selection.
@@ -197,34 +189,46 @@ row and recomputing `_relpath`.
 ## Source of the GeoJSON
 
 The feed reads the index DB `files` table populated by the
-[organize pipeline](crash-safe-move-engine.md); `lat`/`lon`/`place_string`/
-`local_date`/`codec` come straight from columns written at organize time (see
+[organize pipeline](crash-safe-move-engine.md); location, local time, media,
+capture-kind, rating, and stitch properties come from indexed columns (see
 [capture time & geocoding](capture-time-and-geocoding.md) for how those values are
-derived). The two-database split (decision D24) is unchanged — the API only reads
-the index DB plus, for the codec lookup, the same table.
+derived). `has_track` is calculated from indexed SRT companions. The two-database
+split is unchanged: most API reads use the index DB, while `/api/place-search`
+queries the GeoNames DB.
 
-## Frontend SPA (`frontend/`, B7)
+## Frontend SPA (`frontend/`)
 
-A Vite + React + TypeScript single-page app (`react-map-gl` v8 MapLibre adapter,
+A Vite + React 19 + TypeScript single-page app (`react-map-gl` MapLibre adapter,
 `maplibre-gl`, `supercluster`) consumes the contract above. It builds to
 `src/geosorter/webui` — the dir `create_app` mounts — so it is served same-origin
 by `geosorter serve` (no CORS); the build output is gitignored and produced on
 demand (`npm --prefix frontend run build`). Dev runs the Vite server with `/api`
 proxied to `127.0.0.1:8000`.
 
-Key choices: **OpenFreeMap** hosted vector tiles (no key; the only online
-dependency — photos/GPS stay local; offline pmtiles is a Phase 2 option), and
+Key choices: **OpenFreeMap** hosted vector tiles (no key; the main online
+dependency — photos/GPS stay local), and
 **client-side clustering** with the explicit `supercluster` package in a pure,
 unit-tested module (the `/api/library` feed is loaded whole, so the map — not the
 server — does the clustering; `getClusters(bbox, zoom)` returns only the visible
 clusters/points, keeping DOM marker count low). Pure logic (URL builders,
 clustering, the organize-job polling state machine, marker→files selection) lives
 in side-effect-free modules with Vitest coverage; the React components and the
-visual end-to-end flow are verified by a manual smoke. The lightbox loads photos
+visual end-to-end flow are browser-tested during UI work. The lightbox loads photos
 from `/api/preview` (1080p) and plays videos from `/api/video` (H.264 proxy for
-HEVC); "Process Inbox" drives `POST /api/organize` + status polling.
+HEVC).
 
-**View toggles (B8).** A pure `basemaps.ts` module holds the basemap styles and the
+The current UI adds a virtualized, viewport-scoped file rail; day/month/year
+grouping; newest/oldest sort; photo/video/panorama/hyperlapse filters; a resizable
+desktop rail and snap-height mobile bottom sheet; selective Process Inbox;
+Locations, No-GPS, and Unstitched Panorama panels; administrator-only re-tag,
+assign, undo, rescan, and stitch controls; and retry/error states for failed
+library or job loads.
+
+Videos with `has_track` can draw their SRT route on the map. The viewer becomes a
+draggable picture-in-map player, timestamped track samples move a drone marker in
+sync with playback, and an optional follow mode keeps the map centered on it.
+
+**View toggles.** A pure `basemaps.ts` module holds the basemap styles and the
 heatmap spec: `VECTOR_STYLE` (OpenFreeMap), `SATELLITE_STYLE` (an Esri World Imagery
 **raster** style object with attribution), `HEATMAP_LAYER` (a native MapLibre
 `type:'heatmap'` layer), and `heatmapData(features)` (a GeoJSON `FeatureCollection`).

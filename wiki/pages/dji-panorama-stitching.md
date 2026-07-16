@@ -2,8 +2,8 @@
 title: DJI Panorama Stitching (Hugin)
 tags: [dji, panorama, stitching, hugin, derived-assets, geosorter]
 created: 2026-06-05
-updated: 2026-06-13
-sources: [task:l-panorama-stitch-spike, task:m-panorama-stitch, task:m-fix-panorama-projection-autodetect, task:m-cli-restitch-fix-projection, task:m-fix-wide-pano-stitch-and-failure-ux]
+updated: 2026-07-16
+sources: [src/geosorter/derived.py, src/geosorter/jobs.py, src/geosorter/api.py, frontend/src/components/Lightbox.tsx, task:l-panorama-stitch-spike]
 ---
 
 # DJI Panorama Stitching (Hugin)
@@ -110,9 +110,13 @@ A failed pipeline step, a timeout, or a gate rejection all surface as a single
   lightbox button, generated once, then mtime-cached under
   `.geosorter-cache/stitch/<rel>.jpg` (keyed on the primary tile, like every derived
   asset). Re-tag/re-organize moves the primary → new cache key → regenerates.
+  The lightbox also supports **Re-stitch** with auto, equirectangular, cylindrical,
+  or rectilinear projection selection; an override forces a cold run so an older
+  cached hero cannot shadow the choice.
 - **Dedicated read-only worker pool.** A stitch reads already-organized tiles and
   writes only the cache — strictly **off the crash-safe move path**. It runs on its
-  own `max_workers=1` pool, *separate* from the destructive organize/undo/retag
+  own `max_workers=1` pool, *separate* from the destructive
+  organize/undo/retag/assign/rescan
   worker, so a 7-min stitch never blocks (or waits behind) a destructive job, yet
   stitches still serialize to one at a time (bounding CPU/RAM).
 - **`stitch_status` provenance.** A nullable `files.stitch_status` column
