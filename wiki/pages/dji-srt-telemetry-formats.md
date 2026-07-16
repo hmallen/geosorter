@@ -2,8 +2,8 @@
 title: DJI SRT Telemetry Formats
 tags: [dji, srt, metadata, gps, geosorter]
 created: 2026-05-31
-updated: 2026-05-31
-sources: [task:h-extract-srt-codec]
+updated: 2026-07-16
+sources: [src/geosorter/srt_parser.py, src/geosorter/api.py, frontend/src/flightTrack.ts, task:h-extract-srt-codec]
 ---
 
 # DJI SRT Telemetry Formats
@@ -71,3 +71,34 @@ then `paren`) against each cue, returns the first valid fix, and flags
 the sibling `.SRT` only for videos lacking embedded EXIF GPS, and retains both
 `exif_gps` and `srt_gps` for audit. The index DB's `files.gps_source` column
 records provenance (`exif` | `srt` | `srt_partial` | `none`).
+
+## Full flight tracks and playback synchronization
+
+The same parser now exposes the complete usable route:
+
+- `parse_srt_track` returns every valid fix in frame order.
+- `parse_srt_track_samples` also retains each cue's subtitle-clock time.
+- The payload family is pinned by the first matching cue, so a malformed file that
+  mixes bracket and paren syntax cannot interleave differently ordered coordinates.
+- Missing or unreadable sidecars return an empty list rather than failing media
+  playback.
+
+`GET /api/track/{file_id}` finds the indexed SRT companion and returns:
+
+```json
+{
+  "points": [[-105.1, 39.7]],
+  "samples": [{"time_s": 0.0, "lon": -105.1, "lat": 39.7}]
+}
+```
+
+Both arrays use GeoJSON longitude-first order and are independently downsampled to
+at most 500 entries while retaining the first and final fix. `/api/library` sets
+`has_track=true` for videos with an SRT companion so the viewer only offers the
+flight-path control when a route may exist.
+
+In the browser, selecting the flight path draws a cased line and takeoff marker,
+moves the video into a draggable picture-in-map player, and synchronizes a moving
+drone marker to `video.currentTime`. Follow mode keeps the map centered on that
+marker. A sidecar without enough timestamped samples still draws the static route
+but reports that timeline synchronization is unavailable.

@@ -2,7 +2,7 @@
 title: DJI MISC Catalog Databases
 tags: [dji, metadata, sqlite, ratings, geosorter]
 created: 2026-06-04
-updated: 2026-06-04
+updated: 2026-07-16
 sources: [task:m-dji-catalog-ratings]
 ---
 
@@ -76,5 +76,5 @@ via `/api/media`. Ratings are still carried in the `/api/library` GeoJSON
 (`star_rating`) and stored in the DB, but as of `m-hide-star-rating-ui` they are no
 longer displayed in the frontend (the read-only star widget was removed; the data is
 retained for future use). See also
-[DJI SRT Telemetry Formats](pages/dji-srt-telemetry-formats.md) for the other
+[DJI SRT Telemetry Formats](dji-srt-telemetry-formats.md) for the other
 DJI-format reader.
