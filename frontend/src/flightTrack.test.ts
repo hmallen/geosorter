@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { trackBBox, trackLine } from './flightTrack'
+import { clampPipPosition, positionAtTime, trackBBox, trackLine } from './flightTrack'
 
 describe('trackBBox', () => {
   it('returns the [west, south, east, north] envelope of the points', () => {
@@ -28,5 +28,57 @@ describe('trackLine', () => {
       geometry: { type: 'LineString', coordinates: pts },
       properties: {},
     })
+  })
+})
+
+describe('positionAtTime', () => {
+  const samples = [
+    { time_s: 1, lon: -105, lat: 40 },
+    { time_s: 3, lon: -103, lat: 42 },
+    { time_s: 5, lon: -101, lat: 44 },
+  ]
+
+  it('hides before GPS lock, interpolates, and holds the final fix', () => {
+    expect(positionAtTime(samples, 0.99)).toBeNull()
+    expect(positionAtTime(samples, 2)).toEqual([-104, 41])
+    expect(positionAtTime(samples, 8)).toEqual([-101, 44])
+  })
+
+  it('returns exact samples while seeking', () => {
+    expect(positionAtTime(samples, 1)).toEqual([-105, 40])
+    expect(positionAtTime(samples, 3)).toEqual([-103, 42])
+  })
+
+  it('uses the last fix at a duplicate timestamp', () => {
+    const duplicate = [
+      { time_s: 1, lon: 10, lat: 20 },
+      { time_s: 1, lon: 11, lat: 21 },
+      { time_s: 2, lon: 12, lat: 22 },
+    ]
+    expect(positionAtTime(duplicate, 1)).toEqual([11, 21])
+    expect(positionAtTime(duplicate, 1.5)).toEqual([11.5, 21.5])
+  })
+
+  it('returns null for empty telemetry', () => {
+    expect(positionAtTime([], 10)).toBeNull()
+  })
+})
+
+describe('clampPipPosition', () => {
+  it('clamps every edge inside the viewport', () => {
+    const pip = { width: 320, height: 200 }
+    const viewport = { width: 1000, height: 700 }
+    expect(clampPipPosition({ x: -50, y: -10 }, pip, viewport)).toEqual({ x: 12, y: 12 })
+    expect(clampPipPosition({ x: 900, y: 650 }, pip, viewport)).toEqual({ x: 668, y: 488 })
+  })
+
+  it('leaves an in-bounds drag unchanged', () => {
+    expect(
+      clampPipPosition(
+        { x: 200, y: 100 },
+        { width: 320, height: 200 },
+        { width: 1000, height: 700 },
+      ),
+    ).toEqual({ x: 200, y: 100 })
   })
 })

@@ -3,6 +3,7 @@
 
 import type { LineLayerSpecification } from 'maplibre-gl'
 import type { BBox } from './clusters'
+import type { FlightTrackSample } from './types'
 
 // Dark casing under a brand-teal line: readable on both the dark vector
 // basemap and bright satellite imagery (same rationale as the pin ring).
@@ -58,5 +59,58 @@ export function trackLine(points: [number, number][]): {
     type: 'Feature',
     geometry: { type: 'LineString', coordinates: points },
     properties: {},
+  }
+}
+
+// Resolve the drone's map position at a video timestamp. An upper-bound binary
+// search intentionally selects the LAST sample at an exact duplicate timestamp,
+// then interpolates toward the next later fix.
+export function positionAtTime(
+  samples: FlightTrackSample[],
+  timeS: number,
+): [number, number] | null {
+  if (samples.length === 0 || timeS < samples[0].time_s) return null
+  const last = samples[samples.length - 1]
+  if (timeS >= last.time_s) return [last.lon, last.lat]
+
+  let low = 0
+  let high = samples.length
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    if (samples[mid].time_s <= timeS) low = mid + 1
+    else high = mid
+  }
+  const left = samples[Math.max(0, low - 1)]
+  const right = samples[low]
+  if (!right || right.time_s <= left.time_s) return [left.lon, left.lat]
+  const ratio = (timeS - left.time_s) / (right.time_s - left.time_s)
+  return [
+    left.lon + (right.lon - left.lon) * ratio,
+    left.lat + (right.lat - left.lat) * ratio,
+  ]
+}
+
+export interface PipPosition {
+  x: number
+  y: number
+}
+
+export interface RectSize {
+  width: number
+  height: number
+}
+
+// Keep a dragged PiP wholly inside the viewport with a small reachable margin.
+export function clampPipPosition(
+  position: PipPosition,
+  pip: RectSize,
+  viewport: RectSize,
+  margin = 12,
+): PipPosition {
+  const maxX = Math.max(margin, viewport.width - pip.width - margin)
+  const maxY = Math.max(margin, viewport.height - pip.height - margin)
+  return {
+    x: Math.min(maxX, Math.max(margin, position.x)),
+    y: Math.min(maxY, Math.max(margin, position.y)),
   }
 }

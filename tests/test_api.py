@@ -471,25 +471,53 @@ def test_track_returns_lon_lat_points(tmp_path):
     client, fid = _track_client(tmp_path)
     resp = client.get(f"/api/track/{fid}")
     assert resp.status_code == 200
-    points = resp.json()["points"]
+    payload = resp.json()
+    points = payload["points"]
     # The fixture's first frame is pre-lock (0,0) and must be skipped; the valid
     # fixes are around (lat 14.798, lon -65.691) — points are [lon, lat].
     assert len(points) >= 2
     for lon, lat in points:
         assert -66.0 < lon < -65.0
         assert 14.0 < lat < 15.0
+    assert payload["samples"] == [
+        {"time_s": 0.033, "lon": -65.69145, "lat": 14.79824},
+        {"time_s": 0.066, "lon": -65.691449, "lat": 14.79824},
+    ]
 
 
 def test_track_video_without_srt_is_empty(tmp_path):
     client, fid = _track_client(tmp_path, with_srt=False)
     resp = client.get(f"/api/track/{fid}")
     assert resp.status_code == 200
-    assert resp.json() == {"points": []}
+    assert resp.json() == {"points": [], "samples": []}
 
 
 def test_track_unknown_id_404(tmp_path):
     client, _ = _track_client(tmp_path)
     assert client.get("/api/track/999999").status_code == 404
+
+
+def test_track_downsampling_preserves_both_endpoints(tmp_path, monkeypatch):
+    client, fid = _track_client(tmp_path)
+    fixes = [(float(i), float(-i)) for i in range(600)]
+    samples = [
+        api.srt_parser.SrtTrackSample(time_s=float(i), lat=float(i), lon=float(-i))
+        for i in range(600)
+    ]
+    monkeypatch.setattr(api.srt_parser, "parse_srt_track", lambda _path: fixes)
+    monkeypatch.setattr(api.srt_parser, "parse_srt_track_samples", lambda _path: samples)
+
+    payload = client.get(f"/api/track/{fid}").json()
+    assert len(payload["points"]) == 500
+    assert payload["points"][0] == [0.0, 0.0]
+    assert payload["points"][-1] == [-599.0, 599.0]
+    assert len(payload["samples"]) == 500
+    assert payload["samples"][0]["time_s"] == 0.0
+    assert payload["samples"][-1] == {
+        "time_s": 599.0,
+        "lon": -599.0,
+        "lat": 599.0,
+    }
 
 
 def test_library_exposes_has_track(tmp_path):
