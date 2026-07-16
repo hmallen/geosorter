@@ -1,5 +1,5 @@
 // Typed helpers for the B6 HTTP API: media-URL builders + the library fetch.
-import type { LibraryFC, PlaceResult, QuarantineItem } from './types'
+import type { FlightTrack, LibraryFC, PlaceResult, QuarantineItem } from './types'
 import type { InboxGroup } from './inboxTree'
 
 // Encode each path segment but preserve the separators, so a library-relative
@@ -54,18 +54,21 @@ export async function fetchFrames(
   return ((await resp.json()) as { frames: string[] }).frames
 }
 
-// Flight track: a video's GPS path parsed from its SRT telemetry sidecar,
-// as [lon, lat] pairs (GeoJSON order), downsampled server-side. Empty when the
-// video has no sidecar or the sidecar holds no valid fixes.
+// Flight track: the legacy route points plus SRT-clock-aligned samples used to
+// synchronize the active drone marker with video.currentTime.
 export const trackUrl = (id: number): string => `/api/track/${id}`
 
 export async function fetchTrack(
   id: number,
   fetchFn: typeof fetch = fetch,
-): Promise<[number, number][]> {
+): Promise<FlightTrack> {
   const resp = await fetchFn(trackUrl(id))
   if (!resp.ok) throw new Error(`track fetch failed: ${resp.status}`)
-  return ((await resp.json()) as { points: [number, number][] }).points
+  const payload = (await resp.json()) as Partial<FlightTrack>
+  return {
+    points: payload.points ?? [],
+    samples: payload.samples ?? [],
+  }
 }
 
 // Panorama stitched hero (B13): the cached 360 equirectangular for a panorama

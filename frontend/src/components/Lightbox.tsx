@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { collageUrl, fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
 import { captionInfo } from '../captionInfo'
+import { clampPipPosition, type PipPosition } from '../flightTrack'
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature } from '../types'
@@ -23,8 +24,14 @@ interface Props {
   // still VIEWED by everyone; only generating/re-stitching is gated.
   onStartStitch?: (fileId: number, opts?: { force?: boolean; projection?: string }) => void
   // Flight-track overlay: offered for a video with an SRT sidecar (has_track).
-  // App closes the lightbox and draws the path on the map.
+  // App fetches the path before switching this same video element into PiP mode.
   onShowTrack?: (f: LibraryFeature) => void
+  trackMode: boolean
+  trackActive: boolean
+  trackLoading: boolean
+  trackError: string | null
+  onPlaybackTime: (timeS: number) => void
+  onExpand: () => void
 }
 
 export default function Lightbox({
@@ -35,8 +42,19 @@ export default function Lightbox({
   stitchByFile,
   onStartStitch,
   onShowTrack,
+  trackMode,
+  trackActive,
+  trackLoading,
+  trackError,
+  onPlaybackTime,
+  onExpand,
 }: Props) {
   const f = files[index]
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const pipRef = useRef<HTMLDivElement | null>(null)
+  const playbackCallback = useRef(onPlaybackTime)
+  const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
+  const [pipPosition, setPipPosition] = useState<PipPosition | null>(null)
   // Source-frame gallery: a hyperlapse render's frames (B10) or a panorama's tiles
   // (B12) are the only such entity, fetched on demand and shown as a thumbnail grid.
   const [frames, setFrames] = useState<string[] | null>(null)
@@ -102,6 +120,124 @@ export default function Lightbox({
     setProjChoice('')
   }, [fileId])
 
+  useEffect(() => {
+    playbackCallback.current = onPlaybackTime
+  }, [onPlaybackTime])
+
+  // Publish video.currentTime immediately for seeks/pause and at ~10 Hz while
+  // playing. requestAnimationFrame is used only as a scheduler; the 100 ms gate
+  // avoids driving the full app at display refresh rate.
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !trackMode) return
+    let frame = 0
+    let lastPublished = -Infinity
+
+    const publish = () => playbackCallback.current(video.currentTime)
+    const tick = (now: number) => {
+      if (now - lastPublished >= 100) {
+        lastPublished = now
+        publish()
+      }
+      if (!video.paused && !video.ended) frame = requestAnimationFrame(tick)
+      else frame = 0
+    }
+    const start = () => {
+      publish()
+      if (!frame) frame = requestAnimationFrame(tick)
+    }
+    const stop = () => {
+      if (frame) cancelAnimationFrame(frame)
+      frame = 0
+      publish()
+    }
+    const seek = () => publish()
+
+    video.addEventListener('play', start)
+    video.addEventListener('pause', stop)
+    video.addEventListener('ended', stop)
+    video.addEventListener('seeking', seek)
+    video.addEventListener('seeked', seek)
+    video.addEventListener('timeupdate', seek)
+    video.addEventListener('loadedmetadata', seek)
+    publish()
+    if (!video.paused && !video.ended) start()
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      video.removeEventListener('play', start)
+      video.removeEventListener('pause', stop)
+      video.removeEventListener('ended', stop)
+      video.removeEventListener('seeking', seek)
+      video.removeEventListener('seeked', seek)
+      video.removeEventListener('timeupdate', seek)
+      video.removeEventListener('loadedmetadata', seek)
+    }
+  }, [trackMode, fileId])
+
+  // Initial PiP placement uses the map's available desktop width (left of the
+  // resizable file rail); dragging itself is clamped to the full viewport.
+  useLayoutEffect(() => {
+    if (!trackMode) return
+    const pip = pipRef.current
+    if (!pip) return
+    const place = () => {
+      const rect = pip.getBoundingClientRect()
+      const panel = window.innerWidth >= 1024
+        ? document.querySelector<HTMLElement>('.panel')
+        : null
+      const availableRight = panel?.getBoundingClientRect().left ?? window.innerWidth
+      const chipBottom =
+        document.querySelector<HTMLElement>('.track-chip')?.getBoundingClientRect().bottom ?? 116
+      setPipPosition((current) => {
+        const candidate = current ?? {
+          x: availableRight - rect.width - 16,
+          y: chipBottom + 12,
+        }
+        return clampPipPosition(
+          { ...candidate, y: Math.max(candidate.y, chipBottom + 12) },
+          { width: rect.width, height: rect.height },
+          { width: window.innerWidth, height: window.innerHeight },
+        )
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [trackMode])
+
+  const beginPipDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pip = pipRef.current
+    if (!pip) return
+    const rect = pip.getBoundingClientRect()
+    drag.current = {
+      pointerId: e.pointerId,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const movePip = (e: React.PointerEvent<HTMLDivElement>) => {
+    const active = drag.current
+    const pip = pipRef.current
+    if (!active || active.pointerId !== e.pointerId || !pip) return
+    const rect = pip.getBoundingClientRect()
+    setPipPosition(
+      clampPipPosition(
+        { x: e.clientX - active.offsetX, y: e.clientY - active.offsetY },
+        { width: rect.width, height: rect.height },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    )
+  }
+
+  const endPipDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointerId === e.pointerId) drag.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  }
+
   // Re-attach to an in-flight stitch on (re)open: if the library reports this
   // panorama as still 'pending' (e.g. after a page refresh) and we are not already
   // tracking it, kick the job — the server dedups to the running job and we resume
@@ -146,12 +282,15 @@ export default function Lightbox({
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
       if (e.key === 'Escape') onClose()
-      else if (e.key === 'ArrowLeft') onIndex((index - 1 + files.length) % files.length)
-      else if (e.key === 'ArrowRight') onIndex((index + 1) % files.length)
+      else if (!trackMode && e.key === 'ArrowLeft') {
+        onIndex((index - 1 + files.length) % files.length)
+      } else if (!trackMode && e.key === 'ArrowRight') {
+        onIndex((index + 1) % files.length)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, files.length, onIndex, onClose])
+  }, [index, files.length, onIndex, onClose, trackMode])
 
   if (!f) return null
   const prev = () => onIndex((index - 1 + files.length) % files.length)
@@ -159,15 +298,61 @@ export default function Lightbox({
 
   return (
     <div
-      className="lightbox"
-      onClick={onClose}
+      className={`lightbox${trackMode ? ' lightbox--pip' : ''}`}
+      onClick={trackMode ? undefined : onClose}
       role="dialog"
-      aria-modal="true"
+      aria-modal={trackMode ? undefined : 'true'}
       aria-label={f.properties.filename}
     >
-      <button className="lightbox-close" onClick={onClose} aria-label="Close">×</button>
-      <div className="lightbox-body" onClick={(e) => e.stopPropagation()}>
-        <div className="lightbox-caption">{captionInfo(f.properties)}</div>
+      {!trackMode && (
+        <button className="lightbox-close" onClick={onClose} aria-label="Close">×</button>
+      )}
+      <div
+        ref={pipRef}
+        className="lightbox-body"
+        style={
+          trackMode && pipPosition
+            ? { left: pipPosition.x, top: pipPosition.y }
+            : undefined
+        }
+        onClick={(e) => e.stopPropagation()}
+      >
+        {trackMode && (
+          <div
+            className="pip-header"
+            onPointerDown={beginPipDrag}
+            onPointerMove={movePip}
+            onPointerUp={endPipDrag}
+            onPointerCancel={endPipDrag}
+          >
+            <span className="pip-title" title={f.properties.filename}>
+              {f.properties.filename}
+            </span>
+            <div className="pip-actions">
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={onExpand}
+                aria-label="Expand video"
+                title="Expand video"
+              >
+                ⛶
+              </button>
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={onClose}
+                aria-label="Close video and flight track"
+                title="Close video and flight track"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+        {!trackMode && (
+          <div className="lightbox-caption">{captionInfo(f.properties)}</div>
+        )}
         <div className="lightbox-media">
           {frameZoom ? (
             <LoadingImage key={frameZoom} src={previewUrl(frameZoom)} alt="source frame" />
@@ -189,10 +374,12 @@ export default function Lightbox({
             )
           ) : f.properties.media_type === 'video' ? (
             <video
+              ref={videoRef}
               src={videoUrl(f.properties.path)}
               poster={posterUrl(f.properties.path)}
               controls
               autoPlay
+              playsInline
             />
           ) : isPanorama ? (
             // Instant raw-tile collage placeholder: shown immediately while the
@@ -246,14 +433,24 @@ export default function Lightbox({
           </div>
         )}
 
-        {onShowTrack && f.properties.media_type === 'video' && f.properties.has_track && (
-          <button
-            className="frames-toggle"
-            onClick={() => onShowTrack(f)}
-            title="Close the viewer and draw this flight's GPS path on the map"
-          >
-            ✈ Show flight path on map
-          </button>
+        {!trackMode && onShowTrack && f.properties.media_type === 'video' && f.properties.has_track && (
+          <>
+            <button
+              className="frames-toggle"
+              onClick={() => onShowTrack(f)}
+              disabled={trackLoading}
+              title="Show this video over its synchronized GPS flight path"
+            >
+              {trackLoading
+                ? 'Loading flight path…'
+                : trackActive
+                  ? '✈ Return to flight map'
+                  : '✈ Show flight path on map'}
+            </button>
+            {trackError && (
+              <div className="track-inline-error" role="alert">{trackError}</div>
+            )}
+          </>
         )}
 
         {isFrameGallery && (
@@ -281,11 +478,13 @@ export default function Lightbox({
           </div>
         )}
 
-        <div className="lightbox-nav">
-          <button onClick={prev} aria-label="Previous">‹</button>
-          <span>{f.properties.filename}</span>
-          <button onClick={next} aria-label="Next">›</button>
-        </div>
+        {!trackMode && (
+          <div className="lightbox-nav">
+            <button onClick={prev} aria-label="Previous">‹</button>
+            <span>{f.properties.filename}</span>
+            <button onClick={next} aria-label="Next">›</button>
+          </div>
+        )}
       </div>
     </div>
   )
