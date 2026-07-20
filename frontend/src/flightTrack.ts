@@ -100,6 +100,10 @@ export interface RectSize {
   height: number
 }
 
+export const PIP_MIN_WIDTH = 280
+export const PIP_ASPECT_RATIO = 16 / 9
+export const PIP_CHROME_HEIGHT = 50
+
 // Keep a dragged PiP wholly inside the viewport with a small reachable margin.
 export function clampPipPosition(
   position: PipPosition,
@@ -113,4 +117,20 @@ export function clampPipPosition(
     x: Math.min(maxX, Math.max(margin, position.x)),
     y: Math.min(maxY, Math.max(margin, position.y)),
   }
+}
+
+// Keep a resized PiP inside the viewport while preserving the video's aspect
+// ratio. The fixed chrome height accounts for the title bar and resize grip.
+export function clampPipWidth(
+  width: number,
+  position: PipPosition,
+  viewport: RectSize,
+  margin = 12,
+): number {
+  const maxByWidth = viewport.width - position.x - margin
+  const availableVideoHeight = viewport.height - position.y - margin - PIP_CHROME_HEIGHT
+  const maxByHeight = availableVideoHeight * PIP_ASPECT_RATIO
+  const maxWidth = Math.max(0, Math.min(maxByWidth, maxByHeight))
+  const effectiveMin = Math.min(PIP_MIN_WIDTH, maxWidth)
+  return Math.min(maxWidth, Math.max(effectiveMin, width))
 }

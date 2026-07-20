@@ -1,7 +1,12 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { collageUrl, fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
 import { captionInfo } from '../captionInfo'
-import { clampPipPosition, type PipPosition } from '../flightTrack'
+import {
+  PIP_ASPECT_RATIO,
+  clampPipPosition,
+  clampPipWidth,
+  type PipPosition,
+} from '../flightTrack'
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature } from '../types'
@@ -54,7 +59,14 @@ export default function Lightbox({
   const pipRef = useRef<HTMLDivElement | null>(null)
   const playbackCallback = useRef(onPlaybackTime)
   const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
+  const resize = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    startWidth: number
+  } | null>(null)
   const [pipPosition, setPipPosition] = useState<PipPosition | null>(null)
+  const [pipWidth, setPipWidth] = useState<number | null>(null)
   // Source-frame gallery: a hyperlapse render's frames (B10) or a panorama's tiles
   // (B12) are the only such entity, fetched on demand and shown as a thumbnail grid.
   const [frames, setFrames] = useState<string[] | null>(null)
@@ -238,6 +250,65 @@ export default function Lightbox({
     }
   }
 
+  const beginPipResize = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const pip = pipRef.current
+    if (!pip) return
+    const rect = pip.getBoundingClientRect()
+    resize.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startWidth: rect.width,
+    }
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const movePipResize = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const active = resize.current
+    const pip = pipRef.current
+    if (!active || active.pointerId !== e.pointerId || !pip) return
+    const deltaX = e.clientX - active.startX
+    const deltaFromY = (e.clientY - active.startY) * PIP_ASPECT_RATIO
+    const delta = Math.abs(deltaX) >= Math.abs(deltaFromY) ? deltaX : deltaFromY
+    const rect = pip.getBoundingClientRect()
+    setPipWidth(
+      clampPipWidth(
+        active.startWidth + delta,
+        { x: rect.left, y: rect.top },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    )
+  }
+
+  const endPipResize = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (resize.current?.pointerId === e.pointerId) resize.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  }
+
+  const resizePipByKeyboard = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const pip = pipRef.current
+    if (!pip) return
+    const direction =
+      e.key === 'ArrowRight' || e.key === 'ArrowDown'
+        ? 1
+        : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+          ? -1
+          : 0
+    if (!direction) return
+    e.preventDefault()
+    const rect = pip.getBoundingClientRect()
+    setPipWidth(
+      clampPipWidth(
+        rect.width + direction * 24,
+        { x: rect.left, y: rect.top },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    )
+  }
+
   // Re-attach to an in-flight stitch on (re)open: if the library reports this
   // panorama as still 'pending' (e.g. after a page refresh) and we are not already
   // tracking it, kick the job — the server dedups to the running job and we resume
@@ -311,8 +382,11 @@ export default function Lightbox({
         ref={pipRef}
         className="lightbox-body"
         style={
-          trackMode && pipPosition
-            ? { left: pipPosition.x, top: pipPosition.y }
+          trackMode
+            ? {
+                ...(pipPosition ? { left: pipPosition.x, top: pipPosition.y } : {}),
+                ...(pipWidth !== null ? { width: pipWidth } : {}),
+              }
             : undefined
         }
         onClick={(e) => e.stopPropagation()}
@@ -397,6 +471,19 @@ export default function Lightbox({
             />
           )}
         </div>
+        {trackMode && (
+          <button
+            type="button"
+            className="pip-resize-handle"
+            aria-label="Resize video window"
+            title="Drag to resize video window"
+            onPointerDown={beginPipResize}
+            onPointerMove={movePipResize}
+            onPointerUp={endPipResize}
+            onPointerCancel={endPipResize}
+            onKeyDown={resizePipByKeyboard}
+          />
+        )}
 
         {stitchable && !frameZoom && onStartStitch && (
           <div className="stitch-controls">
