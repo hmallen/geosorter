@@ -23,6 +23,10 @@ export interface FeatureProps {
   // drawable via GET /api/track/{id}. Optional: absent on quarantine previews
   // and payloads predating the field.
   has_track?: boolean
+  // Favorited (persisted by content hash server-side). Optional: absent on
+  // quarantine previews and payloads predating the field. Distinct from
+  // star_rating (the DJI in-app rating) — this is the app's own heart toggle.
+  is_favorite?: boolean
   path: string // library-relative POSIX path used to build media URLs
 }
 
@@ -41,11 +45,20 @@ export interface FlightTrackSample {
   time_s: number
   lon: number
   lat: number
+  // Height in metres from the same SRT cue, or null/absent when that frame
+  // carries no altitude token. Read against the track's `altitudeRef`.
+  alt?: number | null
 }
+
+// Datum an altitude is measured against: above the takeoff point, or barometric
+// mean sea level. The two differ by the launch site's elevation, so a readout
+// must say which one it shows.
+export type AltitudeRef = 'relative' | 'absolute'
 
 export interface FlightTrack {
   points: [number, number][]
   samples: FlightTrackSample[]
+  altitudeRef: AltitudeRef | null
 }
 
 // One no-GPS (quarantined) capture awaiting a manual location (GET /api/quarantine).
@@ -59,6 +72,20 @@ export interface QuarantineItem {
   capture_kind: 'hyperlapse' | 'panorama' | null
   frame_count: number | null
   path: string // library-relative POSIX path (still under _no-gps/)
+}
+
+// One inbox capture skipped as a duplicate of an already-organized file
+// (GET /api/duplicates). With relocate_duplicates off these pile up in the inbox;
+// the Duplicates panel lists them and Dismiss moves the group to _duplicates/.
+export interface DuplicateItem {
+  id: number
+  filename: string
+  source_path: string // inbox-relative POSIX path of the primary
+  matched_path: string | null // library-relative path of the match, null if it died
+  matched_file_id: number | null
+  sha256: string
+  first_seen_at: string
+  missing: boolean // source file no longer on disk (dismiss just deletes the row)
 }
 
 // One offline forward place-name search match (GET /api/place-search): the user

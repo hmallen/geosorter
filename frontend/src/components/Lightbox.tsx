@@ -31,6 +31,13 @@ interface Props {
   // Flight-track overlay: offered for a video with an SRT sidecar (has_track).
   // App fetches the path before switching this same video element into PiP mode.
   onShowTrack?: (f: LibraryFeature) => void
+  // Video favorites: the CURRENT file's effective favorite state, computed in App
+  // (effectiveFavorite over the live features + optimistic overrides — this
+  // component stays dumb; its `files` are a stale snapshot).
+  isFavorite?: boolean
+  // Admin-gated heart toggle (like re-tag): undefined hides the control. Only
+  // offered on videos per the feature request; `next` is the desired state.
+  onToggleFavorite?: (id: number, next: boolean) => void
   trackMode: boolean
   trackActive: boolean
   trackLoading: boolean
@@ -47,6 +54,8 @@ export default function Lightbox({
   stitchByFile,
   onStartStitch,
   onShowTrack,
+  isFavorite,
+  onToggleFavorite,
   trackMode,
   trackActive,
   trackLoading,
@@ -520,24 +529,41 @@ export default function Lightbox({
           </div>
         )}
 
-        {!trackMode && onShowTrack && f.properties.media_type === 'video' && f.properties.has_track && (
-          <>
-            <button
-              className="frames-toggle"
-              onClick={() => onShowTrack(f)}
-              disabled={trackLoading}
-              title="Show this video over its synchronized GPS flight path"
-            >
-              {trackLoading
-                ? 'Loading flight path…'
-                : trackActive
-                  ? '✈ Return to flight map'
-                  : '✈ Show flight path on map'}
-            </button>
+        {/* Video actions row: favorite toggle + the flight-path entry point. Both
+            are chrome, so the whole row is hidden once the viewer is docked as a
+            PiP over the map (trackMode). */}
+        {!trackMode &&
+          f.properties.media_type === 'video' &&
+          (onToggleFavorite || (onShowTrack && f.properties.has_track)) && (
+          <div className="lightbox-actions">
+            {onToggleFavorite && (
+              <button
+                className={`frames-toggle fav-toggle${isFavorite ? ' fav-toggle--on' : ''}`}
+                onClick={() => onToggleFavorite(f.properties.id, !isFavorite)}
+                aria-pressed={!!isFavorite}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {isFavorite ? '♥ Favorited' : '♡ Favorite'}
+              </button>
+            )}
+            {onShowTrack && f.properties.has_track && (
+              <button
+                className="frames-toggle"
+                onClick={() => onShowTrack(f)}
+                disabled={trackLoading}
+                title="Show this video over its synchronized GPS flight path"
+              >
+                {trackLoading
+                  ? 'Loading flight path…'
+                  : trackActive
+                    ? '✈ Return to flight map'
+                    : '✈ Show flight path on map'}
+              </button>
+            )}
             {trackError && (
               <div className="track-inline-error" role="alert">{trackError}</div>
             )}
-          </>
+          </div>
         )}
 
         {isFrameGallery && (

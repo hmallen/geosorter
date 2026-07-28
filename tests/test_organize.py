@@ -1,5 +1,7 @@
 """Tests for the organize pipeline (scan → move → quarantine → report)."""
 
+import hashlib
+import json
 import os
 import shutil
 from dataclasses import replace
@@ -385,6 +387,133 @@ def test_relocated_duplicate_suffixes_on_collision(tmp_path):
     )
     assert (inbox / "_duplicates" / "d" / "DJI_0002.JPG").exists()
     assert (inbox / "_duplicates" / "d" / "DJI_0002_2.JPG").exists()
+
+
+def test_duplicate_relocation_off_records_pending_row(tmp_path):
+    # relocate_duplicates off: the skipped duplicate stays in the inbox AND is
+    # persisted in the duplicates table (source, hash, companions, matched library
+    # row) so the review panel can see and drain the backlog.
+    cfg, inbox, _library = _setup(tmp_path)
+    cfg = replace(cfg, relocate_duplicates=False)
+    _add(inbox, "DJI_0001.JPG", b"same-content")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    prim = _add(inbox, "card/DJI_0002.JPG", b"same-content")
+    dng = _add(inbox, "card/DJI_0002.DNG", b"raw-bytes")
+    report = organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0002.JPG": _md()})
+    )
+    assert report.duplicates_skipped == 1
+    assert prim.exists()  # left in place, only recorded
+    conn = _index(cfg)
+    try:
+        rows = conn.execute(
+            "SELECT source_path, sha256, companion_paths, matched_file_id, "
+            "matched_dest_path, batch_id, first_seen_at FROM duplicates"
+        ).fetchall()
+        matched = conn.execute(
+            "SELECT id, dest_path FROM files WHERE status='organized'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    src, sha, companions_json, mid, mdest, batch, first_seen = rows[0]
+    assert src == str(prim)
+    assert sha == hashlib.sha256(b"same-content").hexdigest()
+    assert json.loads(companions_json) == [str(dng)]
+    assert mid == matched[0]
+    assert mdest == organize._strip(matched[1])
+    assert batch == report.batch_id
+    assert first_seen  # stamped by the table default
+
+
+def test_duplicate_record_is_idempotent_across_runs(tmp_path):
+    # A second run re-detects the same inbox duplicate: the row is upserted
+    # (same id, batch refreshed), never duplicated.
+    cfg, inbox, _library = _setup(tmp_path)
+    cfg = replace(cfg, relocate_duplicates=False)
+    _add(inbox, "DJI_0001.JPG", b"same-content")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    _add(inbox, "DJI_0002.JPG", b"same-content")
+    factory = _factory({"DJI_0002.JPG": _md()})
+    organize.run_organize(cfg, assume_yes=True, extractor_factory=factory)
+    conn = _index(cfg)
+    try:
+        first_id = conn.execute("SELECT id FROM duplicates").fetchone()[0]
+    finally:
+        conn.close()
+    second = organize.run_organize(cfg, assume_yes=True, extractor_factory=factory)
+    assert second.duplicates_skipped == 1
+    conn = _index(cfg)
+    try:
+        rows = conn.execute("SELECT id, batch_id FROM duplicates").fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    assert rows[0][0] == first_id  # upsert kept the row (and its first_seen_at)
+    assert rows[0][1] == second.batch_id  # ...but refreshed the volatile fields
+
+
+def test_duplicate_relocation_on_prunes_pending_row(tmp_path):
+    # With relocation ON the physical move to _duplicates/ is the record: no row
+    # is left behind, and a stale row from a relocate-off era is pruned.
+    cfg, inbox, _library = _setup(tmp_path)
+    off = replace(cfg, relocate_duplicates=False)
+    _add(inbox, "DJI_0001.JPG", b"dup-bytes")
+    organize.run_organize(
+        off, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    _add(inbox, "DJI_0002.JPG", b"dup-bytes")
+    factory = _factory({"DJI_0002.JPG": _md()})
+    organize.run_organize(off, assume_yes=True, extractor_factory=factory)
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM duplicates").fetchone()[0] == 1
+    finally:
+        conn.close()
+    # Flip relocation on (the _setup default): the dup moves out and the row dies.
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=factory)
+    assert report.duplicates_relocated == 1
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM duplicates").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_import_after_undo_prunes_stale_duplicate_row(tmp_path):
+    # When the matched library file is undone (files row gone), the former
+    # duplicate imports normally on the next run — and its stale pending row
+    # must be pruned with it.
+    cfg, inbox, _library = _setup(tmp_path)
+    cfg = replace(cfg, relocate_duplicates=False)
+    _add(inbox, "DJI_0001.JPG", b"undone-bytes")
+    organize.run_organize(
+        cfg, assume_yes=True, extractor_factory=_factory({"DJI_0001.JPG": _md()})
+    )
+    _add(inbox, "DJI_0002.JPG", b"undone-bytes")
+    factory = _factory({"DJI_0002.JPG": _md()})
+    organize.run_organize(cfg, assume_yes=True, extractor_factory=factory)
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM duplicates").fetchone()[0] == 1
+        # Undo-style deletion of the matched library rows: the sha match is gone
+        # (real undo removes the moves rows with the files rows).
+        conn.execute("DELETE FROM moves")
+        conn.execute("DELETE FROM files")
+        conn.commit()
+    finally:
+        conn.close()
+    report = organize.run_organize(cfg, assume_yes=True, extractor_factory=factory)
+    assert report.organized == 1
+    conn = _index(cfg)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM duplicates").fetchone()[0] == 0
+    finally:
+        conn.close()
 
 
 def test_collision_different_content_gets_suffix(tmp_path, monkeypatch):

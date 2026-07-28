@@ -36,8 +36,9 @@ def test_bracket_real_first_fix():
 
 
 def test_phantom_paren_lonlat_order():
-    # Variant 2 (synthetic): Phantom OSD GPS(lon,lat,alt) — longitude is FIRST.
-    # The parser must not swap them.
+    # Variant 2 (synthetic): Phantom OSD GPS(lon,lat,...) — longitude is FIRST.
+    # The parser must not swap them. (The third field is not read; this family's
+    # altitude comes from BAROMETER — see the altitude tests below.)
     res = parse_srt(SRT_DIR / "phantom_paren_synthetic.srt")
     assert res.gps_source == "srt"
     assert res.variant == "paren"
@@ -113,7 +114,7 @@ def test_track_bracket_fixture_yields_ordered_fixes():
 
 
 def test_track_paren_fixture_is_lon_first_safe():
-    # The paren family writes GPS(lon,lat,alt): the track must come back (lat, lon).
+    # The paren family writes GPS(lon,lat,...): the track must come back (lat, lon).
     track = parse_srt_track(SRT_DIR / "phantom_paren_synthetic.srt")
     assert len(track) >= 2
     lat, lon = track[0]
@@ -164,6 +165,60 @@ def test_timed_track_skips_malformed_timing_but_static_track_keeps_fix(tmp_path)
     assert [(s.time_s, s.lat, s.lon) for s in samples] == [
         (2.0, 40.1, -105.1),
     ]
+
+
+def test_timed_track_prefers_relative_altitude_over_absolute():
+    # The real bracket payload carries `[rel_alt: X abs_alt: Y]`: height above
+    # takeoff wins, and the datum is reported so a consumer can label it.
+    samples = parse_srt_track_samples(SRT_DIR / "mini4pro_bracket.srt")
+    assert [s.alt for s in samples] == [pytest.approx(0.0), pytest.approx(0.0)]
+    assert {s.alt_ref for s in samples} == {"relative"}
+
+
+def test_timed_track_reads_spaced_bracket_altitude():
+    # Older bracket payloads write a single barometric `[altitude : X]` (MSL).
+    samples = parse_srt_track_samples(SRT_DIR / "mavic_bracket_synthetic.srt")
+    assert samples[0].alt == pytest.approx(35.0)
+    assert samples[0].alt_ref == "absolute"
+    assert samples[1].alt == pytest.approx(35.1)
+
+
+def test_timed_track_reads_paren_barometer_not_satellite_count():
+    # The paren family's height is BAROMETER. The third GPS() field (16 here) is
+    # the satellite count on DJI GO OSD builds and must never surface as metres.
+    samples = parse_srt_track_samples(SRT_DIR / "phantom_paren_synthetic.srt")
+    assert samples[0].alt == pytest.approx(8.50)
+    assert samples[0].alt_ref == "relative"
+    assert samples[1].alt == pytest.approx(8.51)
+
+
+def test_timed_track_keeps_fix_when_altitude_absent(tmp_path):
+    # GPS gates the sample; a cue with no altitude token still contributes its
+    # position, with alt left None rather than a fabricated 0.
+    srt = tmp_path / "no-alt.srt"
+    srt.write_text(
+        "1\n00:00:00,000 --> 00:00:00,033\n"
+        "[latitude: 40.000000] [longitude: -105.000000]\n",
+        encoding="utf-8",
+    )
+    samples = parse_srt_track_samples(srt)
+    assert len(samples) == 1
+    assert samples[0].alt is None
+    assert samples[0].alt_ref is None
+
+
+def test_timed_track_reads_negative_and_integer_altitudes(tmp_path):
+    # Below-takeoff flights are real (canyon/downhill launches) and DJI does not
+    # always write a fractional part.
+    srt = tmp_path / "neg-alt.srt"
+    srt.write_text(
+        "1\n00:00:00,000 --> 00:00:00,033\n"
+        "[latitude: 40.000000] [longitude: -105.000000] [rel_alt: -12 abs_alt: 1400]\n",
+        encoding="utf-8",
+    )
+    samples = parse_srt_track_samples(srt)
+    assert samples[0].alt == pytest.approx(-12.0)
+    assert samples[0].alt_ref == "relative"
 
 
 def test_timed_track_skips_backward_timestamps_but_keeps_equal_times(tmp_path):

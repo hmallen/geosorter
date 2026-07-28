@@ -27,6 +27,16 @@ interface ToolbarProps {
   // Open the unstitched-panorama panel (owned by App) listing exactly which panorama
   // sets are waiting to be stitched. Admin-only (stitching is an admin action).
   onOpenStitch: () => void
+  // Open the duplicate-review panel (owned by App). `duplicatesCount` labels the
+  // button; hidden for non-admins and when the backlog is empty (like No-GPS).
+  onOpenDuplicates: () => void
+  duplicatesCount: number
+  // Toggle the timeline scrubber (date-range brush over the map).
+  onToggleTimeline: () => void
+  timelineOn: boolean
+  // Toggle the favorites-only view (App-level filter before map + list).
+  onToggleFavorites: () => void
+  favoritesOn: boolean
 }
 
 export default function Toolbar({
@@ -37,6 +47,12 @@ export default function Toolbar({
   noGpsCount,
   onOpenLocations,
   onOpenStitch,
+  onOpenDuplicates,
+  duplicatesCount,
+  onToggleTimeline,
+  timelineOn,
+  onToggleFavorites,
+  favoritesOn,
 }: ToolbarProps) {
   // Suspend the inbox-badge poll while a destructive job runs (synced to `busy` in the
   // effect below). Stable ref -> the useInboxCount interval is established once, not
@@ -140,8 +156,32 @@ export default function Toolbar({
         </>
       )}
       <button onClick={onOpenLocations}>Locations</button>
+      <button
+        className={timelineOn ? 'tb-toggle--on' : undefined}
+        onClick={onToggleTimeline}
+        aria-pressed={timelineOn}
+        title="Show the date-range timeline over the map"
+      >
+        Timeline
+      </button>
+      <button
+        className={favoritesOn ? 'tb-toggle--on' : undefined}
+        onClick={onToggleFavorites}
+        aria-pressed={favoritesOn}
+        title="Show only favorited captures"
+      >
+        ♥ Favorites
+      </button>
       {admin && noGpsCount > 0 && (
         <button onClick={onOpenNoGps}>No-GPS ({noGpsCount})</button>
+      )}
+      {admin && duplicatesCount > 0 && (
+        <button
+          onClick={onOpenDuplicates}
+          title="Review inbox captures skipped as duplicates of organized files"
+        >
+          Duplicates ({duplicatesCount})
+        </button>
       )}
       {admin && stitchTargets.length > 0 && (
         <button onClick={onOpenStitch} title="See exactly which panorama sets are waiting to be stitched">

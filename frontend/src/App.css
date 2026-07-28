@@ -59,6 +59,18 @@
   cursor: default;
 }
 
+/* Pressed state for the toolbar's view toggles (Timeline, ♥ Favorites): the
+   accent fill mirrors .chip--on / .seg-btn--active so "on" reads consistently. */
+.toolbar button.tb-toggle--on {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+}
+
+.toolbar button.tb-toggle--on:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
 /* Admin login control (m-implement-view-only-admin-auth) */
 .login-control {
   margin-left: 4px;
@@ -201,8 +213,26 @@
   background: var(--surface-3);
 }
 
-/* Flight-track overlay chip: names the drawn track and offers Clear. Same slot
-   as .library-status (they never co-occur: the chip needs a loaded library). */
+/* Under-toolbar chip row: the flight-track chip and the active-filter chips
+   (date range, favorites) stack HORIZONTALLY here so they can coexist. The row
+   owns the absolute positioning the lone .track-chip used to carry. */
+.chips-row {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 92vw;
+}
+
+/* Flight-track overlay chip: names the drawn track and carries the follow-drone
+   toggle (the PiP viewer owns clearing the track). Same slot as .library-status
+   (they never co-occur: the chip needs a loaded library). */
 .track-chip {
   position: absolute;
   top: 64px;
@@ -229,6 +259,41 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+/* Inside the row the chips are plain flex children — the row positions them. */
+.chips-row .track-chip {
+  position: static;
+  transform: none;
+}
+
+/* Active-filter chip (date range / favorites): the .track-chip visual family,
+   born static (it only ever renders inside .chips-row). */
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chip button {
+  padding: 4px 12px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.filter-chip button:hover {
+  background: var(--surface-3);
 }
 
 /* Legend swatch echoing the on-map track line (teal over a dark casing). */
@@ -275,6 +340,35 @@
   background: #22c55e;
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+
+/* Marker anchor sized to the token alone, so the altitude badge hanging off its
+   right edge cannot shift the glyph away from the coordinate it marks. */
+.track-drone-anchor {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+/* Live altitude readout beside the position token. Same surface family as the
+   track chip, sized down; tabular figures keep the pill from twitching as the
+   digits change every frame. */
+.track-altitude {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-text);
+  border: 1px solid var(--border);
+  box-shadow: 0 0 0 1px rgba(15, 17, 22, 0.7), 0 2px 6px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* Bright directional glyph for the position synchronized to video.currentTime. */
@@ -957,6 +1051,24 @@
   background: var(--surface-3);
 }
 
+/* Row of per-capture action buttons under the media (heart + flight path), so
+   they sit BESIDE each other instead of stacking as full-width block rows. */
+.lightbox-actions {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Video favorite heart: outline when off, teal-text heart when on (the fill
+   teal is too dim for glyph-sized marks on dark — see .inbox-kind). */
+.fav-toggle--on {
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
 .track-inline-error {
   align-self: center;
   max-width: min(620px, 90vw);
@@ -967,6 +1079,12 @@
   background: rgba(255, 107, 107, 0.08);
   font-size: 13px;
   text-align: center;
+}
+
+/* Inside the actions row the error is a flex item: force it onto its own line
+   so it never squeezes in beside the heart/flight-path buttons. */
+.lightbox-actions .track-inline-error {
+  flex-basis: 100%;
 }
 
 .frames-grid {
@@ -1481,6 +1599,210 @@
   cursor: default;
 }
 
+/* Duplicate-review panel: inbox captures organize skipped as duplicates of
+   already-organized files. Same top-left slot + chrome as the No-GPS panel
+   (slightly wider: rows carry a filename AND a matched library path). */
+.duplicates-panel {
+  position: absolute;
+  top: 56px;
+  left: 8px;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 80vh;
+  z-index: 30;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+/* "Dismiss all" header action — a sub-header bar, like .stitch-all-bar. */
+.dup-actions {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dup-actions button {
+  padding: 6px 12px;
+  cursor: pointer;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+}
+
+.dup-actions button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.dup-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+}
+
+.dup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dup-meta {
+  flex: 1 1 auto;
+  min-width: 0; /* let the nowrap name/path lines ellipsis-clamp */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dup-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Source file gone from disk: dismissing just clears the entry. */
+.dup-missing {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.dup-path,
+.dup-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dup-dismiss {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.dup-dismiss:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.dup-dismiss:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Timeline scrubber (date-range brush): floating bottom-center pill over the
+   map, same visual family as the toolbar. Sized to clear the bottom-left map
+   controls and the right-rail file panel on desktop; hidden entirely on
+   mobile/tablet (see the ≤1024px block — the brush needs horizontal room). */
+.timeline-scrubber {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: min(680px, 56vw);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* The bar strip: one equal-width column per month, bars growing up from the
+   baseline; also the positioning context for the two brush handles. */
+.timeline-bars {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 48px;
+}
+
+.timeline-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.timeline-bar-fill {
+  width: 100%;
+  background: var(--surface-3);
+  border-radius: 1px 1px 0 0;
+}
+
+/* Months inside the selected range light up in the brand accent. */
+.timeline-bar--in .timeline-bar-fill {
+  background: var(--accent);
+}
+
+/* Brush handles: focusable buttons (arrow keys nudge by one month) riding the
+   strip's edges. touch-action:none so the drag gesture is never stolen. */
+.timeline-handle {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 10px;
+  margin-left: -5px;
+  padding: 0;
+  border-radius: 4px;
+  background: var(--accent-text);
+  border: 1px solid rgba(15, 17, 22, 0.7);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.timeline-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-height: 24px;
+}
+
+.timeline-info button {
+  padding: 2px 10px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.timeline-info button:hover {
+  background: var(--surface-3);
+}
+
 .location-list {
   list-style: none;
   margin: 0;
@@ -1719,11 +2041,18 @@
   .inbox-panel,
   .quarantine-panel,
   .location-panel,
-  .stitch-panel {
+  .stitch-panel,
+  .duplicates-panel {
     left: 6px;
     right: 6px;
     width: auto;
     max-width: none;
+  }
+
+  /* The month brush needs horizontal room and would fight the bottom sheet for
+     the same edge — desktop-only for now (matches the design's initial scope). */
+  .timeline-scrubber {
+    display: none;
   }
 
   /* Lift the map view-toggle/legend overlay above the collapsed sheet (the 12vh here

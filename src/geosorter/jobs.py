@@ -303,6 +303,15 @@ class JobManager:
         event.set()
         return True
 
+    def active_destructive_job_id(self) -> str | None:
+        """Thread-safe id of an in-flight destructive job (organize included), else None.
+
+        Public accessor for synchronous inbox-mutating callers (the duplicate-dismiss
+        route) that must 409 rather than move inbox files under a live organize.
+        """
+        with self._lock:
+            return self._active_destructive_job()
+
     def _active_destructive_job(self, *, include_organize: bool = True) -> str | None:
         """Id of an in-flight (pending/running) organize/undo/retag/rescan job, else None.
 

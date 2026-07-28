@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
+  altitudeTitle,
   clampPipPosition,
   clampPipWidth,
+  formatAltitude,
   positionAtTime,
   trackBBox,
   trackLine,
+  trackStateAtTime,
 } from './flightTrack'
 
 describe('trackBBox', () => {
@@ -67,6 +70,58 @@ describe('positionAtTime', () => {
 
   it('returns null for empty telemetry', () => {
     expect(positionAtTime([], 10)).toBeNull()
+  })
+})
+
+describe('trackStateAtTime', () => {
+  const samples = [
+    { time_s: 1, lon: -105, lat: 40, alt: 100 },
+    { time_s: 3, lon: -103, lat: 42, alt: 140 },
+    { time_s: 5, lon: -101, lat: 44, alt: 120 },
+  ]
+
+  it('interpolates altitude alongside the position', () => {
+    expect(trackStateAtTime(samples, 2)).toEqual({ position: [-104, 41], altitude: 120 })
+    expect(trackStateAtTime(samples, 3)).toEqual({ position: [-103, 42], altitude: 140 })
+  })
+
+  it('hides before GPS lock and holds the final altitude after the last fix', () => {
+    expect(trackStateAtTime(samples, 0.99)).toBeNull()
+    expect(trackStateAtTime(samples, 8)).toEqual({ position: [-101, 44], altitude: 120 })
+  })
+
+  it('reports a null altitude for fixes with no height token', () => {
+    const noAlt = [
+      { time_s: 1, lon: -105, lat: 40 },
+      { time_s: 3, lon: -103, lat: 42 },
+    ]
+    expect(trackStateAtTime(noAlt, 2)).toEqual({ position: [-104, 41], altitude: null })
+  })
+
+  it('holds the known height across a one-sided gap instead of blanking', () => {
+    const gap = [
+      { time_s: 1, lon: -105, lat: 40, alt: 90 },
+      { time_s: 3, lon: -103, lat: 42, alt: null },
+      { time_s: 5, lon: -101, lat: 44, alt: 110 },
+    ]
+    expect(trackStateAtTime(gap, 2)?.altitude).toBe(90)
+    expect(trackStateAtTime(gap, 4)?.altitude).toBe(110)
+  })
+})
+
+describe('formatAltitude', () => {
+  it('rounds to whole metres and normalizes -0', () => {
+    expect(formatAltitude(120.4)).toBe('120 m')
+    expect(formatAltitude(-12.6)).toBe('-13 m')
+    expect(formatAltitude(-0.2)).toBe('0 m')
+  })
+})
+
+describe('altitudeTitle', () => {
+  it('names the datum so the number is never ambiguous', () => {
+    expect(altitudeTitle('relative')).toBe('Altitude above takeoff')
+    expect(altitudeTitle('absolute')).toBe('Altitude above sea level')
+    expect(altitudeTitle(null)).toBe('Altitude')
   })
 })
 

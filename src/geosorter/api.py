@@ -23,6 +23,11 @@ Exposes the organized library over HTTP for the B7 frontend:
   /api/assign-location/status/{id}`` — bulk-file no-GPS captures to a picked
   location (see :mod:`geosorter.setloc`). Shares the single destructive worker.
 * ``GET  /api/quarantine`` — the no-GPS (quarantined) captures list.
+* ``GET  /api/duplicates`` / ``POST /api/duplicates/dismiss`` — the pending
+  re-import backlog (``relocate_duplicates = false``) and its synchronous drain
+  (see :mod:`geosorter.duplicates`).
+* ``POST /api/favorite`` — toggle a content-hash favorite; ``/api/library``
+  features carry the resulting ``is_favorite`` flag.
 * ``GET  /api/inbox/list`` — the inbox as a selectable capture-group tree.
 * ``GET  /api/place-search?q=`` — forward GeoNames search for assign-by-name.
 * ``POST /api/stitch/{id}`` / ``GET /api/stitch/status/{job}`` — panorama hero
@@ -70,7 +75,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
-from . import auth, config, db, derived, geocoder, inbox, pathing, srt_parser
+from . import auth, config, db, derived, duplicates, geocoder, inbox, pathing, srt_parser
 from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
@@ -195,6 +200,23 @@ class StitchRequest(BaseModel):
 
     force: bool = False
     projection: Literal["equirectangular", "cylindrical", "rectilinear"] | None = None
+
+
+class DismissDuplicatesRequest(BaseModel):
+    """Body of ``POST /api/duplicates/dismiss``: pending-duplicate row ids to drain.
+
+    Non-empty by construction — an empty list is a client bug, rejected with a
+    clean 422 rather than answering a vacuous ``{"dismissed": 0}``.
+    """
+
+    ids: list[int] = Field(min_length=1)
+
+
+class FavoriteRequest(BaseModel):
+    """Body of ``POST /api/favorite``: set/clear the favorite flag for a file."""
+
+    file_id: int
+    favorite: bool
 
 
 class LoginRequest(BaseModel):
@@ -364,7 +386,13 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         # stitch-status code sum, AND a stitch-projection code sum (a cache-hit
         # backfill can change projection while status stays 'ok'), or a
         # retag/stitch reload would wrongly 304 and the map would keep a stale marker
-        # or route a hero to the wrong viewer.
+        # or route a hero to the wrong viewer. A favorite toggle is likewise an
+        # in-place change (a favorites row, not a files row), so the key also folds
+        # in the count + id-sum of favorited files that are IN the payload — both
+        # subqueries range over the exact organized+GPS predicate below, so
+        # favoriting a quarantined/no-GPS file (payload byte-identical) cannot bust
+        # every client's cache, while the id-sum still catches moving one favorite
+        # from payload file A to payload file B (count alone misses that).
         conn = _index()
         try:
             ver = conn.execute(
@@ -374,16 +402,25 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "CAST(total(CASE stitch_status WHEN 'pending' THEN 1 "
                 "WHEN 'ok' THEN 2 WHEN 'failed' THEN 3 ELSE 0 END) AS INTEGER), "
                 "CAST(total(CASE stitch_projection WHEN 'equirectangular' THEN 1 "
-                "WHEN 'flat' THEN 2 ELSE 0 END) AS INTEGER) "
+                "WHEN 'flat' THEN 2 ELSE 0 END) AS INTEGER), "
+                "(SELECT COUNT(*) FROM files f "
+                "JOIN favorites fv ON fv.sha256 = f.sha256 "
+                "WHERE f.status='organized' "
+                "AND f.lat IS NOT NULL AND f.lon IS NOT NULL), "
+                "(SELECT CAST(total(f.id) AS INTEGER) FROM files f "
+                "JOIN favorites fv ON fv.sha256 = f.sha256 "
+                "WHERE f.status='organized' "
+                "AND f.lat IS NOT NULL AND f.lon IS NOT NULL) "
                 "FROM files "
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchone()
             max_id, count, max_created = (ver[0] or 0), ver[1], ver[2]
-            # The `lib3-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
-            # `properties` shape changes (v3: `has_track` was added) so a client
+            # The `lib4-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
+            # `properties` shape changes (v4: `is_favorite` was added) so a client
             # holding a `no-cache`-revalidated response from the previous build gets a
             # one-time 200 with the new field instead of a 304 serving the old body.
-            etag = f'W/"lib3-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}"'
+            etag = (f'W/"lib4-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}'
+                    f'-{ver[7]}-{ver[8]}"')
             inm = request.headers.get("if-none-match")
             if inm is not None and _etag_matches(inm, etag):
                 return Response(
@@ -398,7 +435,9 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "SELECT id, filename, place_string, local_date, capture_ts_local, "
                 "media_type, codec, "
                 "gps_source, capture_kind, frame_count, star_rating, stitch_status, "
-                "stitch_projection, dest_path, lat, lon "
+                "stitch_projection, dest_path, lat, lon, "
+                "EXISTS(SELECT 1 FROM favorites WHERE sha256 = files.sha256) "
+                "AS is_favorite "
                 "FROM files WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchall()
             # Videos with an SRT telemetry sidecar have a drawable flight track
@@ -431,6 +470,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                     "stitch_status": r["stitch_status"],
                     "stitch_projection": r["stitch_projection"],
                     "has_track": r["media_type"] == "video" and r["id"] in srt_ids,
+                    "is_favorite": bool(r["is_favorite"]),
                     "path": _relpath(r["dest_path"], url_root, library_root),
                 },
             }
@@ -484,10 +524,18 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         """A video's GPS flight track, parsed from its SRT telemetry sidecar.
 
         ``points`` retains the original GeoJSON-order route contract. ``samples``
-        adds subtitle-clock-aligned fixes for synchronized playback. Each list is
-        independently downsampled to at most ``_TRACK_MAX_POINTS`` while retaining
-        its first and final item. Empty data is not an error; 404 is reserved for
-        an unknown file id.
+        adds subtitle-clock-aligned fixes for synchronized playback, each with the
+        frame's ``alt`` in metres (``null`` when that cue carries no altitude
+        token). Each list is independently downsampled to at most
+        ``_TRACK_MAX_POINTS`` while retaining its first and final item.
+
+        ``altitude_ref`` labels the datum every ``alt`` is measured against —
+        ``'relative'`` (above the takeoff point) or ``'absolute'`` (barometric
+        MSL) — and is ``null`` when the sidecar carries no altitude at all. It is
+        taken from the first sample with a height: DJI pins one payload family
+        per file, so the datum does not change mid-track.
+
+        Empty data is not an error; 404 is reserved for an unknown file id.
         """
         conn = _index()
         try:
@@ -503,16 +551,24 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         finally:
             conn.close()
         if row is None:
-            return {"points": [], "samples": []}
+            return {"points": [], "samples": [], "altitude_ref": None}
         path = _strip(row["dest_path"])
         fixes = _downsample_track(srt_parser.parse_srt_track(path))
         samples = _downsample_track(srt_parser.parse_srt_track_samples(path))
         return {
             "points": [[lon, lat] for lat, lon in fixes],
             "samples": [
-                {"time_s": sample.time_s, "lon": sample.lon, "lat": sample.lat}
+                {
+                    "time_s": sample.time_s,
+                    "lon": sample.lon,
+                    "lat": sample.lat,
+                    "alt": sample.alt,
+                }
                 for sample in samples
             ],
+            "altitude_ref": next(
+                (s.alt_ref for s in samples if s.alt is not None), None
+            ),
         }
 
     @app.get("/api/inbox")
@@ -556,6 +612,111 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "path": _relpath(r["dest_path"], url_root, library_root),
             })
         return {"features": features}
+
+    @app.get("/api/duplicates")
+    def duplicates_list() -> dict:
+        """List the pending re-import duplicates so the map UI can drain the backlog.
+
+        With ``relocate_duplicates = false`` a detected duplicate stays in the inbox;
+        organize records it in the ``duplicates`` table (see
+        :mod:`geosorter.duplicates`). ``source_path`` is inbox-relative POSIX (bare
+        filename if the stored path is not under the configured inbox);
+        ``matched_path`` is the matched library file, library-relative like every
+        media URL, or null when the match is gone; ``missing`` flags a source that
+        has vanished from disk (dismiss then just deletes the row).
+        """
+        inbox_root = Path(cfg.inbox_path) if cfg.inbox_path else None
+        conn = _index()
+        try:
+            rows = duplicates.list_rows(conn)
+        finally:
+            conn.close()
+        items = []
+        for r in rows:
+            src = Path(_strip(r["source_path"]))
+            try:
+                rel = src.relative_to(inbox_root).as_posix() if inbox_root else src.name
+            except ValueError:
+                rel = src.name
+            matched = r["matched_dest_path"]
+            items.append({
+                "id": r["id"],
+                "filename": src.name,
+                "source_path": rel,
+                "matched_path": (
+                    _relpath(matched, url_root, library_root) if matched else None
+                ),
+                "matched_file_id": r["matched_file_id"],
+                "sha256": r["sha256"],
+                "first_seen_at": r["first_seen_at"],
+                "missing": not src.exists(),
+            })
+        return {"items": items, "count": len(items)}
+
+    @app.post("/api/duplicates/dismiss", dependencies=[Depends(require_admin)])
+    def duplicates_dismiss(req: DismissDuplicatesRequest) -> dict:
+        """Move the selected duplicate groups into ``_duplicates/`` and drop their rows.
+
+        Synchronous — renames within the inbox volume are cheap, so no job is needed.
+        Refused with 409 (same shape as :func:`_submit_or_409`) while any destructive
+        job is in flight: moving inbox files under a live organize is racy. Also 409
+        (same detail shape, null ``blocking_job_id``) when no ``inbox_path`` is
+        configured — there is no inbox to relocate into.
+        """
+        blocking = jobs.active_destructive_job_id()
+        if blocking is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "a destructive job is already running",
+                    "blocking_job_id": blocking,
+                },
+            )
+        if cfg.inbox_path is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "no inbox_path configured; cannot relocate duplicates",
+                    "blocking_job_id": None,
+                },
+            )
+        conn = _index()
+        try:
+            result = duplicates.dismiss(conn, req.ids, Path(cfg.inbox_path))
+        finally:
+            conn.close()
+        return {
+            "dismissed": result.dismissed,
+            "skipped": result.skipped,
+            "failures": result.failures,
+        }
+
+    @app.post("/api/favorite", dependencies=[Depends(require_admin)])
+    def favorite(req: FavoriteRequest) -> dict:
+        """Set/clear the favorite flag for a file's content hash (idempotent).
+
+        Keyed on ``sha256``, not ``files.id`` — ids die on undo/re-import; the hash
+        is the stable identity organize itself dedupes on, so a favorite survives an
+        undo + re-import cycle.
+        """
+        conn = _index()
+        try:
+            row = conn.execute(
+                "SELECT sha256 FROM files WHERE id=?", (req.file_id,)
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="unknown file")
+            if req.favorite:
+                conn.execute(
+                    "INSERT OR IGNORE INTO favorites(sha256) VALUES (?)",
+                    (row["sha256"],),
+                )
+            else:
+                conn.execute("DELETE FROM favorites WHERE sha256=?", (row["sha256"],))
+            conn.commit()
+        finally:
+            conn.close()
+        return {"file_id": req.file_id, "favorite": req.favorite}
 
     @app.get("/api/place-search")
     def place_search(q: str = "") -> dict:

@@ -5,8 +5,14 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { buildIndex, clustersFor, expansionZoom, type BBox } from '../clusters'
 import { VECTOR_STYLE, SATELLITE_STYLE, HEATMAP_LAYER, heatmapData } from '../basemaps'
-import { trackLine, TRACK_CASING_LAYER, TRACK_LINE_LAYER } from '../flightTrack'
-import type { LibraryFeature } from '../types'
+import {
+  altitudeTitle,
+  formatAltitude,
+  trackLine,
+  TRACK_CASING_LAYER,
+  TRACK_LINE_LAYER,
+} from '../flightTrack'
+import type { AltitudeRef, LibraryFeature } from '../types'
 
 const WORLD: BBox = [-180, -85, 180, 85]
 
@@ -31,10 +37,23 @@ interface Props {
   // Flight-track overlay: a video's GPS path as [lon, lat] points (App owns the
   // fetch + the dismiss chip). Rendered as a teal line under the markers.
   track?: [number, number][] | null
+  // Shareable-URL camera restore: seeds the INITIAL view state only (read once
+  // on mount); later prop changes are deliberately ignored — the camera is
+  // driven by gestures/flyTo after that.
+  initialView?: { longitude: number; latitude: number; zoom: number }
+  // Report the settled camera (same moveend/onLoad cadence as onBoundsChange)
+  // so App can mirror it into the URL hash.
+  onViewChange?: (v: { longitude: number; latitude: number; zoom: number }) => void
   // Interpolated video-clock position. Follow mode recenters periodically without
   // changing the user's zoom level.
   activeTrackPosition?: [number, number] | null
   followTrack?: boolean
+  // Altitude (metres) at that same instant, shown beside the position token.
+  // Null when the sidecar carries no height — the token still renders.
+  activeTrackAltitude?: number | null
+  // Datum for the readout above; drives its label so the number is never
+  // ambiguous between height-above-takeoff and height-above-sea-level.
+  altitudeRef?: AltitudeRef | null
 }
 
 export default function MapView({
@@ -44,15 +63,23 @@ export default function MapView({
   onBoundsChange,
   flyTo,
   track,
+  initialView,
+  onViewChange,
   activeTrackPosition,
   followTrack = false,
+  activeTrackAltitude,
+  altitudeRef,
 }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const mapRef = useRef<MapLibreMap | null>(null)
   // The loaded map as STATE (not just a ref) so the moveend-listener effect
   // below re-runs when the map instance appears.
   const [mapObj, setMapObj] = useState<MapLibreMap | null>(null)
-  const [view, setView] = useState({ longitude: -98, latitude: 39, zoom: 3 })
+  // Camera state, seeded from a shared URL's `map=` hash when present (the
+  // initializer runs once — later initialView changes are ignored by design).
+  const [view, setView] = useState(
+    initialView ?? { longitude: -98, latitude: 39, zoom: 3 },
+  )
   const [bbox, setBbox] = useState<BBox>(WORLD)
   const [satellite, setSatellite] = useState(false)
   const [heatmap, setHeatmap] = useState(false)
@@ -65,7 +92,12 @@ export default function MapView({
     const next: BBox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
     setBbox(next)
     onBoundsChange?.(next)
-  }, [onBoundsChange])
+    // Same settled cadence for the URL-hash camera mirror: read the CAMERA off
+    // the map (not the controlled `view` state, which react-map-gl may not have
+    // round-tripped yet for programmatic moves like fitBounds).
+    const c = map.getCenter()
+    onViewChange?.({ longitude: c.lng, latitude: c.lat, zoom: map.getZoom() })
+  }, [onBoundsChange, onViewChange])
 
   // Subscribe to maplibre's `moveend` DIRECTLY on the map, not via react-map-gl's
   // `onMoveEnd` prop. In controlled mode react-map-gl suppresses its own camera
@@ -237,8 +269,22 @@ export default function MapView({
           latitude={activeTrackPosition[1]}
           anchor="center"
         >
-          <div className="track-drone" title="Current drone position" aria-label="Current drone position">
-            <span aria-hidden="true">✦</span>
+          {/* The anchor box stays exactly the token's size; the altitude badge
+              is absolutely positioned out of flow so a wider readout can never
+              nudge the glyph off the coordinate it marks. */}
+          <div className="track-drone-anchor">
+            <div className="track-drone" title="Current drone position" aria-label="Current drone position">
+              <span aria-hidden="true">✦</span>
+            </div>
+            {activeTrackAltitude != null && (
+              <div
+                className="track-altitude"
+                title={altitudeTitle(altitudeRef)}
+                aria-label={`${altitudeTitle(altitudeRef)}: ${formatAltitude(activeTrackAltitude)}`}
+              >
+                {formatAltitude(activeTrackAltitude)}
+              </div>
+            )}
           </div>
         </Marker>
       )}

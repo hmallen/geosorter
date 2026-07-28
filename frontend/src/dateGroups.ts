@@ -9,7 +9,9 @@
 
 import type { LibraryFeature, FeatureProps } from './types'
 
-const MONTHS = [
+// Exported as the app's single month-name table: dateRange derives its short
+// labels from these (slice(0, 3) — 'Jan', 'Feb', ...).
+export const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
@@ -37,7 +39,9 @@ export type RowItem =
 
 // Anchored extraction of the leading 'YYYY-MM-DD' from an ISO string (ignores any
 // trailing time/offset). Returns null when the string doesn't start with a date.
-function partsFrom(s: string | null | undefined): DateParts | null {
+// Exported for dateRange.featureDate, whose SOURCE PRIORITY differs from
+// parseParts below (local_date first) but shares this parse/validation.
+export function partsFrom(s: string | null | undefined): DateParts | null {
   if (!s) return null
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
   if (!m) return null

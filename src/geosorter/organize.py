@@ -15,8 +15,11 @@ double-delete (each file is independently idempotent via the move engine).
 
 **Duplicates & collisions** (decision: dedup-then-suffix). A source whose content
 hash already exists in ``files`` (from a *different* source — a re-import) is
-skipped and left in the inbox. A *different-content* file that resolves to an
-already-occupied ``dest_path`` is disambiguated with a ``_2``/``_3`` suffix.
+skipped: relocated into ``<inbox>/_duplicates/`` when ``relocate_duplicates`` is
+on, else left in the inbox and recorded in the ``duplicates`` table for the map
+UI's review panel (see :mod:`geosorter.duplicates`). A *different-content* file
+that resolves to an already-occupied ``dest_path`` is disambiguated with a
+``_2``/``_3`` suffix.
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import db, geocoder, grouping, inference, misc_parser, move_engine, pathing, tz_resolver
+from . import db, duplicates, geocoder, grouping, inference, misc_parser, move_engine, pathing, tz_resolver
 from .metadata import MediaMetadata, MetadataExtractor
 
 # Files whose extension implies a video when ExifTool cannot read the metadata.
@@ -199,59 +202,27 @@ def _resolve_collision(conn, primary: Path, dest_path: str) -> str:
         n += 1
 
 
-def _relocate_duplicate(index, group, companions, inbox, src_sha: str, report) -> None:
-    r"""Move a duplicate capture out of the inbox into ``<inbox>/_duplicates/`` + log it.
+def _relocate_duplicate(index, group, companions, inbox, matched_dest: str, report) -> None:
+    """Move a duplicate capture out of the inbox into ``<inbox>/_duplicates/`` + log it.
 
-    A duplicate is byte-identical content already verified in ``library_root``, so this is
-    a plain move (no copy-verify, never touches the library). The whole capture (primary +
-    its effective companions) moves together, each preserving its inbox-relative subpath so
-    recycled DJI names across cards never collide, and one TSV line — incoming primary path
-    and the matched library ``dest_path`` — is appended to ``_duplicates/duplicates.log``.
+    Delegates the move/suffix/log mechanics to :func:`duplicates.relocate_group` (the
+    single implementation, shared with the review panel's dismiss). On success the
+    source's pending-duplicates row (a leftover from a ``relocate_duplicates=off``
+    era) is pruned — the physical move IS the record.
     """
-    dup_root = Path(inbox) / grouping.DUPLICATES_DIRNAME
-    # Companions FIRST, primary LAST — mirroring the organizer's move discipline. This
-    # path is off the crash-safe move log, so if a move fails midway the primary must
-    # still be in the inbox for the next run to rebuild and retry the group from it
-    # (a primary moved out first would strand any unmoved companion as an orphan).
-    for src in [c for c, _t in companions] + [group.primary]:
-        if not src.exists():
-            continue
-        target = _dup_target(dup_root, Path(inbox), src)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            os.replace(src, target)  # atomic within the inbox volume
-        except OSError:
-            try:
-                shutil.move(str(src), str(target))  # cross-device fallback
-            except OSError as exc:
-                # A duplicate is already safe in the library, so a relocation failure is
-                # non-fatal: record it and leave the rest in place rather than aborting
-                # the whole run. The next run rebuilds the group from the primary.
-                report.failures.append(f"{src}: duplicate relocation failed: {exc}")
-                return
-    row = index.execute(
-        "SELECT dest_path FROM files WHERE sha256=? LIMIT 1", (src_sha,)
-    ).fetchone()
-    matched_dest = _strip(row[0]) if row else ""
-    dup_root.mkdir(parents=True, exist_ok=True)
-    line = f"{datetime.now().isoformat(timespec='seconds')}\t{report.batch_id}\t{group.primary}\t{matched_dest}\n"
-    with open(dup_root / "duplicates.log", "a", encoding="utf-8") as fh:
-        fh.write(line)
+    try:
+        duplicates.relocate_group(
+            Path(inbox), group.primary, [c for c, _t in companions],
+            matched_dest, report.batch_id,
+        )
+    except OSError as exc:
+        # A duplicate is already safe in the library, so a relocation failure is
+        # non-fatal: record it and leave the rest in place rather than aborting
+        # the whole run. The next run rebuilds the group from the primary.
+        report.failures.append(str(exc))
+        return
+    duplicates.prune(index, str(group.primary))
     report.duplicates_relocated += 1
-
-
-def _dup_target(dup_root: Path, inbox: Path, src: Path) -> Path:
-    """Non-clobbering ``_duplicates/`` destination preserving ``src``'s inbox subpath."""
-    target = dup_root / src.relative_to(inbox)
-    if not target.exists():
-        return target
-    stem, ext = os.path.splitext(target.name)
-    n = 2
-    while True:
-        candidate = target.with_name(f"{stem}_{n}{ext}")
-        if not candidate.exists():
-            return candidate
-        n += 1
 
 
 def _same_volume(a: Path, b: Path) -> bool:
@@ -768,8 +739,25 @@ def _process_group(group, md, inferred, index, geonames, library, report, dry_ru
         src_sha = move_engine.sha256_file(primary)
         if _is_duplicate(index, primary, src_sha):
             report.duplicates_skipped += 1
+            matched = index.execute(
+                "SELECT id, dest_path FROM files WHERE sha256=? LIMIT 1", (src_sha,)
+            ).fetchone()
             if relocate_duplicates and inbox is not None:
-                _relocate_duplicate(index, group, companions, inbox, src_sha, report)
+                _relocate_duplicate(index, group, companions, inbox,
+                                    _strip(matched[1]) if matched else "", report)
+            else:
+                # Relocation off: the file stays in the inbox, so persist a
+                # pending-duplicates row for the review panel — without it every
+                # future run re-hashes and re-skips this source invisibly.
+                duplicates.record(
+                    index,
+                    source_path=str(primary),
+                    sha256=src_sha,
+                    companion_paths=[str(c) for c, _t in companions],
+                    matched_file_id=matched[0] if matched else None,
+                    matched_dest_path=_strip(matched[1]) if matched else None,
+                    batch_id=report.batch_id,
+                )
             return
     else:
         src_sha = None
@@ -949,6 +937,9 @@ def _persist(index, report, md, geo, local, quarantine, primary, primary_dest,
             "INSERT INTO file_companions(primary_file_id, dest_path, companion_type) VALUES (?,?,?)",
             (file_id, cdest, ctype),
         )
+    # A source that files successfully is no pending duplicate: drop any stale row
+    # (the matched library file was undone, so this run imported the former dup).
+    duplicates.prune(index, str(primary))
     index.commit()
 
 
