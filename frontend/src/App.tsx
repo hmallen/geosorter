@@ -10,7 +10,7 @@ import DuplicatesPanel from './components/DuplicatesPanel'
 import TimelineScrubber from './components/TimelineScrubber'
 import { buildPlaces } from './locationFilter'
 import { dismissDuplicates, fetchTrack } from './api'
-import { positionAtTime, trackBBox } from './flightTrack'
+import { trackBBox, trackStateAtTime } from './flightTrack'
 import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
 import { effectiveFavorite, filterFavorites } from './favorites'
 import { parseHash, type UrlState, type UrlView } from './urlState'
@@ -26,7 +26,7 @@ import { useStitchAll } from './useStitchAll'
 import { useAuthContext } from './useAuth'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
-import type { FlightTrackSample, LibraryFeature, QuarantineItem } from './types'
+import type { AltitudeRef, FlightTrackSample, LibraryFeature, QuarantineItem } from './types'
 import './App.css'
 
 interface ActiveFlightTrack {
@@ -34,6 +34,9 @@ interface ActiveFlightTrack {
   filename: string
   points: [number, number][]
   samples: FlightTrackSample[]
+  // Datum for the samples' altitudes (null when the sidecar carries none), held
+  // alongside them so the live readout can label the number it shows.
+  altitudeRef: AltitudeRef | null
   currentTime: number
   follow: boolean
   pip: boolean
@@ -159,6 +162,7 @@ export default function App() {
         filename: f.properties.filename,
         points: payload.points,
         samples: payload.samples,
+        altitudeRef: payload.altitudeRef,
         currentTime: 0,
         follow: false,
         pip: true,
@@ -185,12 +189,20 @@ export default function App() {
   }
 
   const syncAvailable = (track?.samples.length ?? 0) >= 2
-  const activeTrackPosition = useMemo(
+  // Position and altitude come from one resolve so the readout can never lag a
+  // frame behind the token it sits next to.
+  const activeTrackState = useMemo(
     () =>
       track && syncAvailable
-        ? positionAtTime(track.samples, track.currentTime)
+        ? trackStateAtTime(track.samples, track.currentTime)
         : null,
     [track, syncAvailable],
+  )
+  // Kept as its own memo: MapView's follow effect keys on this array's identity,
+  // so it must stay stable across renders that did not move the drone.
+  const activeTrackPosition = useMemo(
+    () => activeTrackState?.position ?? null,
+    [activeTrackState],
   )
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
   // progress survives the lightbox closing/reopening; reload on success so the hero
@@ -377,6 +389,8 @@ export default function App() {
         onViewChange={setMapView}
         activeTrackPosition={activeTrackPosition}
         followTrack={Boolean(track?.pip && track.follow && activeTrackPosition)}
+        activeTrackAltitude={activeTrackState?.altitude ?? null}
+        altitudeRef={track?.altitudeRef ?? null}
       />
       {/* Under-toolbar chip slot: the flight-track chip plus the active-filter
           chips (date range, favorites) share one horizontal row so they can

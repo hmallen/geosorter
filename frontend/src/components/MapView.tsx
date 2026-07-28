@@ -5,8 +5,14 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { buildIndex, clustersFor, expansionZoom, type BBox } from '../clusters'
 import { VECTOR_STYLE, SATELLITE_STYLE, HEATMAP_LAYER, heatmapData } from '../basemaps'
-import { trackLine, TRACK_CASING_LAYER, TRACK_LINE_LAYER } from '../flightTrack'
-import type { LibraryFeature } from '../types'
+import {
+  altitudeTitle,
+  formatAltitude,
+  trackLine,
+  TRACK_CASING_LAYER,
+  TRACK_LINE_LAYER,
+} from '../flightTrack'
+import type { AltitudeRef, LibraryFeature } from '../types'
 
 const WORLD: BBox = [-180, -85, 180, 85]
 
@@ -42,6 +48,12 @@ interface Props {
   // changing the user's zoom level.
   activeTrackPosition?: [number, number] | null
   followTrack?: boolean
+  // Altitude (metres) at that same instant, shown beside the position token.
+  // Null when the sidecar carries no height — the token still renders.
+  activeTrackAltitude?: number | null
+  // Datum for the readout above; drives its label so the number is never
+  // ambiguous between height-above-takeoff and height-above-sea-level.
+  altitudeRef?: AltitudeRef | null
 }
 
 export default function MapView({
@@ -55,6 +67,8 @@ export default function MapView({
   onViewChange,
   activeTrackPosition,
   followTrack = false,
+  activeTrackAltitude,
+  altitudeRef,
 }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -255,8 +269,22 @@ export default function MapView({
           latitude={activeTrackPosition[1]}
           anchor="center"
         >
-          <div className="track-drone" title="Current drone position" aria-label="Current drone position">
-            <span aria-hidden="true">✦</span>
+          {/* The anchor box stays exactly the token's size; the altitude badge
+              is absolutely positioned out of flow so a wider readout can never
+              nudge the glyph off the coordinate it marks. */}
+          <div className="track-drone-anchor">
+            <div className="track-drone" title="Current drone position" aria-label="Current drone position">
+              <span aria-hidden="true">✦</span>
+            </div>
+            {activeTrackAltitude != null && (
+              <div
+                className="track-altitude"
+                title={altitudeTitle(altitudeRef)}
+                aria-label={`${altitudeTitle(altitudeRef)}: ${formatAltitude(activeTrackAltitude)}`}
+              >
+                {formatAltitude(activeTrackAltitude)}
+              </div>
+            )}
           </div>
         </Marker>
       )}

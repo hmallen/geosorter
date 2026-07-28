@@ -524,10 +524,18 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         """A video's GPS flight track, parsed from its SRT telemetry sidecar.
 
         ``points`` retains the original GeoJSON-order route contract. ``samples``
-        adds subtitle-clock-aligned fixes for synchronized playback. Each list is
-        independently downsampled to at most ``_TRACK_MAX_POINTS`` while retaining
-        its first and final item. Empty data is not an error; 404 is reserved for
-        an unknown file id.
+        adds subtitle-clock-aligned fixes for synchronized playback, each with the
+        frame's ``alt`` in metres (``null`` when that cue carries no altitude
+        token). Each list is independently downsampled to at most
+        ``_TRACK_MAX_POINTS`` while retaining its first and final item.
+
+        ``altitude_ref`` labels the datum every ``alt`` is measured against —
+        ``'relative'`` (above the takeoff point) or ``'absolute'`` (barometric
+        MSL) — and is ``null`` when the sidecar carries no altitude at all. It is
+        taken from the first sample with a height: DJI pins one payload family
+        per file, so the datum does not change mid-track.
+
+        Empty data is not an error; 404 is reserved for an unknown file id.
         """
         conn = _index()
         try:
@@ -543,16 +551,24 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         finally:
             conn.close()
         if row is None:
-            return {"points": [], "samples": []}
+            return {"points": [], "samples": [], "altitude_ref": None}
         path = _strip(row["dest_path"])
         fixes = _downsample_track(srt_parser.parse_srt_track(path))
         samples = _downsample_track(srt_parser.parse_srt_track_samples(path))
         return {
             "points": [[lon, lat] for lat, lon in fixes],
             "samples": [
-                {"time_s": sample.time_s, "lon": sample.lon, "lat": sample.lat}
+                {
+                    "time_s": sample.time_s,
+                    "lon": sample.lon,
+                    "lat": sample.lat,
+                    "alt": sample.alt,
+                }
                 for sample in samples
             ],
+            "altitude_ref": next(
+                (s.alt_ref for s in samples if s.alt is not None), None
+            ),
         }
 
     @app.get("/api/inbox")

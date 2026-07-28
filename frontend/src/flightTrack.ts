@@ -3,7 +3,7 @@
 
 import type { LineLayerSpecification } from 'maplibre-gl'
 import type { BBox } from './clusters'
-import type { FlightTrackSample } from './types'
+import type { AltitudeRef, FlightTrackSample } from './types'
 
 // Dark casing under a brand-teal line: readable on both the dark vector
 // basemap and bright satellite imagery (same rationale as the pin ring).
@@ -62,16 +62,40 @@ export function trackLine(points: [number, number][]): {
   }
 }
 
-// Resolve the drone's map position at a video timestamp. An upper-bound binary
-// search intentionally selects the LAST sample at an exact duplicate timestamp,
-// then interpolates toward the next later fix.
-export function positionAtTime(
+// The drone's telemetry at one instant of the video clock: where it was, and how
+// high. `altitude` is null when the surrounding cues carried no height token —
+// a sidecar can have GPS without altitude, and a missing height must not hide
+// the position marker.
+export interface TrackState {
+  position: [number, number]
+  altitude: number | null
+}
+
+// Interpolate between the two fixes bracketing a value. A null endpoint falls
+// back to the other one rather than interpolating toward nothing, so an isolated
+// gap in the altitude track holds the last known height instead of blanking.
+function lerpOptional(
+  left: number | null | undefined,
+  right: number | null | undefined,
+  ratio: number,
+): number | null {
+  if (left == null) return right ?? null
+  if (right == null) return left
+  return left + (right - left) * ratio
+}
+
+// Resolve the drone's map position and altitude at a video timestamp. An
+// upper-bound binary search intentionally selects the LAST sample at an exact
+// duplicate timestamp, then interpolates toward the next later fix.
+export function trackStateAtTime(
   samples: FlightTrackSample[],
   timeS: number,
-): [number, number] | null {
+): TrackState | null {
   if (samples.length === 0 || timeS < samples[0].time_s) return null
   const last = samples[samples.length - 1]
-  if (timeS >= last.time_s) return [last.lon, last.lat]
+  if (timeS >= last.time_s) {
+    return { position: [last.lon, last.lat], altitude: last.alt ?? null }
+  }
 
   let low = 0
   let high = samples.length
@@ -82,12 +106,42 @@ export function positionAtTime(
   }
   const left = samples[Math.max(0, low - 1)]
   const right = samples[low]
-  if (!right || right.time_s <= left.time_s) return [left.lon, left.lat]
+  if (!right || right.time_s <= left.time_s) {
+    return { position: [left.lon, left.lat], altitude: left.alt ?? null }
+  }
   const ratio = (timeS - left.time_s) / (right.time_s - left.time_s)
-  return [
-    left.lon + (right.lon - left.lon) * ratio,
-    left.lat + (right.lat - left.lat) * ratio,
-  ]
+  return {
+    position: [
+      left.lon + (right.lon - left.lon) * ratio,
+      left.lat + (right.lat - left.lat) * ratio,
+    ],
+    altitude: lerpOptional(left.alt, right.alt, ratio),
+  }
+}
+
+// Position-only view of trackStateAtTime, kept for callers (and the map marker)
+// that never need the height.
+export function positionAtTime(
+  samples: FlightTrackSample[],
+  timeS: number,
+): [number, number] | null {
+  return trackStateAtTime(samples, timeS)?.position ?? null
+}
+
+// Readout text for the live altitude badge. DJI writes metres; whole metres are
+// what a per-frame readout can show without the last digit flickering as noise.
+// `-0` is normalized away — a drone at the takeoff plane reads "0 m".
+export function formatAltitude(metres: number): string {
+  const rounded = Math.round(metres)
+  return `${rounded === 0 ? 0 : rounded} m`
+}
+
+// Wording for the badge's tooltip/aria label. The datum matters: 120 m above
+// takeoff and 120 m above sea level are different flights.
+export function altitudeTitle(ref: AltitudeRef | null | undefined): string {
+  if (ref === 'relative') return 'Altitude above takeoff'
+  if (ref === 'absolute') return 'Altitude above sea level'
+  return 'Altitude'
 }
 
 export interface PipPosition {

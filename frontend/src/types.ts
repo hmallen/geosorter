@@ -45,11 +45,20 @@ export interface FlightTrackSample {
   time_s: number
   lon: number
   lat: number
+  // Height in metres from the same SRT cue, or null/absent when that frame
+  // carries no altitude token. Read against the track's `altitudeRef`.
+  alt?: number | null
 }
+
+// Datum an altitude is measured against: above the takeoff point, or barometric
+// mean sea level. The two differ by the launch site's elevation, so a readout
+// must say which one it shows.
+export type AltitudeRef = 'relative' | 'absolute'
 
 export interface FlightTrack {
   points: [number, number][]
   samples: FlightTrackSample[]
+  altitudeRef: AltitudeRef | null
 }
 
 // One no-GPS (quarantined) capture awaiting a manual location (GET /api/quarantine).

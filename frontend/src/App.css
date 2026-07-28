@@ -342,6 +342,35 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 5px rgba(0, 0, 0, 0.6);
 }
 
+/* Marker anchor sized to the token alone, so the altitude badge hanging off its
+   right edge cannot shift the glyph away from the coordinate it marks. */
+.track-drone-anchor {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+/* Live altitude readout beside the position token. Same surface family as the
+   track chip, sized down; tabular figures keep the pill from twitching as the
+   digits change every frame. */
+.track-altitude {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-text);
+  border: 1px solid var(--border);
+  box-shadow: 0 0 0 1px rgba(15, 17, 22, 0.7), 0 2px 6px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* Bright directional glyph for the position synchronized to video.currentTime. */
 .track-drone {
   width: 24px;

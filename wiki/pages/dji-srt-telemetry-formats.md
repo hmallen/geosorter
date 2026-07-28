@@ -2,7 +2,7 @@
 title: DJI SRT Telemetry Formats
 tags: [dji, srt, metadata, gps, geosorter]
 created: 2026-05-31
-updated: 2026-07-16
+updated: 2026-07-28
 sources: [src/geosorter/srt_parser.py, src/geosorter/api.py, frontend/src/flightTrack.ts, task:h-extract-srt-codec]
 ---
 
@@ -50,8 +50,10 @@ DJI's GPS encoding falls into two on-disk families (model / firmware dependent):
    HOME(-122.419400,37.774900) 2020.04.15 10:30:00
    GPS(-122.419400,37.774900,16) BAROMETER:8.50
    ```
-   **Gotcha: the order is `GPS(longitude, latitude, altitude)` — longitude
-   first.** Easy to transpose; pin the field semantics explicitly.
+   **Gotcha: longitude comes first** — `GPS(longitude, latitude, …)`. Easy to
+   transpose; pin the field semantics explicitly. The third field is *not* a
+   dependable altitude (see [Altitude](#altitude)); this family's height is the
+   separate `BAROMETER:` token.
 
 ## Two real-world gotchas
 
@@ -88,7 +90,8 @@ The same parser now exposes the complete usable route:
 ```json
 {
   "points": [[-105.1, 39.7]],
-  "samples": [{"time_s": 0.0, "lon": -105.1, "lat": 39.7}]
+  "samples": [{"time_s": 0.0, "lon": -105.1, "lat": 39.7, "alt": 42.3}],
+  "altitude_ref": "relative"
 }
 ```
 
@@ -102,3 +105,35 @@ moves the video into a draggable picture-in-map player, and synchronizes a movin
 drone marker to `video.currentTime`. Follow mode keeps the map centered on that
 marker. A sidecar without enough timestamped samples still draws the static route
 but reports that timeline synchronization is unavailable.
+
+## Altitude
+
+The same cues carry height, so each timed sample gets an `alt` in metres plus a
+track-level `altitude_ref` naming its datum. Probes run in preference order:
+
+| Token | Family | Datum (`altitude_ref`) |
+| --- | --- | --- |
+| `rel_alt` | bracket (modern) | `relative` — above the takeoff point |
+| `BAROMETER:` | paren (DJI GO OSD) | `relative` — above the takeoff point |
+| `abs_alt` | bracket (modern) | `absolute` — barometric MSL |
+| `[altitude: X]` | bracket (older) | `absolute` — barometric MSL |
+
+Height above takeoff wins when a payload carries both: it is what the pilot reads
+on the OSD and it stays meaningful without knowing the launch site's elevation.
+The two datums differ by exactly that elevation (the Mini 4 Pro fixture flies at
+`rel_alt 0.000` / `abs_alt 1496.934`), so the readout must always label which one
+it shows — `altitude_ref` exists for that.
+
+**The paren family's altitude is `BAROMETER:`, not the third `GPS(...)` field.**
+That third value is the satellite count on DJI GO OSD builds (`GPS(lon,lat,16)`
+alongside `BAROMETER:8.50`), so reading it as metres would surface a fabricated
+height. Altitudes are also parsed with a looser number pattern than coordinates —
+DJI does not always write a fractional part, and below-takeoff (negative) values
+are legitimate on canyon or downhill launches.
+
+GPS gates a sample, never altitude: a cue with a valid fix but no height token
+still contributes its position with `alt: null`, and a sidecar with no altitude
+anywhere returns `altitude_ref: null`. In the viewer that means the position
+token renders with no readout beside it, rather than a misleading `0 m`. When
+altitude is present, a pill beside the moving drone marker shows the interpolated
+height in whole metres, labelled by datum in its tooltip.

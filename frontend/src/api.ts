@@ -1,5 +1,6 @@
 // Typed helpers for the B6 HTTP API: media-URL builders + the library fetch.
 import type {
+  AltitudeRef,
   DuplicateItem,
   FlightTrack,
   LibraryFC,
@@ -61,7 +62,9 @@ export async function fetchFrames(
 }
 
 // Flight track: the legacy route points plus SRT-clock-aligned samples used to
-// synchronize the active drone marker with video.currentTime.
+// synchronize the active drone marker (and its altitude readout) with
+// video.currentTime. The wire field is snake_case `altitude_ref`; it is renamed
+// here so the rest of the app sees one camelCase FlightTrack shape.
 export const trackUrl = (id: number): string => `/api/track/${id}`
 
 export async function fetchTrack(
@@ -70,10 +73,13 @@ export async function fetchTrack(
 ): Promise<FlightTrack> {
   const resp = await fetchFn(trackUrl(id))
   if (!resp.ok) throw new Error(`track fetch failed: ${resp.status}`)
-  const payload = (await resp.json()) as Partial<FlightTrack>
+  const payload = (await resp.json()) as Partial<FlightTrack> & {
+    altitude_ref?: AltitudeRef | null
+  }
   return {
     points: payload.points ?? [],
     samples: payload.samples ?? [],
+    altitudeRef: payload.altitude_ref ?? null,
   }
 }
 

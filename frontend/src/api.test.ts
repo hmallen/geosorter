@@ -259,19 +259,25 @@ describe('frames gallery (B10)', () => {
 describe('flight track', () => {
   it('builds the track URL and decodes points plus timed samples', async () => {
     expect(trackUrl(42)).toBe('/api/track/42')
-    const payload = {
-      points: [[-105, 40], [-104, 41]],
-      samples: [
-        { time_s: 1.25, lon: -105, lat: 40 },
-        { time_s: 2.25, lon: -104, lat: 41 },
-      ],
-    }
+    const samples = [
+      { time_s: 1.25, lon: -105, lat: 40, alt: 100 },
+      { time_s: 2.25, lon: -104, lat: 41, alt: 140 },
+    ]
     const fetchFn = (async () => ({
       ok: true,
       status: 200,
-      json: async () => payload,
+      json: async () => ({
+        points: [[-105, 40], [-104, 41]],
+        samples,
+        altitude_ref: 'relative',
+      }),
     })) as unknown as typeof fetch
-    expect(await fetchTrack(42, fetchFn)).toEqual(payload)
+    // The wire's snake_case altitude_ref is renamed to altitudeRef.
+    expect(await fetchTrack(42, fetchFn)).toEqual({
+      points: [[-105, 40], [-104, 41]],
+      samples,
+      altitudeRef: 'relative',
+    })
   })
 
   it('defaults missing additive samples for an older server payload', async () => {
@@ -283,6 +289,7 @@ describe('flight track', () => {
     expect(await fetchTrack(7, fetchFn)).toEqual({
       points: [[-105, 40]],
       samples: [],
+      altitudeRef: null,
     })
   })
 

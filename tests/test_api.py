@@ -480,16 +480,32 @@ def test_track_returns_lon_lat_points(tmp_path):
         assert -66.0 < lon < -65.0
         assert 14.0 < lat < 15.0
     assert payload["samples"] == [
-        {"time_s": 0.033, "lon": -65.69145, "lat": 14.79824},
-        {"time_s": 0.066, "lon": -65.691449, "lat": 14.79824},
+        {"time_s": 0.033, "lon": -65.69145, "lat": 14.79824, "alt": 0.0},
+        {"time_s": 0.066, "lon": -65.691449, "lat": 14.79824, "alt": 0.0},
     ]
+    # The fixture's `rel_alt` is height above the takeoff point.
+    assert payload["altitude_ref"] == "relative"
+
+
+def test_track_altitude_ref_null_without_altitude_tokens(tmp_path, monkeypatch):
+    # A sidecar with fixes but no height token still returns a usable track; the
+    # UI reads the null ref as "no altitude readout", not "sea level".
+    client, fid = _track_client(tmp_path)
+    samples = [
+        api.srt_parser.SrtTrackSample(time_s=float(i), lat=40.0 + i, lon=-105.0)
+        for i in range(2)
+    ]
+    monkeypatch.setattr(api.srt_parser, "parse_srt_track_samples", lambda _path: samples)
+    payload = client.get(f"/api/track/{fid}").json()
+    assert payload["altitude_ref"] is None
+    assert [s["alt"] for s in payload["samples"]] == [None, None]
 
 
 def test_track_video_without_srt_is_empty(tmp_path):
     client, fid = _track_client(tmp_path, with_srt=False)
     resp = client.get(f"/api/track/{fid}")
     assert resp.status_code == 200
-    assert resp.json() == {"points": [], "samples": []}
+    assert resp.json() == {"points": [], "samples": [], "altitude_ref": None}
 
 
 def test_track_unknown_id_404(tmp_path):
@@ -501,7 +517,9 @@ def test_track_downsampling_preserves_both_endpoints(tmp_path, monkeypatch):
     client, fid = _track_client(tmp_path)
     fixes = [(float(i), float(-i)) for i in range(600)]
     samples = [
-        api.srt_parser.SrtTrackSample(time_s=float(i), lat=float(i), lon=float(-i))
+        api.srt_parser.SrtTrackSample(
+            time_s=float(i), lat=float(i), lon=float(-i), alt=float(i), alt_ref="relative"
+        )
         for i in range(600)
     ]
     monkeypatch.setattr(api.srt_parser, "parse_srt_track", lambda _path: fixes)
@@ -517,6 +535,7 @@ def test_track_downsampling_preserves_both_endpoints(tmp_path, monkeypatch):
         "time_s": 599.0,
         "lon": -599.0,
         "lat": 599.0,
+        "alt": 599.0,
     }
 
 
