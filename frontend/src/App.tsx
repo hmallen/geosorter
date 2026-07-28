@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView'
 import FileListPanel from './components/FileListPanel'
 import Lightbox from './components/Lightbox'
@@ -10,7 +10,7 @@ import DuplicatesPanel from './components/DuplicatesPanel'
 import TimelineScrubber from './components/TimelineScrubber'
 import { buildPlaces } from './locationFilter'
 import { dismissDuplicates, fetchTrack } from './api'
-import { trackBBox } from './flightTrack'
+import { positionAtTime, trackBBox } from './flightTrack'
 import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
 import { effectiveFavorite, filterFavorites } from './favorites'
 import { parseHash, type UrlState, type UrlView } from './urlState'
@@ -26,8 +26,18 @@ import { useStitchAll } from './useStitchAll'
 import { useAuthContext } from './useAuth'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
-import type { LibraryFeature, QuarantineItem } from './types'
+import type { FlightTrackSample, LibraryFeature, QuarantineItem } from './types'
 import './App.css'
+
+interface ActiveFlightTrack {
+  fileId: number
+  filename: string
+  points: [number, number][]
+  samples: FlightTrackSample[]
+  currentTime: number
+  follow: boolean
+  pip: boolean
+}
 
 // Build a minimal LibraryFeature from a no-GPS QuarantineItem so its media can be
 // previewed in the shared Lightbox. Quarantined captures carry no coordinate, so the
@@ -110,27 +120,78 @@ export default function App() {
   // The settled camera (moveend cadence), mirrored into the hash. Seeded from
   // the hash so the pre-first-move rewrites don't drop a shared `map=`.
   const [mapView, setMapView] = useState<UrlView | null>(initialUrl.view ?? null)
-  // Flight-track overlay: a video's GPS path (from its SRT sidecar) drawn on the
-  // map. Empty points = "no track found" (parse failure or a fix-less sidecar),
-  // surfaced in the chip rather than silently doing nothing.
-  const [track, setTrack] = useState<{ filename: string; points: [number, number][] } | null>(
-    null,
-  )
+  // The active route stays owned by App so MapView, the PiP lightbox, and playback
+  // synchronization share one source of truth without remounting the video.
+  const [track, setTrack] = useState<ActiveFlightTrack | null>(null)
+  const [trackLoadingId, setTrackLoadingId] = useState<number | null>(null)
+  const [trackError, setTrackError] = useState<{ fileId: number; message: string } | null>(null)
+  const trackRequest = useRef(0)
 
-  // Opened from the lightbox: close it (the map is the surface the track lives
-  // on), fetch the path, and fit the camera to it via the existing flyTo channel.
-  async function showTrack(f: LibraryFeature) {
-    setLightbox(null)
-    let points: [number, number][] = []
-    try {
-      points = await fetchTrack(f.properties.id)
-    } catch {
-      // fall through to the "no track" chip — same UX as an empty sidecar
-    }
-    setTrack({ filename: f.properties.filename, points })
+  function fitTrack(points: [number, number][]) {
     const bbox = trackBBox(points)
     if (bbox) flyToBBox(bbox)
   }
+
+  // Fetch before entering PiP so a missing/broken sidecar leaves the full viewer
+  // intact with an inline error. Returning from expanded mode reuses the payload.
+  async function showTrack(f: LibraryFeature) {
+    if (track?.fileId === f.properties.id) {
+      setTrack((current) => (current ? { ...current, pip: true } : current))
+      setTrackError(null)
+      fitTrack(track.points)
+      return
+    }
+    const request = ++trackRequest.current
+    setTrackLoadingId(f.properties.id)
+    setTrackError(null)
+    try {
+      const payload = await fetchTrack(f.properties.id)
+      if (request !== trackRequest.current) return
+      if (payload.points.length < 2) {
+        setTrackError({
+          fileId: f.properties.id,
+          message: 'No usable GPS flight track was found in this video’s SRT sidecar.',
+        })
+        return
+      }
+      setTrack({
+        fileId: f.properties.id,
+        filename: f.properties.filename,
+        points: payload.points,
+        samples: payload.samples,
+        currentTime: 0,
+        follow: false,
+        pip: true,
+      })
+      fitTrack(payload.points)
+    } catch {
+      if (request === trackRequest.current) {
+        setTrackError({
+          fileId: f.properties.id,
+          message: 'The flight track could not be loaded. Please try again.',
+        })
+      }
+    } finally {
+      if (request === trackRequest.current) setTrackLoadingId(null)
+    }
+  }
+
+  function closeViewer() {
+    trackRequest.current += 1
+    setTrackLoadingId(null)
+    setTrackError(null)
+    setTrack(null)
+    setLightbox(null)
+  }
+
+  const syncAvailable = (track?.samples.length ?? 0) >= 2
+  const activeTrackPosition = useMemo(
+    () =>
+      track && syncAvailable
+        ? positionAtTime(track.samples, track.currentTime)
+        : null,
+    [track, syncAvailable],
+  )
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
   // progress survives the lightbox closing/reopening; reload on success so the hero
   // + stitch_status persist on the map and in the panel.
@@ -188,10 +249,13 @@ export default function App() {
   // the no-GPS list (an assign removes items; an organize may add some) and the
   // duplicate backlog (an organize records rows; a dismiss/undo drains them).
   function handleChanged() {
+    trackRequest.current += 1
     setLightbox(null)
     // Files may have moved/left the library; a drawn track could now belong to
     // a re-filed capture, so drop it rather than risk a stale overlay.
     setTrack(null)
+    setTrackLoadingId(null)
+    setTrackError(null)
     reload()
     reloadQuarantine()
     reloadDuplicates()
@@ -311,23 +375,36 @@ export default function App() {
         track={track?.points}
         initialView={initialUrl.view}
         onViewChange={setMapView}
+        activeTrackPosition={activeTrackPosition}
+        followTrack={Boolean(track?.pip && track.follow && activeTrackPosition)}
       />
       {/* Under-toolbar chip slot: the flight-track chip plus the active-filter
           chips (date range, favorites) share one horizontal row so they can
           coexist without stacking on top of each other. */}
-      {(track || dateRange || favoritesOnly) && (
+      {(track?.pip || dateRange || favoritesOnly) && (
         <div className="chips-row">
-          {track && (
+          {track?.pip && (
             <div className="track-chip">
-              {track.points.length >= 2 ? (
-                <>
-                  <span className="track-swatch" aria-hidden="true" />
-                  Flight path — {track.filename}
-                </>
+              <span className="track-chip__label">
+                <span className="track-swatch" aria-hidden="true" />
+                Flight path — {track.filename}
+              </span>
+              {syncAvailable ? (
+                <label className="track-follow">
+                  <input
+                    type="checkbox"
+                    checked={track.follow}
+                    onChange={(e) =>
+                      setTrack((current) =>
+                        current ? { ...current, follow: e.target.checked } : current,
+                      )
+                    }
+                  />
+                  Follow drone
+                </label>
               ) : (
-                <>No flight track found for {track.filename}</>
+                <span className="track-sync-warning">Timeline synchronization unavailable</span>
               )}
-              <button onClick={() => setTrack(null)}>Clear</button>
             </div>
           )}
           {dateRange && (
@@ -481,8 +558,14 @@ export default function App() {
         <Lightbox
           files={lightbox.files}
           index={lightbox.index}
-          onIndex={(i) => setLightbox((lb) => (lb ? { files: lb.files, index: i } : null))}
-          onClose={() => setLightbox(null)}
+          onIndex={(i) => {
+            trackRequest.current += 1
+            setTrack(null)
+            setTrackLoadingId(null)
+            setTrackError(null)
+            setLightbox((lb) => (lb ? { files: lb.files, index: i } : null))
+          }}
+          onClose={closeViewer}
           stitchByFile={stitchByFile}
           onStartStitch={isAdmin ? startStitch : undefined}
           onShowTrack={showTrack}
@@ -491,6 +574,31 @@ export default function App() {
           // quarantine preview / stale snapshot would persist a favorite the UI
           // could never resurface (see lightboxLive above).
           onToggleFavorite={isAdmin && lightboxLive ? toggleFavorite : undefined}
+          trackMode={Boolean(
+            track?.pip && track.fileId === lightbox.files[lightbox.index]?.properties.id,
+          )}
+          trackActive={track?.fileId === lightbox.files[lightbox.index]?.properties.id}
+          trackLoading={
+            trackLoadingId === lightbox.files[lightbox.index]?.properties.id
+          }
+          trackError={
+            trackError?.fileId === lightbox.files[lightbox.index]?.properties.id
+              ? trackError.message
+              : null
+          }
+          onPlaybackTime={(time) =>
+            setTrack((current) =>
+              current &&
+              current.fileId === lightbox.files[lightbox.index]?.properties.id
+                ? { ...current, currentTime: time }
+                : current,
+            )
+          }
+          onExpand={() =>
+            setTrack((current) =>
+              current ? { ...current, pip: false, follow: false } : current,
+            )
+          }
         />
       )}
     </div>

@@ -38,6 +38,10 @@ interface Props {
   // Report the settled camera (same moveend/onLoad cadence as onBoundsChange)
   // so App can mirror it into the URL hash.
   onViewChange?: (v: { longitude: number; latitude: number; zoom: number }) => void
+  // Interpolated video-clock position. Follow mode recenters periodically without
+  // changing the user's zoom level.
+  activeTrackPosition?: [number, number] | null
+  followTrack?: boolean
 }
 
 export default function MapView({
@@ -49,6 +53,8 @@ export default function MapView({
   track,
   initialView,
   onViewChange,
+  activeTrackPosition,
+  followTrack = false,
 }: Props) {
   const index = useMemo(() => buildIndex(features), [features])
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -63,6 +69,7 @@ export default function MapView({
   const [bbox, setBbox] = useState<BBox>(WORLD)
   const [satellite, setSatellite] = useState(false)
   const [heatmap, setHeatmap] = useState(false)
+  const lastFollowAt = useRef(0)
   const clusters = useMemo(() => clustersFor(index, bbox, view.zoom), [index, bbox, view.zoom])
   const heatData = useMemo(() => heatmapData(features), [features])
 
@@ -109,6 +116,20 @@ export default function MapView({
       { padding: 60, maxZoom: 15, duration: 800 },
     )
   }, [flyTo])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !followTrack || !activeTrackPosition) return
+    const now = performance.now()
+    if (now - lastFollowAt.current < 250) return
+    lastFollowAt.current = now
+    map.easeTo({
+      center: activeTrackPosition,
+      zoom: map.getZoom(),
+      duration: 220,
+      essential: true,
+    })
+  }, [activeTrackPosition, followTrack])
 
   return (
     <Map
@@ -228,6 +249,17 @@ export default function MapView({
           </Marker>
         )
       })}
+      {activeTrackPosition && (
+        <Marker
+          longitude={activeTrackPosition[0]}
+          latitude={activeTrackPosition[1]}
+          anchor="center"
+        >
+          <div className="track-drone" title="Current drone position" aria-label="Current drone position">
+            <span aria-hidden="true">✦</span>
+          </div>
+        </Marker>
+      )}
     </Map>
   )
 }

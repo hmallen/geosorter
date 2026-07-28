@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch, fetchDuplicates, dismissDuplicates, setFavorite } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch, trackUrl, fetchTrack, fetchDuplicates, dismissDuplicates, setFavorite } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -253,5 +253,41 @@ describe('frames gallery (B10)', () => {
   it('throws on a non-OK response', async () => {
     const fetchFn = (async () => ({ ok: false, status: 404 }) as Response) as unknown as typeof fetch
     await expect(fetchFrames(7, fetchFn)).rejects.toThrow(/frames fetch failed: 404/)
+  })
+})
+
+describe('flight track', () => {
+  it('builds the track URL and decodes points plus timed samples', async () => {
+    expect(trackUrl(42)).toBe('/api/track/42')
+    const payload = {
+      points: [[-105, 40], [-104, 41]],
+      samples: [
+        { time_s: 1.25, lon: -105, lat: 40 },
+        { time_s: 2.25, lon: -104, lat: 41 },
+      ],
+    }
+    const fetchFn = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    })) as unknown as typeof fetch
+    expect(await fetchTrack(42, fetchFn)).toEqual(payload)
+  })
+
+  it('defaults missing additive samples for an older server payload', async () => {
+    const fetchFn = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ points: [[-105, 40]] }),
+    })) as unknown as typeof fetch
+    expect(await fetchTrack(7, fetchFn)).toEqual({
+      points: [[-105, 40]],
+      samples: [],
+    })
+  })
+
+  it('throws on a non-OK response', async () => {
+    const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
+    await expect(fetchTrack(7, fetchFn)).rejects.toThrow(/track fetch failed: 500/)
   })
 })

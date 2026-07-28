@@ -41,6 +41,17 @@ export interface LibraryFC {
   features: LibraryFeature[]
 }
 
+export interface FlightTrackSample {
+  time_s: number
+  lon: number
+  lat: number
+}
+
+export interface FlightTrack {
+  points: [number, number][]
+  samples: FlightTrackSample[]
+}
+
 // One no-GPS (quarantined) capture awaiting a manual location (GET /api/quarantine).
 // These are excluded from /api/library (no coordinate to plot), so the No-GPS panel
 // lists them here and assigns a location to promote them to organized.

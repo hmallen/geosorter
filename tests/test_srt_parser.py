@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from geosorter.srt_parser import SrtResult, parse_srt, parse_srt_track
+from geosorter.srt_parser import (
+    SrtResult,
+    parse_srt,
+    parse_srt_track,
+    parse_srt_track_samples,
+)
 
 SRT_DIR = Path(__file__).parent / "fixtures" / "srt"
 
@@ -122,3 +127,55 @@ def test_track_no_gps_fixture_is_empty():
 
 def test_track_missing_file_is_empty(tmp_path):
     assert parse_srt_track(tmp_path / "absent.SRT") == []
+
+
+def test_timed_track_uses_cue_start_and_skips_prelock():
+    samples = parse_srt_track_samples(SRT_DIR / "mini4pro_bracket.srt")
+    assert len(samples) == 2
+    assert samples[0].time_s == pytest.approx(0.033)
+    assert samples[0].lat == pytest.approx(14.798240)
+    assert samples[0].lon == pytest.approx(-65.691450)
+    assert samples[-1].time_s == pytest.approx(0.066)
+
+
+def test_timed_track_accepts_dot_milliseconds(tmp_path):
+    srt = tmp_path / "dot.srt"
+    srt.write_text(
+        "1\n00:00:01.250 --> 00:00:01.283\n"
+        "[latitude: 40.000000] [longitude: -105.000000]\n",
+        encoding="utf-8",
+    )
+    samples = parse_srt_track_samples(srt)
+    assert len(samples) == 1
+    assert samples[0].time_s == pytest.approx(1.25)
+
+
+def test_timed_track_skips_malformed_timing_but_static_track_keeps_fix(tmp_path):
+    srt = tmp_path / "bad-time.srt"
+    srt.write_text(
+        "1\nnot a timing line\n"
+        "[latitude: 40.000000] [longitude: -105.000000]\n\n"
+        "2\n00:00:02,000 --> 00:00:02,033\n"
+        "[latitude: 40.100000] [longitude: -105.100000]\n",
+        encoding="utf-8",
+    )
+    assert len(parse_srt_track(srt)) == 2
+    samples = parse_srt_track_samples(srt)
+    assert [(s.time_s, s.lat, s.lon) for s in samples] == [
+        (2.0, 40.1, -105.1),
+    ]
+
+
+def test_timed_track_skips_backward_timestamps_but_keeps_equal_times(tmp_path):
+    srt = tmp_path / "order.srt"
+    srt.write_text(
+        "1\n00:00:02,000 --> 00:00:02,033\n"
+        "[latitude: 40.000000] [longitude: -105.000000]\n\n"
+        "2\n00:00:01,000 --> 00:00:01,033\n"
+        "[latitude: 40.100000] [longitude: -105.100000]\n\n"
+        "3\n00:00:02,000 --> 00:00:02,033\n"
+        "[latitude: 40.200000] [longitude: -105.200000]\n",
+        encoding="utf-8",
+    )
+    samples = parse_srt_track_samples(srt)
+    assert [s.time_s for s in samples] == [2.0, 2.0]

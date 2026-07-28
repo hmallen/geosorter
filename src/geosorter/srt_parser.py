@@ -70,6 +70,15 @@ class SrtResult:
     frames_seen: int
 
 
+@dataclass(frozen=True)
+class SrtTrackSample:
+    """One range-valid GPS fix aligned to the video's subtitle clock."""
+
+    time_s: float
+    lat: float
+    lon: float
+
+
 def _valid(lat: float, lon: float) -> bool:
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
         return False
@@ -114,6 +123,29 @@ def parse_srt(path: str | Path) -> SrtResult:
     return SrtResult(None, None, "none", None, None, len(cues))
 
 
+_CUE_START = re.compile(
+    r"(?m)^\s*(?P<hours>\d+):(?P<minutes>\d{2}):(?P<seconds>\d{2})"
+    r"(?P<separator>[,.])(?P<millis>\d{3})\s*-->",
+)
+
+
+def _cue_start_seconds(cue: str) -> float | None:
+    """Return an SRT cue's start offset, accepting comma or dot milliseconds."""
+    match = _CUE_START.search(cue)
+    if match is None:
+        return None
+    minutes = int(match.group("minutes"))
+    seconds = int(match.group("seconds"))
+    if minutes >= 60 or seconds >= 60:
+        return None
+    return (
+        int(match.group("hours")) * 3600
+        + minutes * 60
+        + seconds
+        + int(match.group("millis")) / 1000
+    )
+
+
 def parse_srt_track(path: str | Path) -> list[tuple[float, float]]:
     """Return every valid GPS fix in cue order — the video's flight track.
 
@@ -150,3 +182,44 @@ def parse_srt_track(path: str | Path) -> list[tuple[float, float]]:
         if _valid(lat, lon):
             track.append((lat, lon))
     return track
+
+
+def parse_srt_track_samples(path: str | Path) -> list[SrtTrackSample]:
+    """Return valid GPS fixes carrying their SRT cue start offsets.
+
+    Cues with usable GPS but malformed/missing subtitle timing are omitted from
+    this timed view; :func:`parse_srt_track` still returns their coordinates for
+    the static route. Backward-moving timestamps are skipped because frontend
+    interpolation requires a monotonic time axis. Equal timestamps are retained
+    and resolved deterministically by the client.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    cues = [c for c in re.split(r"\r?\n[ \t]*\r?\n", text) if c.strip()]
+    samples: list[SrtTrackSample] = []
+    pinned: re.Pattern[str] | None = None
+    for cue in cues:
+        if pinned is not None:
+            match = pinned.search(cue)
+        else:
+            match = None
+            for _, probe in _PROBES:
+                match = probe.search(cue)
+                if match is not None:
+                    pinned = probe
+                    break
+        if match is None:
+            continue
+        lat = float(match.group("lat"))
+        lon = float(match.group("lon"))
+        if not _valid(lat, lon):
+            continue
+        time_s = _cue_start_seconds(cue)
+        if time_s is None or (samples and time_s < samples[-1].time_s):
+            continue
+        samples.append(SrtTrackSample(time_s=time_s, lat=lat, lon=lon))
+    return samples

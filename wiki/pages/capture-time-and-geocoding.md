@@ -2,7 +2,7 @@
 title: DJI Capture Time & Offline Geocoding
 tags: [dji, metadata, timezone, geocoding, geonames, geosorter]
 created: 2026-05-31
-updated: 2026-05-31
+updated: 2026-07-16
 sources: [task:h-geocode-tz-path, task:h-feature-geocoding]
 ---
 
@@ -12,7 +12,7 @@ How geosorter turns a coordinate + a naive timestamp into a
 `library/<City, Region, Country>/<YYYY-MM-DD>/...` destination. Two pieces of
 non-obvious domain knowledge live here: how DJI stamps capture time, and how
 GeoNames is queried for a place name offline. See also
-[DJI SRT Telemetry Formats](pages/dji-srt-telemetry-formats.md) for where the GPS
+[DJI SRT Telemetry Formats](dji-srt-telemetry-formats.md) for where the GPS
 coordinate itself comes from.
 
 ## Capture time is naive — and its meaning depends on the source tag

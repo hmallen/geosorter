@@ -85,6 +85,14 @@ logger = logging.getLogger("geosorter.api")
 _TRACK_MAX_POINTS = 500
 
 
+def _downsample_track[T](items: list[T]) -> list[T]:
+    """Evenly cap map/timeline data while preserving both endpoints."""
+    if len(items) <= _TRACK_MAX_POINTS:
+        return items
+    step = len(items) / _TRACK_MAX_POINTS
+    return [items[int(i * step)] for i in range(_TRACK_MAX_POINTS - 1)] + [items[-1]]
+
+
 def _safe_cache_path(path: Path, *roots: Path) -> Path:
     """Assert a served derived file lives under one of its cache ``roots``, else 403.
 
@@ -515,12 +523,11 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     def track(file_id: int) -> dict:
         """A video's GPS flight track, parsed from its SRT telemetry sidecar.
 
-        Returns ``{"points": [[lon, lat], ...]}`` in GeoJSON coordinate order,
-        evenly downsampled to at most ``_TRACK_MAX_POINTS`` (an SRT carries one
-        fix per frame — tens of thousands for a long clip; a map polyline needs
-        far fewer). ``points`` is empty when the file has no SRT companion or
-        the sidecar holds no valid fixes — the UI treats that as "no track",
-        not an error. 404 only for an unknown file id.
+        ``points`` retains the original GeoJSON-order route contract. ``samples``
+        adds subtitle-clock-aligned fixes for synchronized playback. Each list is
+        independently downsampled to at most ``_TRACK_MAX_POINTS`` while retaining
+        its first and final item. Empty data is not an error; 404 is reserved for
+        an unknown file id.
         """
         conn = _index()
         try:
@@ -536,13 +543,17 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         finally:
             conn.close()
         if row is None:
-            return {"points": []}
-        fixes = srt_parser.parse_srt_track(_strip(row["dest_path"]))
-        if len(fixes) > _TRACK_MAX_POINTS:
-            # Even stride, but always keep the final fix (the landing point).
-            step = len(fixes) / _TRACK_MAX_POINTS
-            fixes = [fixes[int(i * step)] for i in range(_TRACK_MAX_POINTS - 1)] + [fixes[-1]]
-        return {"points": [[lon, lat] for lat, lon in fixes]}
+            return {"points": [], "samples": []}
+        path = _strip(row["dest_path"])
+        fixes = _downsample_track(srt_parser.parse_srt_track(path))
+        samples = _downsample_track(srt_parser.parse_srt_track_samples(path))
+        return {
+            "points": [[lon, lat] for lat, lon in fixes],
+            "samples": [
+                {"time_s": sample.time_s, "lon": sample.lon, "lat": sample.lat}
+                for sample in samples
+            ],
+        }
 
     @app.get("/api/inbox")
     def inbox_count() -> dict:
