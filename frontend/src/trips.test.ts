@@ -4,8 +4,10 @@ import {
   dayOrdinal,
   filterTrips,
   formatTripDates,
+  haversineKm,
   DEFAULT_GAP_DAYS,
   GAP_CHOICES,
+  TRIP_SPLIT_KM,
 } from './trips'
 import type { LibraryFeature } from './types'
 
@@ -15,6 +17,7 @@ function feat(
   date: string | null,
   lon = 0,
   lat = 0,
+  ts: string | null = null,
 ): LibraryFeature {
   return {
     type: 'Feature',
@@ -24,7 +27,7 @@ function feat(
       filename: `f${id}.JPG`,
       place_string: place,
       local_date: date,
-      capture_ts_local: null,
+      capture_ts_local: ts,
       media_type: 'photo',
       codec: null,
       gps_source: 'exif',
@@ -126,7 +129,7 @@ describe('buildTrips', () => {
     const [trip] = buildTrips([feat(1, MOAB, '2024-05-01')], DEFAULT_GAP_DAYS)
     expect(trip.placeLabel).toBe(MOAB)
     expect(trip.dateLabel).toBe('May 1, 2024')
-    expect(trip.key).toBe('2024-05-01_2024-05-01')
+    expect(trip.key).toBe('2024-05-01_2024-05-01_0')
   })
 
   it('labels a mixed trip with the dominant place plus a more-places suffix', () => {
@@ -155,6 +158,65 @@ describe('buildTrips', () => {
   it('labels a trip with no placed captures as Unknown place', () => {
     const [trip] = buildTrips([feat(1, null, '2024-03-09')], DEFAULT_GAP_DAYS)
     expect(trip.placeLabel).toBe('Unknown place')
+  })
+
+  // Moab, UT vs Pereira, Colombia — ~4400 km apart.
+  const MOAB_LL: [number, number] = [-109.55, 38.57]
+  const PEREIRA_LL: [number, number] = [-75.69, 4.81]
+
+  it('splits on a geographic jump even when the day gap is within the window', () => {
+    const trips = buildTrips(
+      [
+        feat(1, MOAB, '2024-03-09', ...MOAB_LL),
+        feat(2, MOAB, '2024-03-10', ...MOAB_LL),
+        feat(3, PEREIRA, '2024-03-12', ...PEREIRA_LL), // gap 2 ≤ 7, but ~4400 km away
+      ],
+      7,
+    )
+    expect(trips).toHaveLength(2)
+    expect(trips[0].placeLabel).toBe(PEREIRA)
+    expect(trips[1].placeLabel).toBe(MOAB)
+  })
+
+  it('keeps captures within TRIP_SPLIT_KM of each other in one trip', () => {
+    // ~55 km hops (0.5° of latitude) — under the 100 km split threshold.
+    const trips = buildTrips(
+      [
+        feat(1, PEREIRA, '2024-03-09', -75.69, 4.81),
+        feat(2, PEREIRA, '2024-03-10', -75.69, 5.31),
+        feat(3, PEREIRA, '2024-03-11', -75.69, 5.81),
+      ],
+      DEFAULT_GAP_DAYS,
+    )
+    expect(trips).toHaveLength(1)
+    expect(trips[0].count).toBe(3)
+  })
+
+  it('gives same-date trips split by distance distinct keys', () => {
+    const trips = buildTrips(
+      [
+        feat(1, MOAB, '2024-03-09', ...MOAB_LL),
+        feat(2, PEREIRA, '2024-03-09', ...PEREIRA_LL),
+      ],
+      DEFAULT_GAP_DAYS,
+    )
+    expect(trips).toHaveLength(2)
+    expect(trips[0].key).not.toBe(trips[1].key)
+  })
+
+  it('orders same-day captures by timestamp before measuring jumps', () => {
+    // A→B→C are ~60 km hops (one trip), but in input order A→C→B the first
+    // hop would be ~120 km and split — the timestamp sort must prevent that.
+    const trips = buildTrips(
+      [
+        feat(1, PEREIRA, '2024-03-09', 0, 0, '2024-03-09 08:00:00'),
+        feat(3, PEREIRA, '2024-03-09', 0, 1.08, '2024-03-09 16:00:00'),
+        feat(2, PEREIRA, '2024-03-09', 0, 0.54, '2024-03-09 12:00:00'),
+      ],
+      DEFAULT_GAP_DAYS,
+    )
+    expect(trips).toHaveLength(1)
+    expect(trips[0].count).toBe(3)
   })
 
   it('orders multiple trips newest-first by end date', () => {
@@ -208,5 +270,20 @@ describe('gap constants', () => {
   it('offers the default among the choices', () => {
     expect(GAP_CHOICES).toContain(DEFAULT_GAP_DAYS)
     expect(DEFAULT_GAP_DAYS).toBe(2)
+  })
+})
+
+describe('haversineKm', () => {
+  it('returns 0 for identical points', () => {
+    expect(haversineKm(-75.69, 4.81, -75.69, 4.81)).toBe(0)
+  })
+
+  it('measures one degree of latitude as ~111 km', () => {
+    expect(haversineKm(0, 0, 0, 1)).toBeGreaterThan(110)
+    expect(haversineKm(0, 0, 0, 1)).toBeLessThan(112)
+  })
+
+  it('puts Moab and Pereira far beyond the split threshold', () => {
+    expect(haversineKm(-109.55, 38.57, -75.69, 4.81)).toBeGreaterThan(TRIP_SPLIT_KM)
   })
 })

@@ -97,8 +97,26 @@ export default function Toolbar({
     if (admin && !busy) refresh()
   }, [busy, admin, refresh])
 
+  // The toolbar wraps to several rows on narrow windows, so overlays that sit
+  // "under the toolbar" (.chips-row) cannot assume a one-row height. Publish
+  // the live bottom edge as a CSS variable and let the CSS offset from it.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        '--toolbar-bottom',
+        `${el.offsetTop + el.offsetHeight}px`,
+      )
+    publish()
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
-    <div className="toolbar">
+    <div className="toolbar" ref={rootRef}>
       <span className="brand" title="geosorter">
         {/* Pin mark reusing the favicon's cyan→green gradient (see favicon.svg). */}
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">

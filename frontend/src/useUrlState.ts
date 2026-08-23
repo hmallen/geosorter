@@ -21,6 +21,8 @@ interface UseUrlStateArgs {
   pickedPlace: string | null
   lightboxFileId: number | undefined
   dateRange: DateRange | null
+  // Trip pick's geographic filter (rides along with its date range).
+  tripBBox: BBox | null
   favoritesOnly: boolean
   // Fit the camera to a bbox (App's flyTo channel). Must be identity-stable
   // (useCallback) so the restore effect doesn't churn.
@@ -39,6 +41,7 @@ export function useUrlState({
   pickedPlace,
   lightboxFileId,
   dateRange,
+  tripBBox,
   favoritesOnly,
   onFlyTo,
   onOpenCapture,
@@ -88,11 +91,12 @@ export function useUrlState({
       cap: lightboxFileId,
       from: dateRange?.from,
       to: dateRange?.to,
+      bbox: tripBBox ?? undefined,
       fav: favoritesOnly || undefined,
     })
     const id = setTimeout(() => {
       history.replaceState(null, '', hash || window.location.pathname + window.location.search)
     }, 300)
     return () => clearTimeout(id)
-  }, [restored, mapView, pickedPlace, lightboxFileId, dateRange, favoritesOnly])
+  }, [restored, mapView, pickedPlace, lightboxFileId, dateRange, tripBBox, favoritesOnly])
 }

@@ -1,7 +1,8 @@
 // Pure trip-clustering helpers for the Trips panel: derive "trips" — runs of
-// capture days at most `maxGapDays` apart — from the loaded library features,
-// entirely client-side (no API call). Dates are 'YYYY-MM-DD' STRINGS throughout,
-// never `new Date()` (see dateRange.ts); the only arithmetic is integer
+// captures at most `maxGapDays` apart in time AND at most TRIP_SPLIT_KM apart
+// between consecutive captures — from the loaded library features, entirely
+// client-side (no API call). Dates are 'YYYY-MM-DD' STRINGS throughout, never
+// `new Date()` (see dateRange.ts); the only date arithmetic is integer
 // civil-date math, so clustering is timezone-stable in any browser.
 
 import type { BBox } from './clusters'
@@ -10,7 +11,7 @@ import { featureDate } from './dateRange'
 import { MONTHS } from './dateGroups'
 
 export interface Trip {
-  key: string // `${from}_${to}` — stable id for React keys
+  key: string // `${from}_${to}_${seq}` — stable id for React keys
   from: string // 'YYYY-MM-DD', inclusive
   to: string // 'YYYY-MM-DD', inclusive
   count: number // captures in the trip
@@ -22,6 +23,25 @@ export interface Trip {
 // Idle-day thresholds offered by the panel's gap select.
 export const GAP_CHOICES = [1, 2, 3, 7] as const
 export const DEFAULT_GAP_DAYS = 2
+
+// A jump of more than this between CONSECUTIVE captures starts a new trip even
+// inside the idle-day window — a week-long gap select must not merge, say, Utah
+// and Colombia into one trip. 100 km keeps day excursions around a base in one
+// trip while splitting on any flight or long drive between destinations.
+export const TRIP_SPLIT_KM = 100
+
+const EARTH_RADIUS_KM = 6371
+
+// Great-circle distance in km between two [lon, lat] points (haversine).
+export function haversineKm(lon1: number, lat1: number, lon2: number, lat2: number): number {
+  const rad = Math.PI / 180
+  const dLat = (lat2 - lat1) * rad
+  const dLon = (lon2 - lon1) * rad
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(a))
+}
 
 // Days since 1970-01-01 from a 'YYYY-MM-DD' string, by the days-from-civil
 // algorithm (Hinnant) — pure integer math, no Date object involved.
@@ -61,9 +81,12 @@ interface TripAccum {
   count: number
   bbox: BBox
   placeCounts: Map<string, number>
+  // Position of the most recent capture — the anchor for the distance split.
+  lastLon: number
+  lastLat: number
 }
 
-function finalize(t: TripAccum): Trip {
+function finalize(t: TripAccum, seq: number): Trip {
   let placeLabel = 'Unknown place'
   if (t.placeCounts.size > 0) {
     let dominant = ''
@@ -79,7 +102,9 @@ function finalize(t: TripAccum): Trip {
       extra > 0 ? `${dominant} +${extra} more place${extra === 1 ? '' : 's'}` : dominant
   }
   return {
-    key: `${t.from}_${t.to}`,
+    // The seq suffix keeps keys unique when a distance split yields several
+    // trips over the same date range (e.g. an out-and-back day excursion).
+    key: `${t.from}_${t.to}_${seq}`,
     from: t.from,
     to: t.to,
     count: t.count,
@@ -89,31 +114,52 @@ function finalize(t: TripAccum): Trip {
   }
 }
 
-// Cluster the dated captures into trips: sort by capture date and start a new
-// trip whenever the gap to the previous capture exceeds maxGapDays (a gap
-// exactly equal to it stays in the same trip). Dateless captures are excluded —
-// they cannot be placed on a timeline. Trips return newest-first.
+// Cluster the dated captures into trips: sort chronologically (date, then
+// capture time within a day) and start a new trip whenever the gap to the
+// previous capture exceeds maxGapDays (a gap exactly equal to it stays in the
+// same trip) OR the jump from the previous capture exceeds TRIP_SPLIT_KM —
+// media far apart geographically is never the same trip, whatever the gap
+// select says. Dateless captures are excluded — they cannot be placed on a
+// timeline. Trips return newest-first.
 export function buildTrips(features: LibraryFeature[], maxGapDays: number): Trip[] {
-  const dated: { f: LibraryFeature; d: string }[] = []
+  const dated: { f: LibraryFeature; d: string; ts: string }[] = []
   for (const f of features) {
     const d = featureDate(f.properties)
-    if (d !== null) dated.push({ f, d })
+    if (d !== null) dated.push({ f, d, ts: f.properties.capture_ts_local ?? '' })
   }
-  dated.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0))
+  // Intra-day order matters for the distance split (an out-of-order pair could
+  // fake a jump), so break date ties on the capture timestamp where known.
+  dated.sort((a, b) =>
+    a.d < b.d ? -1 : a.d > b.d ? 1 : a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0,
+  )
 
   const trips: Trip[] = []
   let cur: TripAccum | null = null
   for (const { f, d } of dated) {
     const [lon, lat] = f.geometry.coordinates
-    if (cur !== null && dayOrdinal(d) - dayOrdinal(cur.to) > maxGapDays) {
-      trips.push(finalize(cur))
+    if (
+      cur !== null &&
+      (dayOrdinal(d) - dayOrdinal(cur.to) > maxGapDays ||
+        haversineKm(cur.lastLon, cur.lastLat, lon, lat) > TRIP_SPLIT_KM)
+    ) {
+      trips.push(finalize(cur, trips.length))
       cur = null
     }
     if (cur === null) {
-      cur = { from: d, to: d, count: 0, bbox: [lon, lat, lon, lat], placeCounts: new Map() }
+      cur = {
+        from: d,
+        to: d,
+        count: 0,
+        bbox: [lon, lat, lon, lat],
+        placeCounts: new Map(),
+        lastLon: lon,
+        lastLat: lat,
+      }
     }
     cur.to = d // sorted ascending, so d only ever extends the trip
     cur.count += 1
+    cur.lastLon = lon
+    cur.lastLat = lat
     cur.bbox = [
       Math.min(cur.bbox[0], lon),
       Math.min(cur.bbox[1], lat),
@@ -123,7 +169,7 @@ export function buildTrips(features: LibraryFeature[], maxGapDays: number): Trip
     const place = f.properties.place_string
     if (place) cur.placeCounts.set(place, (cur.placeCounts.get(place) ?? 0) + 1)
   }
-  if (cur !== null) trips.push(finalize(cur))
+  if (cur !== null) trips.push(finalize(cur, trips.length))
   return trips.reverse()
 }
 
