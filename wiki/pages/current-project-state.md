@@ -2,7 +2,7 @@
 title: Current Project State
 tags: [current-state, architecture, cli, api, frontend, operations, geosorter]
 created: 2026-07-16
-updated: 2026-07-16
+updated: 2026-08-23
 sources: [README.md, pyproject.toml, geosorter.example.toml, src/geosorter, frontend/src]
 ---
 
@@ -115,6 +115,11 @@ moves the primary and companions as one verified group.
   snap-height bottom sheet over a full-screen map.
 - The Locations panel searches the places already represented in the library and
   flies the map to the selected bounds.
+- The Trips panel derives trips client-side (runs of capture days at most an
+  adjustable 1/2/3/7 idle-day gap apart, default 2), labeled by dominant place
+  and day-resolution date range; picking one applies the trip's date range as
+  the app-level filter (Clear chip, shareable `from`/`to` hash) and fits the
+  camera to its captures. Public, like Locations.
 - Initial library failures show a retryable error instead of an unexplained blank
   map.
 - Keyboard focus indicators, reduced-motion support, accessible dialog semantics,

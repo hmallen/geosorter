@@ -5,6 +5,7 @@ import Lightbox from './components/Lightbox'
 import Toolbar from './components/Toolbar'
 import QuarantinePanel from './components/QuarantinePanel'
 import LocationPanel from './components/LocationPanel'
+import TripsPanel from './components/TripsPanel'
 import StitchPanel from './components/StitchPanel'
 import DuplicatesPanel from './components/DuplicatesPanel'
 import TimelineScrubber from './components/TimelineScrubber'
@@ -94,6 +95,9 @@ export default function App() {
   // panel open flag + the imperative map-fit target. `nonce` makes each pick a
   // distinct value so re-picking the same place re-fires MapView's fitBounds.
   const [showLocations, setShowLocations] = useState(false)
+  // Trips panel: auto-derived trips over the library (pure trips.buildTrips);
+  // picking one applies its date range as the app-level filter + fits the camera.
+  const [showTrips, setShowTrips] = useState(false)
   // Unstitched-panorama panel: a library-wide list of which panorama sets still want a
   // 360 stitch (the toolbar shows only the count).
   const [showStitch, setShowStitch] = useState(false)
@@ -370,6 +374,7 @@ export default function App() {
         onOpenNoGps={() => setShowNoGps((v) => !v)}
         noGpsCount={quarantineCount}
         onOpenLocations={() => setShowLocations((v) => !v)}
+        onOpenTrips={() => setShowTrips((v) => !v)}
         onOpenStitch={() => setShowStitch((v) => !v)}
         onOpenDuplicates={() => setShowDuplicates((v) => !v)}
         duplicatesCount={duplicatesCount}
@@ -511,6 +516,19 @@ export default function App() {
             setPickedPlace(place) // URL-hash breadcrumb (feature 2)
             flyToBBox(bbox)
             setShowLocations(false)
+          }}
+        />
+      )}
+      {showTrips && (
+        <TripsPanel
+          features={features}
+          onClose={() => setShowTrips(false)}
+          onPick={(trip) => {
+            // Fly + filter (user decision): the trip's range becomes the app-level
+            // date filter — the existing Clear chip and URL-hash from/to carry it.
+            setDateRange({ from: trip.from, to: trip.to })
+            flyToBBox(trip.bbox)
+            setShowTrips(false)
           }}
         />
       )}

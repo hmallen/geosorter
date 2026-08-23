@@ -163,3 +163,10 @@ panos stitch instead of being rejected. Documented the now projection-aware vali
 (`PanoSphere` 360 vs flat zoomable `FlatHero`), the ETag projection fold, and the
 cache-hit projection backfill that recovers a value lost to an index-DB rebuild (never
 overwriting the authoritative cold-run HFOV value).
+
+## [2026-08-23] update | Current Project State
+
+Added the Trips panel (m-implement-trip-explorer) to the browser-experience list:
+client-side trip derivation (runs of capture days at most an adjustable 1/2/3/7
+idle-day gap apart), dominant-place + day-resolution labels, pick applies the trip's
+date range as the app-level filter and fits the camera; public like Locations.
