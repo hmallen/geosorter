@@ -134,12 +134,17 @@ export default function Lightbox({
       : ''
 
   // Reset the gallery + projection choice whenever the selected file changes.
-  useEffect(() => {
+  // Done during render (compare against the previous file id) rather than in an
+  // effect: React re-renders before committing, so the old file's gallery state
+  // never paints against the new file.
+  const [prevFileId, setPrevFileId] = useState(fileId)
+  if (fileId !== prevFileId) {
+    setPrevFileId(fileId)
     setShowFrames(false)
     setFrameZoom(null)
     setFrames(null)
     setProjChoice('')
-  }, [fileId])
+  }
 
   useEffect(() => {
     playbackCallback.current = onPlaybackTime
