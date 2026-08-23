@@ -3,22 +3,48 @@
   inset: 0;
 }
 
-.toolbar {
+/* ============================================================
+   Toolbar: a single floating command bar. The design system is
+   deliberately quiet — borderless ghost buttons of ONE fixed
+   height inside one bordered pill, thin rules between functional
+   groups (batch ops · browse · review backlogs · status), counts
+   as badges instead of text baked into labels, and nowrap
+   everywhere so no control can ever wrap ragged.
+   ============================================================ */
+/* Transparent positioning strip for the toolbar pill. Spans the MAP area, not
+   the viewport: the right inset reserves the permanent file-rail's width so a
+   wide (admin) bar can never slide under the rail. Centering happens here with
+   flex, NOT with left:50% + translateX on the pill — a transform-centered
+   absolute box computes its available width from the 50% offset, which halves
+   the room and makes the bar wrap far too early. */
+.toolbar-slot {
   position: absolute;
   top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 8px;
+  right: calc(380px + 16px); /* .panel default width + margins */
   z-index: 10;
+  display: flex;
+  justify-content: center;
+  /* Dead space beside the pill must not swallow map drag/click. */
+  pointer-events: none;
+}
+
+.toolbar {
+  position: relative; /* anchor for the .inbox-panel dropdown */
+  pointer-events: auto;
+  max-width: 100%;
   background: var(--surface);
   color: var(--text);
-  padding: 6px 10px;
+  padding: 5px 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap; /* narrow windows wrap whole groups instead of overflowing */
+  justify-content: center;
   align-items: center;
-  font-size: 14px;
+  gap: 4px 2px;
+  font-size: 13px;
 }
 
 /* Brand wordmark: the one piece of identity in the chrome. The mark reuses the
@@ -27,8 +53,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding-right: 10px;
-  border-right: 1px solid var(--border);
+  padding: 0 4px 0 6px;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 600;
@@ -41,34 +66,113 @@
   display: block;
 }
 
+/* Thin vertical rule between functional groups. */
+.tb-sep {
+  flex: 0 0 1px;
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 6px;
+}
+
+/* A run of related controls; kept as one flex unit so wrapping (narrow
+   windows) breaks between groups, never inside one. */
+.tb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .toolbar button {
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px;
+  white-space: nowrap;
   cursor: pointer;
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .toolbar button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.toolbar button:active:not(:disabled) {
   background: var(--surface-3);
 }
 
 .toolbar button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
 
-/* Pressed state for the toolbar's view toggles (Timeline, ♥ Favorites): the
+/* Icons sit a step quieter than their labels; hover restores full strength. */
+.tb-ico {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.toolbar button:hover:not(:disabled) .tb-ico {
+  color: var(--text);
+}
+
+/* The one filled control: Process Inbox is the app's central action. */
+.toolbar button.tb-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.toolbar button.tb-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* Pressed state for the toolbar's view toggles (Timeline, Favorites): the
    accent fill mirrors .chip--on / .seg-btn--active so "on" reads consistently. */
 .toolbar button.tb-toggle--on {
   background: var(--accent);
   color: var(--accent-contrast);
-  border-color: var(--accent);
 }
 
 .toolbar button.tb-toggle--on:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+.toolbar button.tb-primary .tb-ico,
+.toolbar button.tb-toggle--on .tb-ico,
+.toolbar button.tb-primary:hover:not(:disabled) .tb-ico,
+.toolbar button.tb-toggle--on:hover:not(:disabled) .tb-ico {
+  color: inherit;
+}
+
+/* Count badge inside a button (inbox captures, review backlogs). */
+.tb-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tb-primary .tb-count,
+.tb-toggle--on .tb-count {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--accent-contrast);
 }
 
 /* Admin login control (m-implement-view-only-admin-auth) */
@@ -83,12 +187,13 @@
 }
 
 .login-form input {
-  padding: 5px 8px;
+  height: 32px;
+  padding: 0 10px;
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .login-error {
@@ -96,9 +201,10 @@
   font-size: 13px;
 }
 
-.toolbar .job,
-.toolbar .inbox {
+.toolbar .job {
   color: var(--text-muted);
+  padding: 0 4px;
+  white-space: nowrap;
   /* Telemetry-style counts: digits keep their column as values tick up. */
   font-variant-numeric: tabular-nums;
 }
@@ -106,12 +212,12 @@
 .toolbar .job--progress {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .toolbar .job--progress progress {
-  width: 120px;
-  height: 10px;
+  width: 110px;
+  height: 8px;
   accent-color: var(--accent);
 }
 
@@ -2021,15 +2127,29 @@
    block (the component picks rail vs sheet by the same threshold).
    ============================================================ */
 @media (max-width: 1024px) {
-  /* Toolbar: a full-width wrapping top bar instead of a centered no-wrap pill that
-     would run off-screen. Status/job spans wrap to their own line rather than push
-     buttons out of view. */
-  .toolbar {
-    left: 8px;
+  /* Toolbar: a full-width wrapping top bar instead of a centered pill. Groups
+     wrap as whole units; status/job spans may wrap to their own line rather
+     than push buttons out of view. */
+  /* The file list is a bottom sheet here (no right rail), so the strip spans
+     the full width and the pill stretches into a top bar. */
+  .toolbar-slot {
     right: 8px;
-    transform: none;
-    flex-wrap: wrap;
-    row-gap: 6px;
+  }
+
+  .toolbar {
+    width: 100%;
+    gap: 6px 4px;
+  }
+
+  /* The bar wraps to several rows here, and a group separator that lands at a
+     row edge dangles as a stray tick — group spacing alone carries the
+     structure on the wrapped layout. */
+  .tb-sep {
+    display: none;
+  }
+
+  .toolbar .job {
+    white-space: normal;
   }
 
   .toolbar .job--error {
@@ -2112,21 +2232,30 @@
 
   /* Bigger tap targets for the primary controls. */
   .toolbar button {
-    padding: 8px 14px;
-    min-height: 40px;
+    height: 40px;
+    padding: 0 13px;
+  }
+
+  .login-form input {
+    height: 40px;
   }
 }
 
 /* Phone-only tightening: condense the toolbar and bump lightbox touch targets. */
 @media (max-width: 639px) {
   .toolbar {
-    font-size: 13px;
-    gap: 6px;
-    padding: 6px 8px;
+    padding: 5px 6px;
   }
 
   .toolbar button {
-    padding: 8px 12px;
+    padding: 0 10px;
+  }
+
+  /* A phone can be narrower than a whole group (e.g. the three backlog
+     buttons); let groups break internally instead of clipping at the edges. */
+  .tb-group {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .lightbox-body {
