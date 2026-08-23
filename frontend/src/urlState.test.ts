@@ -49,6 +49,15 @@ describe('formatHash', () => {
   it('drops malformed from/to values instead of writing garbage', () => {
     expect(formatHash({ from: 'not-a-date', to: '2025-13-40' })).toBe('')
   })
+
+  it('formats the trip bbox at 5 decimals, ordered before fav', () => {
+    expect(formatHash({ bbox: [-109.55, 38.567891234, -109.5, 38.6], fav: true }))
+      .toBe('#bbox=-109.55000,38.56789,-109.50000,38.60000&fav=1')
+  })
+
+  it('drops a non-finite bbox', () => {
+    expect(formatHash({ bbox: [NaN, 0, 1, 1] })).toBe('')
+  })
 })
 
 describe('parseHash', () => {
@@ -119,6 +128,22 @@ describe('parseHash', () => {
     expect(parseHash('#to=2025-01-01')).toEqual({ to: '2025-01-01' })
   })
 
+  it('parses a valid bbox and rejects malformed or out-of-range ones', () => {
+    expect(parseHash('#bbox=-109.55000,38.56789,-109.50000,38.60000'))
+      .toEqual({ bbox: [-109.55, 38.56789, -109.5, 38.6] })
+    expect(parseHash('#bbox=1,2,3')).toEqual({}) // wrong arity
+    expect(parseHash('#bbox=a,2,3,4')).toEqual({}) // non-numeric
+    expect(parseHash('#bbox=-181,0,0,0')).toEqual({}) // lon out of range
+    expect(parseHash('#bbox=0,-91,0,0')).toEqual({}) // lat out of range
+    expect(parseHash('#bbox=1,0,0,0')).toEqual({}) // west > east
+    expect(parseHash('#bbox=0,1,0,0')).toEqual({}) // south > north
+    expect(parseHash('#bbox=1,2,3,4&cap=5')).toEqual({ bbox: [1, 2, 3, 4], cap: 5 })
+  })
+
+  it('keeps a degenerate single-point bbox (a one-capture trip)', () => {
+    expect(parseHash('#bbox=5,5,5,5')).toEqual({ bbox: [5, 5, 5, 5] })
+  })
+
   it('treats only fav=1 as true', () => {
     expect(parseHash('#fav=1')).toEqual({ fav: true })
     expect(parseHash('#fav=0')).toEqual({})
@@ -145,6 +170,7 @@ describe('roundtrip', () => {
     { place: 'Boulder, Colorado' },
     { cap: 123 },
     { from: '2024-01-01', to: '2024-12-31' },
+    { bbox: [-109.55, 38.5, -109.5, 38.6] },
     { fav: true },
     {
       view: { longitude: 0, latitude: 0, zoom: 3 },
@@ -152,6 +178,7 @@ describe('roundtrip', () => {
       cap: 1,
       from: '2020-02-01',
       to: '2020-02-31',
+      bbox: [-75.9, 4.6, -75.5, 5],
       fav: true,
     },
   ]
@@ -163,7 +190,8 @@ describe('roundtrip', () => {
   })
 
   it('format(parse(hash)) is identity for canonical hashes', () => {
-    const h = '#map=5.00/10.00000/20.00000&place=X&cap=9&from=2021-03-01&to=2021-04-31&fav=1'
+    const h =
+      '#map=5.00/10.00000/20.00000&place=X&cap=9&from=2021-03-01&to=2021-04-31&bbox=-75.90000,4.60000,-75.50000,5.00000&fav=1'
     expect(formatHash(parseHash(h))).toBe(h)
   })
 })

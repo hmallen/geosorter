@@ -218,7 +218,10 @@
    owns the absolute positioning the lone .track-chip used to carry. */
 .chips-row {
   position: absolute;
-  top: 64px;
+  /* --toolbar-bottom is published by Toolbar's ResizeObserver — the toolbar
+     wraps to several rows on narrow windows, so a fixed offset would land the
+     chips inside it. */
+  top: calc(var(--toolbar-bottom, 56px) + 8px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -1252,7 +1255,7 @@
 .quarantine-panel {
   position: absolute;
   top: 56px;
-  left: 8px;
+  left: 56px; /* clears the maplibre +/- control — see .location-panel */
   width: 380px;
   max-width: 92vw;
   max-height: 80vh;
@@ -1445,7 +1448,10 @@
 .location-panel {
   position: absolute;
   top: 56px;
-  left: 8px;
+  /* 56px clears the maplibre +/- control column at the map's top-left (the
+     mobile media query pulls the panels back to the edge and hides the
+     control instead). Same offset on the three sibling panels below. */
+  left: 56px;
   width: 380px;
   max-width: 92vw;
   max-height: 80vh;
@@ -1474,7 +1480,7 @@
 .stitch-panel {
   position: absolute;
   top: 56px;
-  left: 8px;
+  left: 56px; /* clears the maplibre +/- control — see .location-panel */
   width: 380px;
   max-width: 92vw;
   max-height: 80vh;
@@ -1605,7 +1611,7 @@
 .duplicates-panel {
   position: absolute;
   top: 56px;
-  left: 8px;
+  left: 56px; /* clears the maplibre +/- control — see .location-panel */
   width: 420px;
   max-width: 92vw;
   max-height: 80vh;
@@ -1853,12 +1859,22 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/* flex-start children of a column flex size to max-content — cap them at the
+   column's width so long place labels ellipsize instead of overflowing the row. */
+.trip-main > * {
+  max-width: 100%;
 }
 
 .trip-dates {
   color: var(--text-muted);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trips-gap {

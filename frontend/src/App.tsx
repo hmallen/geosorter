@@ -118,6 +118,11 @@ export default function App() {
   const [dateRange, setDateRange] = useState<DateRange | null>(
     initialUrl.from && initialUrl.to ? { from: initialUrl.from, to: initialUrl.to } : null,
   )
+  // Trip pick's geographic companion to the date range: overlapping-date trips
+  // (split by distance in trips.buildTrips) must not bleed into each other's
+  // map/file list. Set only by a trip pick; cleared with the chip or by
+  // re-scoping the dates from the timeline brush.
+  const [tripBBox, setTripBBox] = useState<BBox | null>(initialUrl.bbox ?? null)
   const [favoritesOnly, setFavoritesOnly] = useState(initialUrl.fav === true)
   // Optimistic favorite overrides + the heart toggle (see useFavorites).
   const { favOverrides, toggleFavorite } = useFavorites(authFetch, features)
@@ -218,12 +223,24 @@ export default function App() {
   const stitchAll = useStitchAll(reload)
 
   // The app-level filter pipeline (spec §3): favorites first, then the date
-  // range. `visible` feeds BOTH the map and the viewport-filtered panel, so the
-  // two surfaces always agree; the media chips stay panel-local as before.
+  // range, then the trip bbox. `visible` feeds BOTH the map and the
+  // viewport-filtered panel, so the two surfaces always agree; the media chips
+  // stay panel-local as before.
   const visible = useMemo(() => {
     const base = favoritesOnly ? filterFavorites(features, favOverrides) : features
-    return filterByDateRange(base, dateRange)
-  }, [features, favoritesOnly, favOverrides, dateRange])
+    const dated = filterByDateRange(base, dateRange)
+    if (!tripBBox) return dated
+    // Pad the box: the hash stores it at 5 decimals (~1 m loss), and the box's
+    // edges ARE capture positions — without slack a roundtripped box would drop
+    // the very captures that defined it. ~11 m is far below trips' 100 km split.
+    const PAD = 1e-4
+    return featuresInBounds(dated, [
+      tripBBox[0] - PAD,
+      tripBBox[1] - PAD,
+      tripBBox[2] + PAD,
+      tripBBox[3] + PAD,
+    ])
+  }, [features, favoritesOnly, favOverrides, dateRange, tripBBox])
 
   // Panel contents: every capture inside the current map viewport. A pure in-memory
   // filter over the already-loaded features — no /api refetch on pan/zoom. Memoized
@@ -360,6 +377,7 @@ export default function App() {
     pickedPlace,
     lightboxFileId: lightboxFile?.properties.id,
     dateRange,
+    tripBBox,
     favoritesOnly,
     onFlyTo: flyToBBox,
     onOpenCapture: openCapture,
@@ -426,10 +444,20 @@ export default function App() {
               )}
             </div>
           )}
-          {dateRange && (
+          {(dateRange || tripBBox) && (
             <div className="filter-chip">
-              {formatRangeLabel(dateRange)}
-              <button onClick={() => setDateRange(null)}>Clear</button>
+              {/* A geographic clamp rides along after a trip pick — say so, and
+                  clear both together (a lone invisible bbox would be baffling). */}
+              {tripBBox ? 'Trip: ' : ''}
+              {dateRange ? formatRangeLabel(dateRange) : 'geographic area'}
+              <button
+                onClick={() => {
+                  setDateRange(null)
+                  setTripBBox(null)
+                }}
+              >
+                Clear
+              </button>
             </div>
           )}
           {favoritesOnly && (
@@ -526,7 +554,11 @@ export default function App() {
           onPick={(trip) => {
             // Fly + filter (user decision): the trip's range becomes the app-level
             // date filter — the existing Clear chip and URL-hash from/to carry it.
+            // Two trips split by distance can share dates, so dates alone
+            // would show both — the trip's bbox rides along as the geographic
+            // filter. The Clear chip and URL-hash from/to/bbox carry the pair.
             setDateRange({ from: trip.from, to: trip.to })
+            setTripBBox(trip.bbox)
             flyToBBox(trip.bbox)
             setShowTrips(false)
           }}
@@ -551,7 +583,16 @@ export default function App() {
         />
       )}
       {showTimeline && (
-        <TimelineScrubber features={features} range={dateRange} onRange={setDateRange} />
+        <TimelineScrubber
+          features={features}
+          range={dateRange}
+          onRange={(r) => {
+            // Brushing re-scopes the view by TIME — keeping a stale trip bbox
+            // would silently hide out-of-area captures inside the new range.
+            setTripBBox(null)
+            setDateRange(r)
+          }}
+        />
       )}
       {showStitch && (
         <StitchPanel
