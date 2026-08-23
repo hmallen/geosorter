@@ -1520,6 +1520,226 @@
   border-radius: 4px;
 }
 
+/* Repair panel (m-repair-broken-captures): shares the quarantine panel's chrome
+   (surface, anchoring) via the .quarantine-panel base class; everything below is
+   the repair-specific list/wizard styling. */
+.repair-panel {
+  overflow: auto;
+}
+
+.repair-note {
+  margin: 0;
+  padding: 8px 10px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.repair-note strong {
+  color: var(--text);
+}
+
+.repair-note--warn {
+  color: #eab308;
+}
+
+.repair-note--error {
+  color: #f87171;
+}
+
+.repair-btn {
+  padding: 4px 10px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.repair-btn--primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+}
+
+.repair-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.repair-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.repair-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px 10px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repair-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.repair-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.repair-item__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.repair-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.repair-badge--zero-byte,
+.repair-badge--missing {
+  color: #f87171;
+  border-color: #f87171;
+}
+
+.repair-badge--no-moov,
+.repair-badge--decode-error {
+  color: #eab308;
+  border-color: #eab308;
+}
+
+.repair-badge--recommended {
+  margin-left: 6px;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.repair-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.repair-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
+  overflow: auto;
+}
+
+.repair-refs {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+.repair-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.repair-ref--selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.repair-ref__thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--placeholder);
+  flex-shrink: 0;
+}
+
+.repair-ref__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.repair-progress {
+  padding: 0 10px;
+}
+
+.repair-progress progress {
+  width: 100%;
+}
+
+.repair-verify {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repair-video {
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.repair-flow-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 4px;
+}
+
+.repair-flow-actions .repair-btn {
+  flex: 1;
+  padding: 8px;
+}
+
+.repair-tail {
+  margin: 0 10px;
+  font-size: 11px;
+}
+
+.repair-tail pre {
+  max-height: 30vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px;
+}
+
 .place-results {
   list-style: none;
   margin: 0;

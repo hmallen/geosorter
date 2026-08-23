@@ -8,6 +8,7 @@ import LocationPanel from './components/LocationPanel'
 import TripsPanel from './components/TripsPanel'
 import StitchPanel from './components/StitchPanel'
 import DuplicatesPanel from './components/DuplicatesPanel'
+import RepairPanel from './components/RepairPanel'
 import TimelineScrubber from './components/TimelineScrubber'
 import { buildPlaces } from './locationFilter'
 import { dismissDuplicates, fetchTrack } from './api'
@@ -113,6 +114,9 @@ export default function App() {
   // Duplicate-review panel + timeline scrubber visibility (toolbar toggles).
   const [showDuplicates, setShowDuplicates] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
+  // Broken-capture repair panel (m-repair-broken-captures): scans the quarantine
+  // for corrupt files and repairs (untrunc) or deletes them. Admin-only toggle.
+  const [showRepair, setShowRepair] = useState(false)
   // App-level view filters (feature 3+4): unlike the panel-local media chips,
   // these apply to BOTH the map and the file list, and are encoded in the hash.
   const [dateRange, setDateRange] = useState<DateRange | null>(
@@ -396,6 +400,7 @@ export default function App() {
         onOpenStitch={() => setShowStitch((v) => !v)}
         onOpenDuplicates={() => setShowDuplicates((v) => !v)}
         duplicatesCount={duplicatesCount}
+        onOpenRepair={() => setShowRepair((v) => !v)}
         onToggleTimeline={() => setShowTimeline((v) => !v)}
         timelineOn={showTimeline}
         onToggleFavorites={() => setFavoritesOnly((v) => !v)}
@@ -534,6 +539,15 @@ export default function App() {
             setShowNoGps(false)
           }}
           onAssignToPlace={(ids, lat, lon) => assignToCoord(ids, lat, lon)}
+        />
+      )}
+      {showRepair && (
+        // Mounted fresh per open, so the panel's auto-scan reruns and a reopened
+        // panel never shows a stale broken list.
+        <RepairPanel
+          busy={assigning}
+          onClose={() => setShowRepair(false)}
+          onChanged={handleChanged}
         />
       )}
       {showLocations && (

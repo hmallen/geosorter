@@ -52,6 +52,12 @@ spatial_index = 'rtree'
 # detect them on PATH; absent Hugin just disables stitching (the tile gallery remains).
 # hugin_bin_dir = 'C:\Program Files\Hugin\bin'
 
+# untrunc executable (or a directory holding it) for the map UI's Repair panel,
+# which rebuilds truncated MP4s (interrupted DJI recordings missing their moov
+# atom) from a healthy reference clip. Leave unset to detect it on PATH; absent
+# untrunc, the Repair panel can still scan and delete broken files.
+# untrunc_path = 'C:\Tools\untrunc\untrunc.exe'
+
 # --- Panorama-stitch tuning (smaller/faster 360 stitch) ---
 # Output canvas (WIDTHxHEIGHT); smaller = faster. Default shrank to 4000x2000.
 # stitch_canvas = '4000x2000'

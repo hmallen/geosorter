@@ -88,6 +88,39 @@ export interface DuplicateItem {
   missing: boolean // source file no longer on disk (dismiss just deletes the row)
 }
 
+// One broken quarantined capture found by the repair scan (m-repair-broken-captures).
+// The scan ffprobes every quarantined file; the Repair panel lists what failed.
+export interface RepairItem {
+  id: number
+  filename: string
+  media_type: 'photo' | 'video'
+  date: string | null
+  size: number
+  // zero-byte: nothing to recover (suggest delete). no-moov: a truncated DJI
+  // recording untrunc can usually rebuild. decode-error: other corruption.
+  // missing: the row is stale (Rescan clears it).
+  status: 'zero-byte' | 'no-moov' | 'decode-error' | 'missing'
+  error: string | null
+  path: string // library-relative POSIX path (still under _no-gps/)
+}
+
+// One healthy library video ranked as an untrunc reference for a broken capture
+// (GET /api/repair/references/{id}); `recommended` marks a strict best match.
+export interface RepairCandidate {
+  id: number
+  filename: string
+  path: string
+  date: string | null
+  place_string: string | null
+  codec: string | null
+  width: number | null
+  height: number | null
+  duration_s: number | null
+  score: number
+  reasons: string[]
+  recommended: boolean
+}
+
 // One offline forward place-name search match (GET /api/place-search): the user
 // picks one to assign its coordinate to the selected no-GPS captures.
 export interface PlaceResult {

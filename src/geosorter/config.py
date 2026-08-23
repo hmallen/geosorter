@@ -73,6 +73,13 @@ spatial_index = 'rtree'
 # unavailable and the map UI keeps the tile gallery (no hard dependency).
 # hugin_bin_dir = 'C:\\Program Files\\Hugin\\bin'
 
+# Optional untrunc executable (or a directory holding it), used by the map UI's
+# Repair panel to rebuild truncated MP4s (interrupted DJI recordings missing their
+# moov atom) from a healthy reference clip. Leave unset to detect it on PATH; when
+# neither finds untrunc, the Repair panel can still scan and delete broken files
+# but offers no repair (no hard dependency).
+# untrunc_path = 'C:\\Tools\\untrunc\\untrunc.exe'
+
 # --- Panorama-stitch tuning (smaller/faster 360 stitch) ---
 # The equirectangular output canvas (WIDTHxHEIGHT). Smaller = fewer output pixels
 # = a faster stitch; the default shrank to 4000x2000 from 6000x3000.
@@ -141,6 +148,10 @@ class Config:
     # silently leaving it in the inbox. False restores the old skip-in-place behavior.
     relocate_duplicates: bool = True
     hugin_bin_dir: Path | None = None
+    # untrunc executable (or a directory holding it) for the broken-capture repair
+    # flow (m-repair-broken-captures). None → PATH lookup; when neither finds it the
+    # Repair panel degrades to scan/delete-only (no hard dependency, like Hugin).
+    untrunc_path: Path | None = None
     # Panorama-stitch tuning (m-frontend-pano-ux): the equirectangular canvas
     # (smaller = faster) and two opt-out quality steps — cpfind --celeste and
     # autooptimiser -l. Defaults match derived.STITCH_CANVAS / both steps on.
@@ -317,6 +328,7 @@ def load(path: str | Path | None = None) -> Config:
         retain_hyperlapse_frames=bool(data.get("retain_hyperlapse_frames", True)),
         relocate_duplicates=bool(data.get("relocate_duplicates", True)),
         hugin_bin_dir=_opt_path(data.get("hugin_bin_dir")),
+        untrunc_path=_opt_path(data.get("untrunc_path")),
         stitch_canvas=stitch_canvas,
         stitch_celeste=stitch_celeste,
         stitch_optimise_lens=stitch_optimise_lens,
@@ -335,14 +347,14 @@ def load(path: str | Path | None = None) -> Config:
     )
 
 
-def update_spatial_index(path: str | Path | None, value: str) -> bool:
-    """Persist the effective ``spatial_index`` to an existing config file.
+def _persist_key(path: str | Path | None, key: str, value: str) -> bool:
+    """Rewrite one ``key = '<value>'`` line in an existing config file.
 
-    Returns ``False`` (no-op) if the config file does not exist — bootstrap
-    should not silently create one.
+    Replaces the exact key token in place (never a comment or a key that merely
+    starts with the same text), appending the line when the key is absent.
+    Returns ``False`` (no-op) when the config file does not exist — the setter
+    commands should not silently create one.
     """
-    if value not in ("rtree", "columnar"):
-        raise ValueError(f"invalid spatial_index: {value!r}")
     cfg_path = resolve_config_path(path)
     if not cfg_path.exists():
         return False
@@ -350,45 +362,40 @@ def update_spatial_index(path: str | Path | None, value: str) -> bool:
     out: list[str] = []
     found = False
     for line in lines:
-        # Match the exact key token only — not a comment or a key that merely
-        # starts with "spatial_index" (e.g. a hypothetical spatial_index_mode).
-        key = line.split("=", 1)[0].strip() if "=" in line else ""
-        if key == "spatial_index":
-            out.append(f"spatial_index = '{value}'")
+        line_key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if line_key == key:
+            out.append(f"{key} = '{value}'")
             found = True
         else:
             out.append(line)
     if not found:
-        out.append(f"spatial_index = '{value}'")
+        out.append(f"{key} = '{value}'")
     cfg_path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return True
+
+
+def update_spatial_index(path: str | Path | None, value: str) -> bool:
+    """Persist the effective ``spatial_index`` to an existing config file."""
+    if value not in ("rtree", "columnar"):
+        raise ValueError(f"invalid spatial_index: {value!r}")
+    return _persist_key(path, "spatial_index", value)
 
 
 def set_admin_password_hash(path: str | Path | None, value: str) -> bool:
     """Persist ``admin_password_hash`` into an existing config file.
 
-    Mirrors :func:`update_spatial_index`: rewrites the exact ``admin_password_hash``
-    key line in place (appending it when absent), and returns ``False`` (no-op) when
-    the config file does not exist — ``set-admin-password`` should not silently create
-    one. ``value`` is the :func:`geosorter.auth.hash_password` string.
+    ``value`` is the :func:`geosorter.auth.hash_password` string.
     """
-    cfg_path = resolve_config_path(path)
-    if not cfg_path.exists():
-        return False
-    lines = cfg_path.read_text(encoding="utf-8").splitlines()
-    out: list[str] = []
-    found = False
-    for line in lines:
-        key = line.split("=", 1)[0].strip() if "=" in line else ""
-        if key == "admin_password_hash":
-            out.append(f"admin_password_hash = '{value}'")
-            found = True
-        else:
-            out.append(line)
-    if not found:
-        out.append(f"admin_password_hash = '{value}'")
-    cfg_path.write_text("\n".join(out) + "\n", encoding="utf-8")
-    return True
+    return _persist_key(path, "admin_password_hash", value)
+
+
+def set_untrunc_path(path: str | Path | None, value: str) -> bool:
+    """Persist ``untrunc_path`` into an existing config file.
+
+    Written by ``geosorter install-untrunc`` after a successful install, so the
+    map UI's Repair panel finds the binary without a manual config edit.
+    """
+    return _persist_key(path, "untrunc_path", value)
 
 
 def write_starter(path: str | Path | None = None, *, overwrite: bool = False) -> Path:

@@ -23,6 +23,15 @@ Exposes the organized library over HTTP for the B7 frontend:
   /api/assign-location/status/{id}`` — bulk-file no-GPS captures to a picked
   location (see :mod:`geosorter.setloc`). Shares the single destructive worker.
 * ``GET  /api/quarantine`` — the no-GPS (quarantined) captures list.
+* ``POST /api/repair/scan`` / ``GET /api/repair/scan/status/{id}`` — ffprobe every
+  quarantined capture for corruption (0-byte, missing ``moov`` atom) on the repair
+  worker pool. ``GET /api/repair/untrunc`` reports untrunc availability;
+  ``GET /api/repair/references/{file_id}`` ranks healthy reference clips;
+  ``POST /api/repair/run`` / ``GET /api/repair/status/{id}`` rebuild a truncated
+  clip with untrunc into ``_repair/fixed/`` for preview; the synchronous
+  ``POST /api/repair/accept`` / ``discard`` / ``delete`` then swap it into the
+  library, drop the attempt, or delete a (re-verified) broken file + its index
+  rows (see :mod:`geosorter.repair`).
 * ``GET  /api/duplicates`` / ``POST /api/duplicates/dismiss`` — the pending
   re-import backlog (``relocate_duplicates = false``) and its synchronous drain
   (see :mod:`geosorter.duplicates`).
@@ -75,7 +84,10 @@ from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
-from . import auth, config, db, derived, duplicates, geocoder, inbox, pathing, srt_parser
+from . import (
+    auth, config, db, derived, duplicates, geocoder, inbox, pathing, repair,
+    srt_parser,
+)
 from .jobs import JobManager, WorkerBusy
 
 logger = logging.getLogger("geosorter.api")
@@ -200,6 +212,23 @@ class StitchRequest(BaseModel):
 
     force: bool = False
     projection: Literal["equirectangular", "cylindrical", "rectilinear"] | None = None
+
+
+class RepairRunRequest(BaseModel):
+    """Body of ``POST /api/repair/run``: rebuild ``file_id`` using ``reference_id``.
+
+    Both are ``files`` row ids: the broken capture and the healthy clip untrunc
+    uses as its structural example (picked from ``GET /api/repair/references``).
+    """
+
+    file_id: int
+    reference_id: int
+
+
+class RepairFileRequest(BaseModel):
+    """Body of the synchronous repair steps (accept / discard / delete): one row id."""
+
+    file_id: int
 
 
 class DismissDuplicatesRequest(BaseModel):
@@ -835,6 +864,140 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             raise HTTPException(status_code=404, detail="unknown job")
         return asdict(state)
 
+    # ----- broken-capture repair (m-repair-broken-captures) ------------------ #
+
+    @app.get("/api/repair/untrunc")
+    def repair_untrunc() -> dict:
+        """Whether an untrunc executable is available (config path or PATH)."""
+        path = repair.find_untrunc(cfg.untrunc_path)
+        return {"available": path is not None, "path": path}
+
+    @app.post("/api/repair/scan", dependencies=[Depends(require_admin)])
+    def repair_scan_start() -> dict:
+        return {"job_id": jobs.submit_repair_scan()}
+
+    @app.get("/api/repair/scan/status/{job_id}")
+    def repair_scan_status(job_id: str) -> dict:
+        state = jobs.repair_scan_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
+
+    @app.get("/api/repair/references/{file_id}")
+    def repair_references(file_id: int) -> dict:
+        """Ranked healthy reference clips for one broken capture (best first)."""
+        try:
+            candidates = repair.reference_candidates(cfg, file_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="unknown file")
+        return {
+            "candidates": [
+                {
+                    "id": c.file_id,
+                    "filename": c.filename,
+                    "path": c.rel_path,
+                    "date": c.date,
+                    "place_string": c.place_string,
+                    "codec": c.codec,
+                    "width": c.width,
+                    "height": c.height,
+                    "duration_s": c.duration_s,
+                    "score": c.score,
+                    "reasons": c.reasons,
+                    "recommended": c.recommended,
+                }
+                for c in candidates
+            ]
+        }
+
+    @app.post("/api/repair/run", dependencies=[Depends(require_admin)])
+    def repair_run(req: RepairRunRequest) -> dict:
+        if repair.find_untrunc(cfg.untrunc_path) is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "untrunc is not installed — set untrunc_path in "
+                               "geosorter.toml or put it on PATH",
+                    "blocking_job_id": None,
+                },
+            )
+        conn = _index()
+        try:
+            known = {
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM files WHERE id IN (?, ?)",
+                    (req.file_id, req.reference_id),
+                )
+            }
+        finally:
+            conn.close()
+        if req.file_id not in known or req.reference_id not in known:
+            raise HTTPException(status_code=404, detail="unknown file")
+        return {"job_id": jobs.submit_repair(req.file_id, req.reference_id)}
+
+    @app.get("/api/repair/status/{job_id}")
+    def repair_status(job_id: str) -> dict:
+        state = jobs.repair_status(job_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="unknown job")
+        return asdict(state)
+
+    def _repair_sync_guard(file_id: int) -> None:
+        """409 when the destructive worker, or a repair of this file, is in flight.
+
+        The synchronous accept/discard/delete steps mutate library files and (for
+        accept/delete) the index — never under a live organize/undo/retag/rescan
+        (same contract as duplicates/dismiss), and never while untrunc is still
+        writing this very capture's work files.
+        """
+        blocking = jobs.active_destructive_job_id() or jobs.active_repair_job_for(
+            file_id
+        )
+        if blocking is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "a conflicting job is already running",
+                    "blocking_job_id": blocking,
+                },
+            )
+
+    def _repair_sync_call(fn, file_id: int) -> dict:
+        """Run one synchronous repair step, mapping ValueError to a clean 4xx.
+
+        An unknown id is a 404; every other refusal (no output awaiting
+        acceptance, a file that re-probes healthy, failed verification) is a 409
+        carrying the human-readable reason.
+        """
+        try:
+            return fn(cfg, file_id)
+        except ValueError as exc:
+            if "unknown file id" in str(exc):
+                raise HTTPException(status_code=404, detail="unknown file")
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(exc), "blocking_job_id": None},
+            )
+
+    @app.post("/api/repair/accept", dependencies=[Depends(require_admin)])
+    def repair_accept(req: RepairFileRequest) -> dict:
+        """Swap the verified ``_repair/fixed/`` output onto the capture's dest path."""
+        _repair_sync_guard(req.file_id)
+        return _repair_sync_call(repair.accept_repair, req.file_id)
+
+    @app.post("/api/repair/discard", dependencies=[Depends(require_admin)])
+    def repair_discard(req: RepairFileRequest) -> dict:
+        """Drop an unaccepted repair attempt's work files (output + backup)."""
+        _repair_sync_guard(req.file_id)
+        return _repair_sync_call(repair.discard_repair, req.file_id)
+
+    @app.post("/api/repair/delete", dependencies=[Depends(require_admin)])
+    def repair_delete(req: RepairFileRequest) -> dict:
+        """Delete a broken capture from disk + prune its rows (server re-verifies)."""
+        _repair_sync_guard(req.file_id)
+        return _repair_sync_call(repair.delete_broken, req.file_id)
+
     def _panorama_row(file_id: int):
         """Return the panorama primary's row, or raise 404 (unknown/non-panorama)."""
         conn = _index()
@@ -961,7 +1124,14 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             ).fetchone()
         finally:
             conn.close()
-        return row["codec"] if row else None
+        if row:
+            return row["codec"]
+        # A repaired-output preview (`_repair/fixed/...`) has no index row yet —
+        # probe the file directly so an HEVC rebuild still gets its playable
+        # proxy for the pre-accept verification player.
+        if relpath.replace("\\", "/").startswith(repair.REPAIR_DIRNAME + "/"):
+            return repair.probe_file(candidate).codec
+        return None
 
     # Same-origin SPA (B7 build output); mounted last so /api routes win. Only
     # mounted when the build directory exists, so B6 alone serves a bare API.

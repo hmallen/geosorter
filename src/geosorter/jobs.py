@@ -29,6 +29,7 @@ from .derived import (
 )
 from .derived import invalidate as invalidate_cache
 from .organize import run_organize
+from .repair import run_repair, scan_broken
 from .rescan import run_rescan
 from .retag import retag_file
 from .setloc import assign_locations
@@ -199,6 +200,57 @@ class StitchJobState:
     error: str | None = None
 
 
+@dataclass
+class RepairScanJobState:
+    """Serializable snapshot of one broken-capture scan (m-repair-broken-captures).
+
+    ``items`` is filled once, when the scan completes: each entry is the wire
+    shape of one broken capture (``{id, filename, media_type, date, size, status,
+    error, path}``) the Repair panel lists.
+    """
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    checked: int = 0
+    ok: int = 0
+    broken: int = 0
+    processed: int = 0  # files seen so far (progress callback ticks)
+    current: str | None = None  # most recent file probed
+    untrunc_available: bool = False
+    items: list[dict] = field(default_factory=list)
+    error: str | None = None
+
+
+@dataclass
+class RepairJobState:
+    """Serializable snapshot of one untrunc repair attempt.
+
+    ``phase`` walks 'backup' (copy into _repair/backups/) → 'repair' (untrunc;
+    ``bytes_done`` tracks the growing output against the broken file's size) →
+    'verify' (ffprobe). A terminal ``state='done'`` carries ``status`` 'ok'
+    (``fixed_path`` is the library-relative preview path) or 'failed'
+    (``error`` + the untrunc ``output_tail``).
+    """
+
+    job_id: str
+    state: str = "pending"  # pending | running | done | error
+    file_id: int | None = None
+    reference_id: int | None = None
+    phase: str = ""  # '' | 'backup' | 'repair' | 'verify'
+    bytes_done: int = 0
+    bytes_total: int = 0
+    status: str = ""  # '' (in progress) | 'ok' | 'failed'
+    warning: str | None = None  # 'ok' but suspicious (e.g. barely any data recovered)
+    fixed_path: str | None = None  # library-relative POSIX path of the repaired file
+    codec: str | None = None
+    width: int | None = None
+    height: int | None = None
+    duration_s: float | None = None
+    size: int | None = None
+    error: str | None = None
+    output_tail: list[str] = field(default_factory=list)
+
+
 class JobManager:
     """Owns the worker pool and the live job table.
 
@@ -211,7 +263,8 @@ class JobManager:
 
     def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
                  retag_fn=retag_file, rescan_fn=run_rescan, stitch_fn=panorama_stitch,
-                 warm_fn=warm_library, assign_fn=assign_locations):
+                 warm_fn=warm_library, assign_fn=assign_locations,
+                 repair_scan_fn=scan_broken, repair_fn=run_repair):
         self._cfg = cfg
         self._organize_fn = organize_fn
         self._undo_fn = undo_fn
@@ -220,6 +273,8 @@ class JobManager:
         self._stitch_fn = stitch_fn
         self._warm_fn = warm_fn
         self._assign_fn = assign_fn
+        self._repair_scan_fn = repair_scan_fn
+        self._repair_fn = repair_fn
         self._executor = ThreadPoolExecutor(max_workers=1)
         # A panorama stitch is read-only (~7 min) and strictly off the crash-safe
         # move path, so it gets its OWN single worker: stitches serialize among
@@ -229,6 +284,12 @@ class JobManager:
         # and gets its OWN single worker — it runs ALONGSIDE the destructive pool
         # (auto-triggered right as an organize finishes) without blocking it.
         self._warm_pool = ThreadPoolExecutor(max_workers=1)
+        # Broken-capture scan + untrunc repairs get their OWN single worker: both
+        # only read library media and write under _repair/, so they run alongside
+        # the destructive pool, while serializing among themselves (one multi-GB
+        # untrunc rebuild at a time). The accept/delete steps that DO mutate the
+        # library are synchronous routes guarded against the destructive worker.
+        self._repair_pool = ThreadPoolExecutor(max_workers=1)
         self._jobs: dict[str, JobState] = {}
         self._undo_jobs: dict[str, UndoJobState] = {}
         self._retag_jobs: dict[str, RetagJobState] = {}
@@ -236,6 +297,8 @@ class JobManager:
         self._rescan_jobs: dict[str, RescanJobState] = {}
         self._stitch_jobs: dict[str, StitchJobState] = {}
         self._warm_jobs: dict[str, WarmJobState] = {}
+        self._repair_scan_jobs: dict[str, RepairScanJobState] = {}
+        self._repair_jobs: dict[str, RepairJobState] = {}
         self._cancels: dict[str, threading.Event] = {}
         # Monotonic start time per organize job, for the bytes-based ETA. Kept off
         # JobState so it never leaks into the serialized status response.
@@ -856,4 +919,128 @@ class JobManager:
         state.proxies_warmed = result.proxies_warmed
         state.deleted = result.eviction.deleted
         state.skipped = result.eviction.skipped
+        state.state = "done"
+
+    # ----- repair jobs (dedicated pool — reads media, writes only _repair/) --- #
+
+    def submit_repair_scan(self) -> str:
+        """Queue a broken-capture scan and return its id.
+
+        Dedups: a pending/running scan's id is returned instead of queueing a
+        second identical ffprobe sweep behind it. Read-only (no
+        :class:`WorkerBusy` guard) — it runs alongside the destructive pool.
+        """
+        with self._lock:
+            for jid, st in self._repair_scan_jobs.items():
+                if st.state in ("pending", "running"):
+                    return jid
+            job_id = uuid.uuid4().hex
+            self._repair_scan_jobs[job_id] = RepairScanJobState(job_id=job_id)
+        self._repair_pool.submit(self._run_repair_scan, job_id)
+        return job_id
+
+    def repair_scan_status(self, job_id: str) -> RepairScanJobState | None:
+        """Consistent point-in-time snapshot of a scan job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._repair_scan_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def _run_repair_scan(self, job_id: str) -> None:
+        state = self._repair_scan_jobs[job_id]
+        state.state = "running"
+
+        def progress(name: str) -> None:
+            state.processed += 1
+            state.current = name
+
+        try:
+            report = self._repair_scan_fn(self._cfg, progress=progress)
+        except Exception as exc:  # surface any failure as a job error
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        state.checked = report.checked
+        state.ok = report.ok
+        state.broken = len(report.items)
+        state.untrunc_available = report.untrunc_available
+        state.items = [
+            {
+                "id": item.file_id,
+                "filename": item.filename,
+                "media_type": item.media_type,
+                "date": item.date,
+                "size": item.size,
+                "status": item.status,
+                "error": item.error,
+                "path": item.rel_path,
+            }
+            for item in report.items
+        ]
+        state.state = "done"
+
+    def submit_repair(self, file_id: int, reference_id: int) -> str:
+        """Queue an untrunc repair of ``file_id`` and return its id.
+
+        Dedups per target: a pending/running repair for the same ``file_id``
+        returns the in-flight id instead of queueing a duplicate multi-GB rebuild.
+        """
+        with self._lock:
+            for jid, st in self._repair_jobs.items():
+                if st.file_id == file_id and st.state in ("pending", "running"):
+                    return jid
+            job_id = uuid.uuid4().hex
+            self._repair_jobs[job_id] = RepairJobState(
+                job_id=job_id, file_id=file_id, reference_id=reference_id
+            )
+        self._repair_pool.submit(self._run_repair, job_id, file_id, reference_id)
+        return job_id
+
+    def repair_status(self, job_id: str) -> RepairJobState | None:
+        """Consistent point-in-time snapshot of a repair job, or ``None`` if unknown."""
+        with self._lock:
+            state = self._repair_jobs.get(job_id)
+            return replace(state) if state is not None else None
+
+    def active_repair_job_for(self, file_id: int) -> str | None:
+        """Id of an in-flight repair for ``file_id``, else ``None``.
+
+        Public accessor for the synchronous accept/discard/delete routes, which
+        must 409 rather than swap or remove files out from under a live untrunc
+        run on the same capture.
+        """
+        with self._lock:
+            for jid, st in self._repair_jobs.items():
+                if st.file_id == file_id and st.state in ("pending", "running"):
+                    return jid
+        return None
+
+    def _run_repair(self, job_id: str, file_id: int, reference_id: int) -> None:
+        state = self._repair_jobs[job_id]
+        state.state = "running"
+
+        def progress(phase: str, done: int, total: int) -> None:
+            state.phase = phase
+            state.bytes_done = done
+            state.bytes_total = total
+
+        try:
+            result = self._repair_fn(
+                self._cfg, file_id, reference_id, progress=progress
+            )
+        except Exception as exc:  # UntruncNotFound / unknown-id / pipeline failure
+            state.state = "error"
+            state.error = str(exc)
+            return
+
+        state.status = result.status
+        state.error = result.error
+        state.warning = result.warning
+        state.fixed_path = result.fixed_rel
+        state.codec = result.codec
+        state.width = result.width
+        state.height = result.height
+        state.duration_s = result.duration_s
+        state.size = result.size
+        state.output_tail = list(result.output_tail)
         state.state = "done"
