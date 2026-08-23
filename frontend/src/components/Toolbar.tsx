@@ -24,6 +24,9 @@ interface ToolbarProps {
   // Open the location-filter panel (owned by App, which holds the place list +
   // map flyTo). Lets the user jump the map to any place in the library by name.
   onOpenLocations: () => void
+  // Open the trips panel (owned by App): auto-derived trips over the library;
+  // picking one date-filters the app and fits the camera. Public, like Locations.
+  onOpenTrips: () => void
   // Open the unstitched-panorama panel (owned by App) listing exactly which panorama
   // sets are waiting to be stitched. Admin-only (stitching is an admin action).
   onOpenStitch: () => void
@@ -46,6 +49,7 @@ export default function Toolbar({
   onOpenNoGps,
   noGpsCount,
   onOpenLocations,
+  onOpenTrips,
   onOpenStitch,
   onOpenDuplicates,
   duplicatesCount,
@@ -156,6 +160,9 @@ export default function Toolbar({
         </>
       )}
       <button onClick={onOpenLocations}>Locations</button>
+      <button onClick={onOpenTrips} title="Browse the library as auto-detected trips">
+        Trips
+      </button>
       <button
         className={timelineOn ? 'tb-toggle--on' : undefined}
         onClick={onToggleTimeline}
