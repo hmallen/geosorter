@@ -507,6 +507,40 @@ def test_install_untrunc_downloads_flattens_and_verifies(tmp_path):
     assert progress and result.release_tag == "latest"
 
 
+def test_install_untrunc_reuses_existing_binary(tmp_path):
+    dest = tmp_path / "tools"
+    dest.mkdir()
+    (dest / "untrunc.exe").write_bytes(b"already-here")
+    verified: list = []
+
+    def no_fetch(*a, **k):
+        pytest.fail("an existing install must not trigger a download")
+
+    result = install_untrunc(dest, fetch_json=no_fetch, fetch_to_file=no_fetch,
+                             verify=verified.append)
+    assert result.reused is True
+    assert result.exe_path == dest / "untrunc.exe"
+    assert verified == [result.exe_path]  # a stale/broken binary must still fail
+
+
+def test_install_untrunc_force_redownloads_over_existing(tmp_path):
+    dest = tmp_path / "tools"
+    dest.mkdir()
+    (dest / "untrunc.exe").write_bytes(b"old")
+    payload = _fake_zip_bytes("untrunc_x64/untrunc.exe")
+    result = install_untrunc(
+        dest, force=True,
+        fetch_json=lambda url: {"tag_name": "latest", "assets": [{
+            "name": "untrunc_x64.zip", "size": len(payload),
+            "browser_download_url": "https://example.invalid/z",
+        }]},
+        fetch_to_file=lambda url, d, on_bytes: d.write_bytes(payload),
+        verify=lambda exe: None,
+    )
+    assert result.reused is False
+    assert result.exe_path.read_bytes() == b"binary!"  # replaced, not reused
+
+
 def test_install_untrunc_without_exe_in_zip_fails(tmp_path):
     payload = _fake_zip_bytes("untrunc_x64/README.txt")
     with pytest.raises(RuntimeError, match="did not contain untrunc.exe"):
@@ -547,7 +581,7 @@ def test_cli_install_untrunc_writes_config(tmp_path, monkeypatch):
     monkeypatch.setattr(repair, "find_untrunc", lambda p: None)
     monkeypatch.setattr(
         repair, "install_untrunc",
-        lambda dest, on_bytes=None: repair.InstallResult(
+        lambda dest, force=False, on_bytes=None: repair.InstallResult(
             exe_path=exe, asset_name="untrunc_x64.zip", size=1, release_tag="latest",
         ),
     )
@@ -564,12 +598,16 @@ def test_cli_install_untrunc_noop_when_present(tmp_path, monkeypatch):
 
     from geosorter.cli import cli as cli_group
 
+    cfg_file = tmp_path / "geosorter.toml"
+    cfg_file.write_text("", encoding="utf-8")
     monkeypatch.setattr(repair, "find_untrunc", lambda p: r"C:\already\untrunc.exe")
     monkeypatch.setattr(
         repair, "install_untrunc",
         lambda *a, **k: pytest.fail("must not reinstall without --force"),
     )
-    result = CliRunner().invoke(cli_group, ["install-untrunc"])
+    result = CliRunner().invoke(
+        cli_group, ["install-untrunc", "--config", str(cfg_file)]
+    )
     assert result.exit_code == 0, result.output
     assert "already available" in result.output
 

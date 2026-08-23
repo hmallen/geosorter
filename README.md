@@ -78,12 +78,15 @@ Configuration is resolved in this order:
 
 1. `--config PATH`
 2. `GEOSORTER_CONFIG`
-3. the platform-specific user configuration directory
+3. `./geosorter.toml` in the current directory, when it exists
+4. the platform-specific user configuration directory
 
-For a repository-local config, create `geosorter.toml` and pass it explicitly:
+For a repository-local config, create `geosorter.toml` at the checkout root and
+run commands from there — it is picked up automatically (or pass `--config` to
+target it from anywhere):
 
 ```bash
-uv run geosorter organize --config geosorter.toml --dry-run
+uv run geosorter organize --dry-run
 ```
 
 The local `geosorter.toml` is ignored by Git because it normally contains personal

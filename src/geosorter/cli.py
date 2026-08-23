@@ -56,7 +56,8 @@ _CONFIG_OPTION = click.option(
     "config_path",
     type=click.Path(dir_okay=False),
     default=None,
-    help="Path to geosorter.toml (overrides $GEOSORTER_CONFIG and the default).",
+    help="Path to geosorter.toml (overrides $GEOSORTER_CONFIG, ./geosorter.toml, "
+         "and the default).",
 )
 
 
@@ -132,7 +133,7 @@ def install_untrunc_cmd(config_path: str | None, dest: str | None, force: bool) 
         click.echo("Pass --force to download and reinstall anyway.")
         return
 
-    click.echo("Fetching the latest untrunc release (github.com/anthwlock/untrunc)…")
+    click.echo("Installing untrunc (github.com/anthwlock/untrunc)…")
     last = {"pct": -10}
 
     def on_bytes(done: int, total: int) -> None:
@@ -144,12 +145,18 @@ def install_untrunc_cmd(config_path: str | None, dest: str | None, force: bool) 
             click.echo(f"  downloading… {pct}% of {total // (1 << 20)} MiB")
 
     try:
-        result = repair.install_untrunc(dest, on_bytes=on_bytes)
+        result = repair.install_untrunc(dest, force=force, on_bytes=on_bytes)
     except (RuntimeError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    tag = f" ({result.release_tag})" if result.release_tag else ""
-    click.echo(f"Installed {result.asset_name}{tag} -> {result.exe_path}")
+    if result.reused:
+        click.echo(
+            f"Reused the existing install at {result.exe_path} "
+            "(pass --force to re-download)."
+        )
+    else:
+        tag = f" ({result.release_tag})" if result.release_tag else ""
+        click.echo(f"Installed {result.asset_name}{tag} -> {result.exe_path}")
     if config.set_untrunc_path(config_path, str(result.exe_path)):
         click.echo(
             f"Wrote untrunc_path to {config.resolve_config_path(config_path)} — "

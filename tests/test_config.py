@@ -44,6 +44,24 @@ def test_env_var_resolution(tmp_path, monkeypatch):
     assert config.load().spatial_index == "columnar"
 
 
+def test_cwd_config_resolution(tmp_path, monkeypatch):
+    # A geosorter.toml in the current directory is picked up without --config
+    # (the repo-local-config convention), but env still wins over it.
+    monkeypatch.delenv("GEOSORTER_CONFIG", raising=False)
+    monkeypatch.chdir(tmp_path)
+    assert config.resolve_config_path() == config.default_config_path()  # absent
+
+    cwd_cfg = tmp_path / "geosorter.toml"
+    cwd_cfg.write_text("spatial_index = 'columnar'\n", encoding="utf-8")
+    assert config.resolve_config_path() == cwd_cfg
+    assert config.load().spatial_index == "columnar"
+
+    env_cfg = tmp_path / "fromenv.toml"
+    env_cfg.write_text("spatial_index = 'rtree'\n", encoding="utf-8")
+    monkeypatch.setenv("GEOSORTER_CONFIG", str(env_cfg))
+    assert config.resolve_config_path() == env_cfg
+
+
 def test_feature_proximity_km_default(tmp_path):
     # No config file → the prefer-nearest-feature radius defaults to 5.0 km.
     assert config.load(tmp_path / "nope.toml").feature_proximity_km == 5.0

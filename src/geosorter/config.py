@@ -4,7 +4,10 @@ Resolution order for the ``geosorter.toml`` location:
 
 1. an explicit ``--config PATH`` (passed to :func:`load` / :func:`write_starter`)
 2. the ``GEOSORTER_CONFIG`` environment variable
-3. ``platformdirs.user_config_dir("geosorter")/geosorter.toml``
+3. ``./geosorter.toml`` in the current directory, when it exists (the
+   repo-local-config convention — running any verb from a checkout that keeps
+   its gitignored config at the root Just Works without ``--config``)
+4. ``platformdirs.user_config_dir("geosorter")/geosorter.toml``
 
 The two SQLite databases default to ``platformdirs.user_data_dir("geosorter")``
 — always on local disk, never inside ``library_root``.
@@ -223,12 +226,22 @@ def default_config_path() -> Path:
 
 
 def resolve_config_path(explicit: str | Path | None = None) -> Path:
-    """Resolve the config-file path per the documented precedence."""
+    """Resolve the config-file path per the documented precedence.
+
+    Unlike the explicit/env sources (honored even when the file is absent, so a
+    setter can report a clean "no config file" on the path the user named), the
+    current-directory step only applies when ``./geosorter.toml`` actually
+    exists — otherwise a checkout without one falls through to the platformdirs
+    default rather than every command claiming the repo root as its config home.
+    """
     if explicit:
         return Path(explicit)
     env = os.environ.get("GEOSORTER_CONFIG")
     if env:
         return Path(env)
+    cwd_cfg = Path.cwd() / "geosorter.toml"
+    if cwd_cfg.is_file():
+        return cwd_cfg
     return default_config_path()
 
 

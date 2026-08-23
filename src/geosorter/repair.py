@@ -115,12 +115,18 @@ DOWNLOAD_TIMEOUT_S = 300
 
 @dataclass(frozen=True)
 class InstallResult:
-    """Outcome of one :func:`install_untrunc` run."""
+    """Outcome of one :func:`install_untrunc` run.
+
+    ``reused`` marks an install that skipped the download because a working
+    binary was already unpacked at the destination (e.g. installed once, but a
+    second checkout's config never got the key wired in).
+    """
 
     exe_path: Path
     asset_name: str
     size: int
     release_tag: str
+    reused: bool = False
 
 
 def default_untrunc_dir() -> Path:
@@ -189,17 +195,20 @@ def _smoke_test(exe: Path) -> None:
         )
 
 
-def install_untrunc(dest_dir: Path | str | None = None, *, on_bytes=None,
-                    fetch_json=None, fetch_to_file=None, verify=None) -> InstallResult:
+def install_untrunc(dest_dir: Path | str | None = None, *, force: bool = False,
+                    on_bytes=None, fetch_json=None, fetch_to_file=None,
+                    verify=None) -> InstallResult:
     """Download the official untrunc Windows build and unpack it into ``dest_dir``.
 
     Fetches the latest release from the pinned anthwlock/untrunc repo, picks the
     x64 zip (x32 fallback), streams it down (``on_bytes(done, total)`` progress),
     flattens the archive into ``dest_dir`` (default
     :func:`default_untrunc_dir`) — the exe ships beside its ffmpeg DLLs, which
-    must stay in one folder — and smoke-tests the binary. Windows-only: other
-    platforms build untrunc from source, and a RuntimeError says so. The three
-    network/exec seams are injectable for tests.
+    must stay in one folder — and smoke-tests the binary. A working binary
+    already at the destination is REUSED without a download (``reused=True``;
+    the caller still wires it into config) unless ``force``. Windows-only:
+    other platforms build untrunc from source, and a RuntimeError says so. The
+    three network/exec seams are injectable for tests.
     """
     if os.name != "nt":
         raise RuntimeError(
@@ -210,10 +219,17 @@ def install_untrunc(dest_dir: Path | str | None = None, *, on_bytes=None,
     fetch_to_file = fetch_to_file or _fetch_to_file
     verify = verify or _smoke_test
 
+    dest = Path(dest_dir) if dest_dir else default_untrunc_dir()
+    existing = dest / "untrunc.exe"
+    if not force and existing.is_file():
+        verify(existing)
+        return InstallResult(
+            exe_path=existing, asset_name="untrunc.exe",
+            size=existing.stat().st_size, release_tag="", reused=True,
+        )
+
     release = fetch_json(UNTRUNC_RELEASE_API)
     asset = select_untrunc_asset(release.get("assets", []))
-
-    dest = Path(dest_dir) if dest_dir else default_untrunc_dir()
     dest.mkdir(parents=True, exist_ok=True)
     archive = dest / str(asset["name"])
     fetch_to_file(str(asset["browser_download_url"]), archive, on_bytes)
