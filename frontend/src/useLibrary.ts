@@ -16,9 +16,11 @@ export function useLibrary() {
   // can't resolve out of order and overwrite newer features with stale ones.
   const seqRef = useRef(0)
 
-  const reload = useCallback(() => {
+  // Fetch + commit, with no synchronous setState: state moves only in the promise
+  // callbacks, so the mount effect below may call this directly. `loading` already
+  // starts true, so the initial load needs no setLoading(true) up front.
+  const load = useCallback(() => {
     const seq = ++seqRef.current
-    setLoading(true)
     fetchLibrary(fetch, etagRef.current)
       .then((res) => {
         if (seq !== seqRef.current) return // superseded by a newer reload
@@ -36,7 +38,17 @@ export function useLibrary() {
       })
   }, [])
 
-  useEffect(() => reload(), [reload])
+  // Event-handler entry point (organize/undo/retag/rescan onDone, Retry): flips
+  // `loading` back on before revalidating. Referentially stable — useStitch and
+  // friends rely on that.
+  const reload = useCallback(() => {
+    setLoading(true)
+    load()
+  }, [load])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   return { features, error, loading, reload }
 }
