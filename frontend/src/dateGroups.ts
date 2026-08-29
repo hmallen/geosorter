@@ -38,6 +38,7 @@ export type RowItem =
   | {
       kind: 'flight-header'
       key: string
+      flightKey: string
       label: string
       visibleCount: number
       totalCount: number

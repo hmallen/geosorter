@@ -4,6 +4,7 @@ import {
   buildFlightIndex,
   buildFlightRowModel,
   changeGranularity,
+  flightHeaderRowIndex,
   groupFlightsByDate,
   initialGroupingFilterState,
   selectionForCatalogFlight,
@@ -193,8 +194,11 @@ describe('groupFlightsByDate', () => {
       'date-header', 'flight-header', 'thumbs', 'thumbs',
     ])
     expect(rows[1]).toMatchObject({ visibleCount: 2, totalCount: 3 })
+    expect(rows[1]).toMatchObject({ flightKey: 'flight:1' })
     expect(rows[2]).toMatchObject({ flightPosition: 'first' })
     expect(rows[3]).toMatchObject({ flightPosition: 'last' })
+    expect(flightHeaderRowIndex(rows, 'flight:1')).toBe(1)
+    expect(flightHeaderRowIndex(rows, 'flight:missing')).toBe(-1)
   })
 })
 

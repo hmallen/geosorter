@@ -354,6 +354,7 @@ export function buildFlightRowModel(groups: FlightDateGroup[], columns: number):
       rows.push({
         kind: 'flight-header',
         key: `fh:${flight.key}`,
+        flightKey: flight.key,
         label: flight.label,
         visibleCount: flight.visibleFiles.length,
         totalCount: flight.members.length,
@@ -378,6 +379,14 @@ export function buildFlightRowModel(groups: FlightDateGroup[], columns: number):
     }
   }
   return rows
+}
+
+// Resolve a virtualized row target by flight identity instead of relying on a row
+// index that can move when the date grouping, sort direction, or column count changes.
+export function flightHeaderRowIndex(rows: RowItem[], flightKey: string): number {
+  return rows.findIndex(
+    (row) => row.kind === 'flight-header' && row.flightKey === flightKey,
+  )
 }
 
 export function selectionForFlight(

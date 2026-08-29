@@ -682,6 +682,15 @@ export default function App() {
         files={panelFiles}
         flightCatalog={flightCatalog}
         onOpen={setLightbox}
+        activeFlight={
+          track?.pip && track.flight
+            ? { key: track.contextKey, label: track.label }
+            : null
+        }
+        activeFileId={track?.pip && track.flight ? viewerFileId : null}
+        onRevealActiveFlight={
+          track?.pip && track.flight ? () => fitTracks(track.tracks) : undefined
+        }
         onRetag={
           isAdmin
             ? (file) => {

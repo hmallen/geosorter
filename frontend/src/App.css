@@ -851,9 +851,66 @@
   color: var(--text);
 }
 
+/* Persistent playback context for a flight docked over the map. It stays outside the
+   virtualized grid so panning cannot make the active flight identity disappear; the
+   whole strip is the jump target, keeping it easy to hit in the mobile sheet too. */
+.current-flight {
+  width: 100%;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-text) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.current-flight:hover {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+
+.current-flight__copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.current-flight__copy strong {
+  font-size: 12px;
+  color: var(--accent-text);
+}
+
+.current-flight__copy small {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-flight__action {
+  flex: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .flight-group-header small {
   color: var(--accent-text);
   font-size: 11px;
+}
+
+.flight-group-header--active {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface-2));
+  border-color: var(--accent-text);
 }
 
 /* Scroll container for the virtualized thumbnail grid (react-virtual). The grid
@@ -894,6 +951,12 @@
   border-left: 4px solid var(--accent);
 }
 
+.grid-row--active-flight {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  border-right-color: var(--accent-text);
+  border-left-color: var(--accent-text);
+}
+
 .grid-row--flight-first,
 .grid-row--flight-only {
   padding-top: 8px;
@@ -916,6 +979,11 @@
   cursor: pointer;
   padding: 0;
   min-width: 0; /* let the column shrink so nowrap names can ellipsis-clamp */
+}
+
+.thumb--active .thumb-img {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
 }
 
 .thumb img {
