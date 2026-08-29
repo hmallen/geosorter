@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
+  TRACK_CASING_LAYER,
+  TRACK_INACTIVE_CASING_LAYER,
+  TRACK_INACTIVE_LINE_LAYER,
+  TRACK_LINE_LAYER,
   altitudeTitle,
   clampPipPosition,
   clampPipWidth,
@@ -96,6 +100,22 @@ describe('multi-track geometry', () => {
 
   it('fits the envelope of all loaded flight paths', () => {
     expect(tracksBBox(tracks)).toEqual([-105, 39, -102, 42])
+  })
+})
+
+describe('multi-track layer visibility', () => {
+  it('keeps inactive routes strongly cased and visually distinct from the active route', () => {
+    expect(TRACK_INACTIVE_CASING_LAYER.paint?.['line-width']).toBe(7)
+    expect(TRACK_INACTIVE_CASING_LAYER.paint?.['line-opacity']).toBeGreaterThanOrEqual(0.8)
+    expect(TRACK_INACTIVE_LINE_LAYER.paint?.['line-width']).toBe(3.5)
+    expect(TRACK_INACTIVE_LINE_LAYER.paint?.['line-opacity']).toBeGreaterThanOrEqual(0.9)
+    expect(TRACK_INACTIVE_LINE_LAYER.paint?.['line-dasharray']).toEqual([1.5, 1.1])
+    expect(TRACK_CASING_LAYER.paint?.['line-width']).toBeGreaterThan(
+      TRACK_INACTIVE_CASING_LAYER.paint?.['line-width'] as number,
+    )
+    expect(TRACK_LINE_LAYER.paint?.['line-width']).toBeGreaterThan(
+      TRACK_INACTIVE_LINE_LAYER.paint?.['line-width'] as number,
+    )
   })
 })
 

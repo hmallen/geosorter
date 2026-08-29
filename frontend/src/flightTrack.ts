@@ -20,8 +20,8 @@ export const TRACK_CASING_LAYER: LineLayerSpecification = {
   filter: ['==', ['get', 'active'], true],
   paint: {
     'line-color': '#0f1116',
-    'line-width': 6,
-    'line-opacity': 0.7,
+    'line-width': 9,
+    'line-opacity': 0.9,
   },
 }
 
@@ -33,12 +33,14 @@ export const TRACK_LINE_LAYER: LineLayerSpecification = {
   filter: ['==', ['get', 'active'], true],
   paint: {
     'line-color': '#5eead4', // --accent-text teal
-    'line-width': 3,
+    'line-width': 5,
+    'line-opacity': 1,
   },
 }
 
-// Context tracks stay visible beneath the active clip, but recede enough that the
-// currently playing path is unmistakable on both vector and satellite basemaps.
+// Context tracks use an opaque light line, dark casing, and a dash pattern so they
+// remain legible over detailed satellite imagery while the solid active path is
+// still unmistakable.
 export const TRACK_INACTIVE_CASING_LAYER: LineLayerSpecification = {
   id: 'flight-track-inactive-casing',
   type: 'line',
@@ -47,8 +49,8 @@ export const TRACK_INACTIVE_CASING_LAYER: LineLayerSpecification = {
   filter: ['==', ['get', 'active'], false],
   paint: {
     'line-color': '#0f1116',
-    'line-width': 4,
-    'line-opacity': 0.48,
+    'line-width': 7,
+    'line-opacity': 0.85,
   },
 }
 
@@ -59,9 +61,10 @@ export const TRACK_INACTIVE_LINE_LAYER: LineLayerSpecification = {
   layout: { 'line-cap': 'round', 'line-join': 'round' },
   filter: ['==', ['get', 'active'], false],
   paint: {
-    'line-color': '#67e8f9',
-    'line-width': 2,
-    'line-opacity': 0.42,
+    'line-color': '#cffafe',
+    'line-width': 3.5,
+    'line-opacity': 0.95,
+    'line-dasharray': [1.5, 1.1],
   },
 }
 
