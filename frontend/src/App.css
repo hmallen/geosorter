@@ -496,10 +496,11 @@
   pointer-events: none;
 }
 
-/* Re-tag placement banner: shown while awaiting a map click (B8). */
+/* Placement/status banners sit below the toolbar. Toolbar publishes its live
+   bottom edge because it can wrap to multiple rows at narrower widths. */
 .placement-banner {
   position: absolute;
-  top: 12px;
+  top: calc(var(--toolbar-bottom, 56px) + 8px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
