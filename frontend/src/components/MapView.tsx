@@ -8,9 +8,12 @@ import { VECTOR_STYLE, SATELLITE_STYLE, HEATMAP_LAYER, heatmapData } from '../ba
 import {
   altitudeTitle,
   formatAltitude,
-  trackLine,
   TRACK_CASING_LAYER,
+  TRACK_INACTIVE_CASING_LAYER,
+  TRACK_INACTIVE_LINE_LAYER,
   TRACK_LINE_LAYER,
+  trackCollection,
+  type LoadedVideoTrack,
 } from '../flightTrack'
 import type { AltitudeRef, LibraryFeature } from '../types'
 
@@ -34,9 +37,11 @@ interface Props {
   // Done via map.fitBounds (a ref), NOT by lifting the controlled `view` state, so
   // the per-pan re-render stays inside MapView.
   flyTo?: { bbox: BBox; nonce: number }
-  // Flight-track overlay: a video's GPS path as [lon, lat] points (App owns the
-  // fetch + the dismiss chip). Rendered as a teal line under the markers.
-  track?: [number, number][] | null
+  // Flight-track overlay: one video path outside flight grouping, or every available
+  // path in the selected inferred flight. App owns fetch/state and identifies which
+  // path belongs to the currently playing clip.
+  tracks?: LoadedVideoTrack[] | null
+  activeTrackId?: number | null
   // Shareable-URL camera restore: seeds the INITIAL view state only (read once
   // on mount); later prop changes are deliberately ignored — the camera is
   // driven by gestures/flyTo after that.
@@ -62,7 +67,8 @@ export default function MapView({
   onMapClick,
   onBoundsChange,
   flyTo,
-  track,
+  tracks,
+  activeTrackId,
   initialView,
   onViewChange,
   activeTrackPosition,
@@ -86,6 +92,14 @@ export default function MapView({
   const lastFollowAt = useRef(0)
   const clusters = useMemo(() => clustersFor(index, bbox, view.zoom), [index, bbox, view.zoom])
   const heatData = useMemo(() => heatmapData(features), [features])
+  const trackData = useMemo(
+    () => trackCollection(tracks ?? [], activeTrackId ?? null),
+    [tracks, activeTrackId],
+  )
+  const activeTrack = useMemo(
+    () => tracks?.find((candidate) => candidate.fileId === activeTrackId) ?? null,
+    [tracks, activeTrackId],
+  )
 
   const syncBounds = useCallback((map: MapLibreMap) => {
     const b = map.getBounds()
@@ -197,18 +211,19 @@ export default function MapView({
           <Layer {...HEATMAP_LAYER} />
         </Source>
       )}
-      {track && track.length >= 2 && (
-        <Source id="flight-track" type="geojson" data={trackLine(track)}>
+      {trackData.features.length > 0 && (
+        <Source id="flight-track" type="geojson" data={trackData}>
+          <Layer {...TRACK_INACTIVE_CASING_LAYER} />
+          <Layer {...TRACK_INACTIVE_LINE_LAYER} />
           <Layer {...TRACK_CASING_LAYER} />
           <Layer {...TRACK_LINE_LAYER} />
         </Source>
       )}
-      {/* Takeoff marker: the first GPS fix, echoing the manual-pin green. The
-          landing point is just where the line ends — no second marker to
-          confuse with the capture's own pin. */}
-      {track && track.length >= 2 && (
-        <Marker longitude={track[0][0]} latitude={track[0][1]} anchor="center">
-          <div className="track-start" title="Takeoff (first GPS fix)" />
+      {/* Mark only the active video's takeoff; inactive tracks remain contextual lines
+          so a many-clip flight does not fill the map with competing start tokens. */}
+      {activeTrack && activeTrack.points.length >= 2 && (
+        <Marker longitude={activeTrack.points[0][0]} latitude={activeTrack.points[0][1]} anchor="center">
+          <div className="track-start" title="Current video takeoff (first GPS fix)" />
         </Marker>
       )}
       {!heatmap && clusters.map((c) => {

@@ -1,0 +1,7 @@
+1
+00:00:00,000 --> 00:00:00,500
+<font size="28">FrameCnt: 1 [latitude: 40.000000] [longitude: -105.300000] [rel_alt: 0.0 abs_alt: 1640.0] </font>
+
+2
+00:00:00,500 --> 00:00:01,000
+<font size="28">FrameCnt: 2 [latitude: 40.010000] [longitude: -105.290000] [rel_alt: 15.0 abs_alt: 1655.0] </font>

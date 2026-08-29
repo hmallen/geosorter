@@ -9,7 +9,8 @@ import {
 } from '../flightTrack'
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
-import type { LibraryFeature } from '../types'
+import type { LibraryFeature, ViewerFlightContext } from '../types'
+import { nextFlightAutoplayIndex } from '../viewerPlayback'
 import FlatHero from './FlatHero'
 import LoadingImage from './LoadingImage'
 
@@ -20,6 +21,7 @@ const PanoSphere = lazy(() => import('./PanoSphere'))
 interface Props {
   files: LibraryFeature[]
   index: number
+  flight: ViewerFlightContext | null
   onIndex: (index: number) => void
   onClose: () => void
   // App-level stitch tracking (keyed by file_id) so progress survives reopen (B).
@@ -30,7 +32,7 @@ interface Props {
   onStartStitch?: (fileId: number, opts?: { force?: boolean; projection?: string }) => void
   // Flight-track overlay: offered for a video with an SRT sidecar (has_track).
   // App fetches the path before switching this same video element into PiP mode.
-  onShowTrack?: (f: LibraryFeature) => void
+  onShowTrack?: () => void
   // Video favorites: the CURRENT file's effective favorite state, computed in App
   // (effectiveFavorite over the live features + optimistic overrides — this
   // component stays dumb; its `files` are a stale snapshot).
@@ -42,6 +44,7 @@ interface Props {
   trackActive: boolean
   trackLoading: boolean
   trackError: string | null
+  trackWarning: string | null
   onPlaybackTime: (timeS: number) => void
   onExpand: () => void
 }
@@ -49,6 +52,7 @@ interface Props {
 export default function Lightbox({
   files,
   index,
+  flight,
   onIndex,
   onClose,
   stitchByFile,
@@ -60,6 +64,7 @@ export default function Lightbox({
   trackActive,
   trackLoading,
   trackError,
+  trackWarning,
   onPlaybackTime,
   onExpand,
 }: Props) {
@@ -91,6 +96,9 @@ export default function Lightbox({
   const isFrameGallery =
     (kind === 'hyperlapse' || kind === 'panorama') && (f?.properties.frame_count ?? 0) > 0
   const fileId = f?.properties.id
+  const pathAvailable = flight
+    ? files.some((candidate) => candidate.properties.has_track)
+    : Boolean(f?.properties.has_track)
 
   // Stitched panorama hero (B13): the ~7-min Hugin stitch is user-triggered, but its
   // job is tracked at the App level (useStitch) so closing/reopening the lightbox
@@ -380,6 +388,10 @@ export default function Lightbox({
   if (!f) return null
   const prev = () => onIndex((index - 1 + files.length) % files.length)
   const next = () => onIndex((index + 1) % files.length)
+  const advanceAfterPlayback = () => {
+    const nextIndex = nextFlightAutoplayIndex(index, files.length, flight !== null)
+    if (nextIndex !== null) onIndex(nextIndex)
+  }
 
   return (
     <div
@@ -462,12 +474,14 @@ export default function Lightbox({
             )
           ) : f.properties.media_type === 'video' ? (
             <video
+              key={f.properties.id}
               ref={videoRef}
               src={videoUrl(f.properties.path)}
               poster={posterUrl(f.properties.path)}
               controls
               autoPlay
               playsInline
+              onEnded={advanceAfterPlayback}
             />
           ) : isPanorama ? (
             // Instant raw-tile collage placeholder: shown immediately while the
@@ -539,7 +553,7 @@ export default function Lightbox({
             PiP over the map (trackMode). */}
         {!trackMode &&
           f.properties.media_type === 'video' &&
-          (onToggleFavorite || (onShowTrack && f.properties.has_track)) && (
+          (onToggleFavorite || (onShowTrack && pathAvailable)) && (
           <div className="lightbox-actions">
             {onToggleFavorite && (
               <button
@@ -551,22 +565,27 @@ export default function Lightbox({
                 {isFavorite ? '♥ Favorited' : '♡ Favorite'}
               </button>
             )}
-            {onShowTrack && f.properties.has_track && (
+            {onShowTrack && pathAvailable && (
               <button
                 className="frames-toggle"
-                onClick={() => onShowTrack(f)}
+                onClick={onShowTrack}
                 disabled={trackLoading}
-                title="Show this video over its synchronized GPS flight path"
+                title={flight
+                  ? 'Show every available path in this flight on the map'
+                  : 'Show this video over its synchronized GPS flight path'}
               >
                 {trackLoading
-                  ? 'Loading flight path…'
+                  ? flight ? 'Loading flight paths…' : 'Loading flight path…'
                   : trackActive
-                    ? '✈ Return to flight map'
-                    : '✈ Show flight path on map'}
+                    ? flight ? '✈ Return to flight paths' : '✈ Return to flight map'
+                    : flight ? '✈ Show flight paths on map' : '✈ Show flight path on map'}
               </button>
             )}
             {trackError && (
               <div className="track-inline-error" role="alert">{trackError}</div>
+            )}
+            {trackWarning && !trackError && (
+              <div className="track-inline-warning">{trackWarning}</div>
             )}
           </div>
         )}

@@ -44,6 +44,20 @@ export interface LibraryFC {
   features: LibraryFeature[]
 }
 
+// A lightbox opened from a flight subgroup is scoped to that inferred flight instead
+// of the panel's entire flattened list. The files on ViewerSelection are the flight's
+// full app-filtered membership (not merely the thumbnails currently inside map bounds).
+export interface ViewerFlightContext {
+  key: string
+  label: string
+}
+
+export interface ViewerSelection {
+  files: LibraryFeature[]
+  index: number
+  flight: ViewerFlightContext | null
+}
+
 export interface FlightTrackSample {
   time_s: number
   lon: number

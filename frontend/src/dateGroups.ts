@@ -34,8 +34,21 @@ export interface DateGroup {
 }
 
 export type RowItem =
-  | { kind: 'header'; key: string; label: string }
-  | { kind: 'thumbs'; key: string; files: LibraryFeature[] }
+  | { kind: 'date-header'; key: string; label: string }
+  | {
+      kind: 'flight-header'
+      key: string
+      label: string
+      visibleCount: number
+      totalCount: number
+    }
+  | {
+      kind: 'thumbs'
+      key: string
+      files: LibraryFeature[]
+      flightKey?: string
+      flightPosition?: 'only' | 'first' | 'middle' | 'last'
+    }
 
 // Anchored extraction of the leading 'YYYY-MM-DD' from an ISO string (ignores any
 // trailing time/offset). Returns null when the string doesn't start with a date.
@@ -56,7 +69,7 @@ export function parseParts(props: Pick<FeatureProps, 'capture_ts_local' | 'local
   return partsFrom(props.capture_ts_local) ?? partsFrom(props.local_date)
 }
 
-function bucketKey(p: DateParts, gran: Granularity): string {
+export function bucketKey(p: DateParts, gran: Granularity): string {
   const y = String(p.year).padStart(4, '0')
   const mo = String(p.month).padStart(2, '0')
   const d = String(p.day).padStart(2, '0')
@@ -65,7 +78,7 @@ function bucketKey(p: DateParts, gran: Granularity): string {
   return `${y}-${mo}-${d}`
 }
 
-function bucketLabel(p: DateParts, gran: Granularity): string {
+export function bucketLabel(p: DateParts, gran: Granularity): string {
   const month = MONTHS[p.month - 1]
   if (gran === 'year') return String(p.year)
   if (gran === 'month') return `${month} ${p.year}`
@@ -134,7 +147,7 @@ export function buildRowModel(groups: DateGroup[], columns: number): RowItem[] {
   const cols = Math.max(1, Math.floor(columns) || 1)
   const rows: RowItem[] = []
   for (const g of groups) {
-    rows.push({ kind: 'header', key: `h:${g.key}`, label: g.label })
+    rows.push({ kind: 'date-header', key: `h:${g.key}`, label: g.label })
     for (let i = 0; i < g.files.length; i += cols) {
       rows.push({ kind: 'thumbs', key: `t:${g.key}:${i}`, files: g.files.slice(i, i + cols) })
     }

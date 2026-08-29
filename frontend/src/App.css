@@ -441,6 +441,11 @@
   font-size: 12px;
 }
 
+.track-inline-warning {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
 /* Takeoff marker at the track's first GPS fix (manual-pin green family). */
 .track-start {
   width: 12px;
@@ -752,6 +757,32 @@
   border-radius: 6px;
 }
 
+/* Optional second grouping level. Kept as a checkbox so Day/Month/Year remain the
+   primary segmented choice and the flight behavior reads as an independent modifier. */
+.flight-subgroup-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.flight-subgroup-toggle:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.flight-subgroup-toggle input {
+  margin: 0;
+}
+
 /* Mutually-exclusive media-type filter chips (multi-select). */
 .chips {
   display: flex;
@@ -792,6 +823,39 @@
   background: var(--surface);
 }
 
+/* Nested flight header: a stronger raised banner than the outer date heading. Its
+   accent rail continues through the associated thumbnail rows below. */
+.flight-group-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 10px 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.25);
+}
+
+.flight-group-header strong {
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.flight-group-header small {
+  color: var(--accent-text);
+  font-size: 11px;
+}
+
 /* Scroll container for the virtualized thumbnail grid (react-virtual). The grid
    layout moved to .grid-row so only viewport-visible rows mount/request. */
 .grid {
@@ -821,6 +885,26 @@
   width: 100%;
   display: grid;
   gap: 6px;
+}
+
+.grid-row--flight {
+  padding: 6px 7px;
+  background: color-mix(in srgb, var(--surface-2) 82%, var(--surface));
+  border-right: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+}
+
+.grid-row--flight-first,
+.grid-row--flight-only {
+  padding-top: 8px;
+}
+
+.grid-row--flight-last,
+.grid-row--flight-only {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.28);
 }
 
 .thumb {

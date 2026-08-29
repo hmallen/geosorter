@@ -2,30 +2,33 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { listThumb } from '../api'
 import { columnsForWidth } from '../gridWindow'
-import { groupFeatures, buildRowModel, type SortDir } from '../dateGroups'
+import { groupFeatures, buildRowModel, type Granularity, type SortDir } from '../dateGroups'
 import {
-  changeGroupMode,
-  groupFlightFeatures,
+  buildFlightRowModel,
+  changeGranularity,
+  groupFlightsByDate,
   initialGroupingFilterState,
+  selectionForFlight,
+  setFlightSubgroups,
   toggleGroupingCategory,
-  type FlightIndex,
-  type GroupMode,
+  type FlightCatalog,
+  type PanelFlightGroup,
 } from '../flightGroups'
 import { filterByCategories, MEDIA_CATEGORIES, type MediaCategory } from '../mediaFilter'
 import { useIsMobile } from '../useMediaQuery'
 import { clampFraction, nearestSnap, cycleSnap, SHEET_SNAPS } from '../sheet'
-import type { LibraryFeature } from '../types'
+import type { LibraryFeature, ViewerSelection } from '../types'
 import LoadingImage from './LoadingImage'
 
 interface Props {
   files: LibraryFeature[]
   // Flight assignments are inferred from the whole app-filtered library (before map
   // bounds), so a viewport subset cannot split or renumber a flight while panning.
-  flightIndex: FlightIndex
+  flightCatalog: FlightCatalog
   // The panel groups + filters its files, so the displayed order differs from the raw
   // viewport list. onOpen receives the EXACT displayed-ordered list it opened against
   // (so the lightbox prev/next walks what the user sees) plus the clicked index.
-  onOpen: (files: LibraryFeature[], index: number) => void
+  onOpen: (selection: ViewerSelection) => void
   // Admin-only re-tag (m-implement-view-only-admin-auth): undefined for a non-admin
   // (view-only) viewer, in which case the per-file "Re-tag location" button is hidden.
   // Receives the clicked feature directly (the index would be ambiguous once filtered).
@@ -46,33 +49,40 @@ const CATEGORY_LABELS: Record<MediaCategory, string> = {
 
 // Estimated height of a group-header row (corrected by measureElement after paint).
 const HEADER_PX = 34
+const FLIGHT_HEADER_PX = 54
 
-export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: Props) {
+export default function FileListPanel({ files, flightCatalog, onOpen, onRetag }: Props) {
   // Below 1024px the panel is a bottom sheet over a full-screen map; at desktop width it
   // stays the right rail (m-implement-mobile-responsive-ui).
   const mobile = useIsMobile()
 
-  // Grouping + media categories remain panel-local. Entering Flight snapshots the
-  // current category selection and locks the panel to ordinary videos; leaving restores
-  // that exact snapshot (see flightGroups.changeGroupMode).
+  // Grouping + media categories remain panel-local. Enabling flight subgroups snapshots
+  // the current category selection and locks the panel to ordinary videos; disabling
+  // restores that exact snapshot (see flightGroups.setFlightSubgroups).
   const [grouping, setGrouping] = useState(initialGroupingFilterState)
   // Date sort direction: descending (newest-first) by default, matching prior behavior.
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const toggleCategory = (c: MediaCategory) =>
     setGrouping((prev) => toggleGroupingCategory(prev, c))
 
-  // Apply the media filter, then group by date or inferred flight. The displayed list is the groups
-  // flattened in heading order — that is what the lightbox must walk, so we key an
-  // id→index map off it for the onOpen call.
+  // Apply the media filter, then either keep the ordinary flat date buckets or nest the
+  // viewport subset into catalog-backed flights. Non-flight lightboxes still walk the
+  // flattened display order; a flight click instead opens that flight's full membership.
   const visibleFiles = useMemo(
     () => filterByCategories(files, grouping.enabled),
     [files, grouping.enabled],
   )
   const groups = useMemo(
-    () => grouping.mode === 'flight'
-      ? groupFlightFeatures(visibleFiles, flightIndex, sortDir)
-      : groupFeatures(visibleFiles, grouping.mode, sortDir),
-    [visibleFiles, flightIndex, grouping.mode, sortDir],
+    () => grouping.subgroupFlights
+      ? []
+      : groupFeatures(visibleFiles, grouping.granularity, sortDir),
+    [visibleFiles, grouping.subgroupFlights, grouping.granularity, sortDir],
+  )
+  const flightDateGroups = useMemo(
+    () => grouping.subgroupFlights
+      ? groupFlightsByDate(visibleFiles, flightCatalog, grouping.granularity, sortDir)
+      : [],
+    [visibleFiles, flightCatalog, grouping.subgroupFlights, grouping.granularity, sortDir],
   )
   const orderedFiles = useMemo(() => groups.flatMap((g) => g.files), [groups])
   // id→display-index lookup for the onOpen call. Assumes feature ids are unique within
@@ -83,6 +93,13 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
     orderedFiles.forEach((f, i) => m.set(f.properties.id, i))
     return m
   }, [orderedFiles])
+  const flightByKey = useMemo(() => {
+    const map = new Map<string, PanelFlightGroup>()
+    for (const dateGroup of flightDateGroups) {
+      for (const flight of dateGroup.flights) map.set(flight.key, flight)
+    }
+    return map
+  }, [flightDateGroups])
 
   const empty = visibleFiles.length === 0
   const filteredOut = empty && files.length > 0
@@ -180,7 +197,12 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
   const cellWidth = (panelWidth - 2 * PAD_PX - (columns - 1) * GAP_PX) / columns
   const estRow = Math.max(80, cellWidth + 46)
 
-  const rowItems = useMemo(() => buildRowModel(groups, columns), [groups, columns])
+  const rowItems = useMemo(
+    () => grouping.subgroupFlights
+      ? buildFlightRowModel(flightDateGroups, columns)
+      : buildRowModel(groups, columns),
+    [grouping.subgroupFlights, flightDateGroups, groups, columns],
+  )
 
   const virtualizer = useVirtualizer({
     count: rowItems.length,
@@ -193,7 +215,12 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
     // keys embed the bucket key + column-dependent offset, so they change whenever the
     // row's content does (incl. a column change reshuffling thumb-row boundaries).
     getItemKey: (index) => rowItems[index]?.key ?? index,
-    estimateSize: (index) => (rowItems[index]?.kind === 'header' ? HEADER_PX : estRow),
+    estimateSize: (index) => {
+      const kind = rowItems[index]?.kind
+      if (kind === 'date-header') return HEADER_PX
+      if (kind === 'flight-header') return FLIGHT_HEADER_PX
+      return estRow
+    },
     overscan: 4,
   })
 
@@ -202,7 +229,7 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
   // past the (now shorter) content.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 })
-  }, [grouping.mode, grouping.enabled, sortDir])
+  }, [grouping.granularity, grouping.subgroupFlights, grouping.enabled, sortDir])
 
   const rootClass = `panel ${mobile ? 'panel--sheet' : 'panel--rail'}`
   const rootStyle = mobile ? { height: `${sheetFrac * 100}vh` } : { width }
@@ -253,17 +280,27 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
       </div>
       <div className="panel-controls">
         <div className="seg" role="group" aria-label="Group by">
-          {(['day', 'month', 'year', 'flight'] as GroupMode[]).map((g) => (
+          {(['day', 'month', 'year'] as Granularity[]).map((g) => (
             <button
               key={g}
-              className={`seg-btn${grouping.mode === g ? ' seg-btn--active' : ''}`}
-              onClick={() => setGrouping((prev) => changeGroupMode(prev, g))}
-              aria-pressed={grouping.mode === g}
+              className={`seg-btn${grouping.granularity === g ? ' seg-btn--active' : ''}`}
+              onClick={() => setGrouping((prev) => changeGranularity(prev, g))}
+              aria-pressed={grouping.granularity === g}
             >
-              {g === 'day' ? 'Day' : g === 'month' ? 'Month' : g === 'year' ? 'Year' : 'Flight'}
+              {g === 'day' ? 'Day' : g === 'month' ? 'Month' : 'Year'}
             </button>
           ))}
         </div>
+        <label className="flight-subgroup-toggle">
+          <input
+            type="checkbox"
+            checked={grouping.subgroupFlights}
+            onChange={(e) =>
+              setGrouping((prev) => setFlightSubgroups(prev, e.target.checked))
+            }
+          />
+          <span>Subgroup videos by flight</span>
+        </label>
         <button
           className="seg-btn sort-toggle"
           onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
@@ -279,8 +316,8 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
               className={`chip${grouping.enabled.has(c) ? ' chip--on' : ''}`}
               onClick={() => toggleCategory(c)}
               aria-pressed={grouping.enabled.has(c)}
-              disabled={grouping.mode === 'flight'}
-              title={grouping.mode === 'flight' ? 'Flight grouping shows ordinary videos only' : undefined}
+              disabled={grouping.subgroupFlights}
+              title={grouping.subgroupFlights ? 'Flight grouping shows ordinary videos only' : undefined}
             >
               {CATEGORY_LABELS[c]}
             </button>
@@ -299,7 +336,7 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
           {virtualizer.getVirtualItems().map((vrow) => {
             const item = rowItems[vrow.index]
             if (!item) return null
-            if (item.kind === 'header') {
+            if (item.kind === 'date-header') {
               return (
                 <div
                   key={item.key}
@@ -312,12 +349,32 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
                 </div>
               )
             }
+            if (item.kind === 'flight-header') {
+              const count = item.visibleCount === item.totalCount
+                ? `${item.totalCount} video${item.totalCount === 1 ? '' : 's'}`
+                : `${item.visibleCount} of ${item.totalCount} videos in view`
+              return (
+                <div
+                  key={item.key}
+                  data-index={vrow.index}
+                  ref={virtualizer.measureElement}
+                  className="flight-group-header"
+                  style={{ transform: `translateY(${vrow.start}px)` }}
+                >
+                  <strong>{item.label}</strong>
+                  <small>{count}</small>
+                </div>
+              )
+            }
+            const flight = item.flightKey ? flightByKey.get(item.flightKey) : undefined
             return (
               <div
                 key={item.key}
                 data-index={vrow.index}
                 ref={virtualizer.measureElement}
-                className="grid-row"
+                className={`grid-row${item.flightPosition
+                  ? ` grid-row--flight grid-row--flight-${item.flightPosition}`
+                  : ''}`}
                 style={{
                   transform: `translateY(${vrow.start}px)`,
                   gridTemplateColumns: `repeat(${columns}, 1fr)`,
@@ -327,7 +384,16 @@ export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: P
                   <div key={f.properties.id} className="thumb">
                     <button
                       className="thumb-open"
-                      onClick={() => onOpen(orderedFiles, idxById.get(f.properties.id) ?? 0)}
+                      onClick={() => {
+                        if (flight) onOpen(selectionForFlight(flight, f.properties.id))
+                        else {
+                          onOpen({
+                            files: orderedFiles,
+                            index: idxById.get(f.properties.id) ?? 0,
+                            flight: null,
+                          })
+                        }
+                      }}
                     >
                       <span className="thumb-img">
                         <LoadingImage

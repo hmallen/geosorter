@@ -1,16 +1,23 @@
-// Pure flight inference for the viewport file panel. Flight identity is computed from
+// Pure flight inference and nested panel grouping. Flight identity is computed from
 // the whole app-filtered library and then reused while the map viewport changes.
 
-import type { DateGroup, Granularity, SortDir } from './dateGroups'
+import {
+  bucketKey,
+  bucketLabel,
+  parseParts,
+  type DateParts,
+  type Granularity,
+  type RowItem,
+  type SortDir,
+} from './dateGroups'
 import { categoryOf, MEDIA_CATEGORIES, type MediaCategory } from './mediaFilter'
-import type { LibraryFeature } from './types'
+import type { LibraryFeature, ViewerSelection } from './types'
 
 export const FLIGHT_CONTINUITY_MS = 2_000
 
-export type GroupMode = Granularity | 'flight'
-
 export interface GroupingFilterState {
-  mode: GroupMode
+  granularity: Granularity
+  subgroupFlights: boolean
   enabled: Set<MediaCategory>
   beforeFlight: Set<MediaCategory> | null
 }
@@ -19,9 +26,32 @@ export interface FlightAssignment {
   key: string
   label: string
   startMs: number | null
+  anchorDate: DateParts | null
+  totalCount: number
 }
 
-export type FlightIndex = ReadonlyMap<number, FlightAssignment>
+export interface FlightGroup extends FlightAssignment {
+  members: LibraryFeature[]
+}
+
+export interface FlightCatalog {
+  assignments: ReadonlyMap<number, FlightAssignment>
+  groups: ReadonlyMap<string, FlightGroup>
+}
+
+export interface PanelFlightGroup {
+  key: string
+  label: string
+  startMs: number | null
+  visibleFiles: LibraryFeature[]
+  members: LibraryFeature[]
+}
+
+export interface FlightDateGroup {
+  key: string
+  label: string
+  flights: PanelFlightGroup[]
+}
 
 interface LocalStamp {
   epochMs: number
@@ -138,34 +168,61 @@ function timedFlightLabel(start: TimedVideo, end: TimedVideo): string {
   return `Flight · ${formatDate(from)}, ${formatTime(from)} – ${formatDate(to)}, ${formatTime(to)}`
 }
 
-function singletonAssignment(f: LibraryFeature): FlightAssignment {
+function singletonGroup(f: LibraryFeature): FlightGroup {
   const stamp = parseLocalStamp(f.properties.capture_ts_local)
+  const anchorDate = parseParts(f.properties)
+  const base = {
+    key: `flight:${f.properties.id}`,
+    startMs: stamp?.epochMs ?? null,
+    anchorDate,
+    totalCount: 1,
+    members: [f],
+  }
   if (!stamp) {
-    return {
-      key: `flight:${f.properties.id}`,
-      label: `Flight time unavailable · ${f.properties.filename}`,
-      startMs: null,
-    }
+    return { ...base, label: `Flight time unavailable · ${f.properties.filename}` }
   }
   const at = wallFields(stamp.epochMs, stamp.offsetMinutes)
   return {
-    key: `flight:${f.properties.id}`,
+    ...base,
     label: `Flight · ${formatDate(at)} · ${formatTime(at)} · duration unavailable`,
-    startMs: stamp.epochMs,
   }
 }
 
-function finalizeFlight(index: Map<number, FlightAssignment>, flight: FlightAccum): void {
+function addGroup(
+  assignments: Map<number, FlightAssignment>,
+  groups: Map<string, FlightGroup>,
+  group: FlightGroup,
+): void {
+  groups.set(group.key, group)
   const assignment: FlightAssignment = {
+    key: group.key,
+    label: group.label,
+    startMs: group.startMs,
+    anchorDate: group.anchorDate,
+    totalCount: group.totalCount,
+  }
+  for (const member of group.members) assignments.set(member.properties.id, assignment)
+}
+
+function finalizeFlight(
+  assignments: Map<number, FlightAssignment>,
+  groups: Map<string, FlightGroup>,
+  flight: FlightAccum,
+): void {
+  const members = flight.members.map((member) => member.feature)
+  addGroup(assignments, groups, {
     key: `flight:${flight.start.feature.properties.id}`,
     label: timedFlightLabel(flight.start, flight.end),
     startMs: flight.start.stamp.epochMs,
-  }
-  for (const member of flight.members) index.set(member.feature.properties.id, assignment)
+    anchorDate: parseParts(flight.start.feature.properties),
+    totalCount: members.length,
+    members,
+  })
 }
 
-export function buildFlightIndex(features: LibraryFeature[]): FlightIndex {
-  const index = new Map<number, FlightAssignment>()
+export function buildFlightCatalog(features: LibraryFeature[]): FlightCatalog {
+  const assignments = new Map<number, FlightAssignment>()
+  const groups = new Map<string, FlightGroup>()
   const timed: TimedVideo[] = []
 
   for (const feature of features) {
@@ -173,7 +230,7 @@ export function buildFlightIndex(features: LibraryFeature[]): FlightIndex {
     const stamp = parseLocalStamp(feature.properties.capture_ts_local)
     const duration = feature.properties.duration_s
     if (!stamp || duration === null || !Number.isFinite(duration) || duration <= 0) {
-      index.set(feature.properties.id, singletonAssignment(feature))
+      addGroup(assignments, groups, singletonGroup(feature))
       continue
     }
     timed.push({ feature, stamp, endMs: stamp.epochMs + duration * 1_000 })
@@ -193,82 +250,187 @@ export function buildFlightIndex(features: LibraryFeature[]): FlightIndex {
       }
       continue
     }
-    if (current) finalizeFlight(index, current)
+    if (current) finalizeFlight(assignments, groups, current)
     current = { members: [video], start: video, end: video, endMs: video.endMs }
   }
-  if (current) finalizeFlight(index, current)
-  return index
+  if (current) finalizeFlight(assignments, groups, current)
+  return { assignments, groups }
 }
 
-// Group only the in-view subset, but use assignments inferred from the whole filtered
-// library. That keeps keys and boundaries stable while the map pans.
-export function groupFlightFeatures(
+// Compatibility view for callers/tests that need only per-file identity.
+export function buildFlightIndex(features: LibraryFeature[]): FlightCatalog['assignments'] {
+  return buildFlightCatalog(features).assignments
+}
+
+function fallbackPanelFlight(file: LibraryFeature): PanelFlightGroup {
+  const group = singletonGroup(file)
+  return {
+    key: group.key,
+    label: group.label,
+    startMs: group.startMs,
+    visibleFiles: [file],
+    members: group.members,
+  }
+}
+
+// Nest the viewport subset beneath Day/Month/Year while retaining every flight's full
+// app-filtered member list. A cross-date flight is anchored to its first clip's date.
+export function groupFlightsByDate(
   files: LibraryFeature[],
-  index: FlightIndex,
+  catalog: FlightCatalog,
+  granularity: Granularity,
   dir: SortDir,
-): DateGroup[] {
-  const groups = new Map<string, DateGroup & { startMs: number | null }>()
+): FlightDateGroup[] {
+  const panels = new Map<string, PanelFlightGroup>()
   for (const file of files) {
     if (!ordinaryVideo(file)) continue
-    const assignment = index.get(file.properties.id) ?? singletonAssignment(file)
-    const existing = groups.get(assignment.key)
-    if (existing) existing.files.push(file)
-    else groups.set(assignment.key, {
-      key: assignment.key,
-      label: assignment.label,
-      files: [file],
-      startMs: assignment.startMs,
-    })
+    const assignment = catalog.assignments.get(file.properties.id)
+    const full = assignment ? catalog.groups.get(assignment.key) : undefined
+    const existing = assignment ? panels.get(assignment.key) : undefined
+    if (existing) existing.visibleFiles.push(file)
+    else if (full) {
+      panels.set(full.key, {
+        key: full.key,
+        label: full.label,
+        startMs: full.startMs,
+        visibleFiles: [file],
+        members: full.members,
+      })
+    } else {
+      const fallback = fallbackPanelFlight(file)
+      panels.set(fallback.key, fallback)
+    }
   }
 
-  for (const group of groups.values()) {
-    group.files.sort((a, b) => {
-      const aStart = parseLocalStamp(a.properties.capture_ts_local)?.epochMs
-      const bStart = parseLocalStamp(b.properties.capture_ts_local)?.epochMs
-      if (aStart !== undefined && bStart !== undefined && aStart !== bStart) return aStart - bStart
-      if (aStart !== undefined && bStart === undefined) return -1
-      if (aStart === undefined && bStart !== undefined) return 1
-      return a.properties.id - b.properties.id
-    })
+  for (const panel of panels.values()) {
+    const memberOrder = new Map<number, number>()
+    panel.members.forEach((member, index) => memberOrder.set(member.properties.id, index))
+    panel.visibleFiles.sort((a, b) =>
+      (memberOrder.get(a.properties.id) ?? Number.MAX_SAFE_INTEGER) -
+        (memberOrder.get(b.properties.id) ?? Number.MAX_SAFE_INTEGER),
+    )
+  }
+
+  const dated = new Map<string, FlightDateGroup>()
+  const undated: PanelFlightGroup[] = []
+  for (const panel of panels.values()) {
+    const assignment = catalog.assignments.get(panel.members[0].properties.id)
+    const parts = assignment?.anchorDate ?? parseParts(panel.members[0].properties)
+    if (!parts) {
+      undated.push(panel)
+      continue
+    }
+    const key = bucketKey(parts, granularity)
+    const existing = dated.get(key)
+    if (existing) existing.flights.push(panel)
+    else dated.set(key, { key, label: bucketLabel(parts, granularity), flights: [panel] })
   }
 
   const sign = dir === 'desc' ? -1 : 1
-  return [...groups.values()].sort((a, b) => {
-    const idDelta = a.files[0].properties.id - b.files[0].properties.id
+  const compareFlights = (a: PanelFlightGroup, b: PanelFlightGroup) => {
+    const idDelta = a.members[0].properties.id - b.members[0].properties.id
     if (a.startMs === null && b.startMs === null) return idDelta
     if (a.startMs === null) return 1
     if (b.startMs === null) return -1
     return (a.startMs - b.startMs) * sign || idDelta
-  })
+  }
+  const result = [...dated.values()].sort((a, b) =>
+    a.key < b.key ? -sign : a.key > b.key ? sign : 0,
+  )
+  for (const group of result) group.flights.sort(compareFlights)
+  if (undated.length > 0) {
+    undated.sort(compareFlights)
+    result.push({ key: '', label: 'Unknown date', flights: undated })
+  }
+  return result
+}
+
+export function buildFlightRowModel(groups: FlightDateGroup[], columns: number): RowItem[] {
+  const cols = Math.max(1, Math.floor(columns) || 1)
+  const rows: RowItem[] = []
+  for (const dateGroup of groups) {
+    rows.push({ kind: 'date-header', key: `h:${dateGroup.key}`, label: dateGroup.label })
+    for (const flight of dateGroup.flights) {
+      rows.push({
+        kind: 'flight-header',
+        key: `fh:${flight.key}`,
+        label: flight.label,
+        visibleCount: flight.visibleFiles.length,
+        totalCount: flight.members.length,
+      })
+      const rowCount = Math.ceil(flight.visibleFiles.length / cols)
+      for (let offset = 0, row = 0; offset < flight.visibleFiles.length; offset += cols, row += 1) {
+        const position = rowCount === 1
+          ? 'only'
+          : row === 0
+            ? 'first'
+            : row === rowCount - 1
+              ? 'last'
+              : 'middle'
+        rows.push({
+          kind: 'thumbs',
+          key: `ft:${flight.key}:${offset}`,
+          files: flight.visibleFiles.slice(offset, offset + cols),
+          flightKey: flight.key,
+          flightPosition: position,
+        })
+      }
+    }
+  }
+  return rows
+}
+
+export function selectionForFlight(flight: PanelFlightGroup, fileId: number): ViewerSelection {
+  const index = flight.members.findIndex((member) => member.properties.id === fileId)
+  return {
+    files: flight.members,
+    index: index < 0 ? 0 : index,
+    flight: { key: flight.key, label: flight.label },
+  }
 }
 
 export function initialGroupingFilterState(): GroupingFilterState {
-  return { mode: 'month', enabled: new Set(MEDIA_CATEGORIES), beforeFlight: null }
+  return {
+    granularity: 'month',
+    subgroupFlights: false,
+    enabled: new Set(MEDIA_CATEGORIES),
+    beforeFlight: null,
+  }
 }
 
-export function changeGroupMode(
+export function changeGranularity(
   state: GroupingFilterState,
-  mode: GroupMode,
+  granularity: Granularity,
 ): GroupingFilterState {
-  if (mode === state.mode) return state
-  if (mode === 'flight') {
-    return { mode, enabled: new Set<MediaCategory>(['video']), beforeFlight: new Set(state.enabled) }
-  }
-  if (state.mode === 'flight') {
+  return granularity === state.granularity ? state : { ...state, granularity }
+}
+
+export function setFlightSubgroups(
+  state: GroupingFilterState,
+  enabled: boolean,
+): GroupingFilterState {
+  if (enabled === state.subgroupFlights) return state
+  if (enabled) {
     return {
-      mode,
-      enabled: new Set(state.beforeFlight ?? MEDIA_CATEGORIES),
-      beforeFlight: null,
+      ...state,
+      subgroupFlights: true,
+      enabled: new Set<MediaCategory>(['video']),
+      beforeFlight: new Set(state.enabled),
     }
   }
-  return { ...state, mode }
+  return {
+    ...state,
+    subgroupFlights: false,
+    enabled: new Set(state.beforeFlight ?? MEDIA_CATEGORIES),
+    beforeFlight: null,
+  }
 }
 
 export function toggleGroupingCategory(
   state: GroupingFilterState,
   category: MediaCategory,
 ): GroupingFilterState {
-  if (state.mode === 'flight') return state
+  if (state.subgroupFlights) return state
   const enabled = new Set(state.enabled)
   if (enabled.has(category)) enabled.delete(category)
   else enabled.add(category)

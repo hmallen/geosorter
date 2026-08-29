@@ -1,0 +1,105 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic "geosorter" [ref=e5]
+    - generic [ref=e50]:
+      - button "Process Inbox" [ref=e51] [cursor=pointer]
+      - button "Undo" [ref=e55] [cursor=pointer]
+      - button "Rescan" [ref=e59] [cursor=pointer]
+      - button "Repair" [ref=e63] [cursor=pointer]
+    - generic [ref=e11]:
+      - button "Locations" [ref=e12] [cursor=pointer]
+      - button "Trips" [ref=e16] [cursor=pointer]
+      - button "Timeline" [ref=e21] [cursor=pointer]
+      - button "Favorites" [ref=e23] [cursor=pointer]
+  - generic [ref=e26]:
+    - generic:
+      - region "Map" [ref=e67]
+      - button "Map marker" [ref=e68]:
+        - generic [ref=e69] [cursor=pointer]: "6"
+    - generic:
+      - generic [ref=e70]:
+        - button "Zoom in" [ref=e71] [cursor=pointer]
+        - button "Zoom out" [ref=e73] [cursor=pointer]
+        - button "Drag to rotate map, click to reset north" [ref=e75]
+      - group [ref=e77]:
+        - generic "Toggle attribution" [ref=e78] [cursor=pointer]
+        - generic [ref=e79]:
+          - link "MapLibre" [ref=e80] [cursor=pointer]:
+            - /url: https://maplibre.org/
+          - text: "| ©"
+          - link "CARTO" [ref=e81] [cursor=pointer]:
+            - /url: https://carto.com/about-carto/
+          - text: ", ©"
+          - link "OpenStreetMap" [ref=e82] [cursor=pointer]:
+            - /url: http://www.openstreetmap.org/about/
+          - text: contributors
+    - generic [ref=e83]:
+      - generic:
+        - generic [ref=e84]:
+          - generic [ref=e85] [cursor=pointer]:
+            - checkbox "Satellite" [ref=e86]
+            - text: Satellite
+          - generic [ref=e87] [cursor=pointer]:
+            - checkbox "Heatmap" [ref=e88]
+            - text: Heatmap
+        - generic [ref=e89]:
+          - generic [ref=e90]: GPS
+          - generic [ref=e92]: inferred
+          - generic [ref=e94]: manual
+          - generic [ref=e96]: panorama
+  - generic [ref=e29]:
+    - generic "Drag to resize" [ref=e30]
+    - generic [ref=e32]:
+      - strong [ref=e33]: Boulder, Colorado, United States
+      - generic [ref=e98]: 2026-08-28 · 5 file(s)
+    - generic [ref=e34]:
+      - group "Group by" [ref=e35]:
+        - button "Day" [active] [pressed] [ref=e36] [cursor=pointer]
+        - button "Month" [ref=e37] [cursor=pointer]
+        - button "Year" [ref=e38] [cursor=pointer]
+      - generic [ref=e39] [cursor=pointer]:
+        - checkbox "Subgroup videos by flight" [checked] [ref=e40]
+        - generic [ref=e41]: Subgroup videos by flight
+      - button "Newest first ↓" [ref=e42] [cursor=pointer]
+      - group "Filter by media type" [ref=e43]:
+        - button "Photos" [disabled] [ref=e44] [cursor=pointer]
+        - button "Videos" [disabled] [pressed] [ref=e45] [cursor=pointer]
+        - button "Panoramas" [disabled] [ref=e46] [cursor=pointer]
+        - button "Hyperlapse" [disabled] [ref=e47] [cursor=pointer]
+    - generic [ref=e99]:
+      - generic [ref=e192]: August 28, 2026
+      - generic [ref=e145]:
+        - strong [ref=e146]: Flight · August 28, 2026 · 4:00 PM · duration unavailable
+        - generic [ref=e147]: 1 video
+      - generic [ref=e149] [cursor=pointer]:
+        - button "DJI_0200.mp4 ▶ DJI_0200.mp4" [ref=e150]:
+          - img "DJI_0200.mp4" [ref=e153]
+          - generic [ref=e154]: ▶ DJI_0200.mp4
+        - button "⌖ Re-tag location" [ref=e155]
+      - generic [ref=e156]:
+        - strong [ref=e157]: Flight · August 28, 2026 · 3:00–3:00 PM
+        - generic [ref=e158]: 1 video
+      - generic [ref=e160] [cursor=pointer]:
+        - button "DJI_0100.mp4 ▶ DJI_0100.mp4" [ref=e161]:
+          - img "DJI_0100.mp4" [ref=e164]
+          - generic [ref=e165]: ▶ DJI_0100.mp4
+        - button "⌖ Re-tag location" [ref=e166]
+      - generic [ref=e167]:
+        - strong [ref=e168]: Flight · August 28, 2026 · 2:10–2:10 PM
+        - generic [ref=e169]: 3 videos
+      - generic [ref=e170]:
+        - generic [ref=e171] [cursor=pointer]:
+          - button "DJI_0001.mp4 ▶ DJI_0001.mp4" [ref=e172]:
+            - img "DJI_0001.mp4" [ref=e175]
+            - generic [ref=e176]: ▶ DJI_0001.mp4
+          - button "⌖ Re-tag location" [ref=e177]
+        - generic [ref=e178] [cursor=pointer]:
+          - button "DJI_0002.mp4 ▶ DJI_0002.mp4" [ref=e179]:
+            - img "DJI_0002.mp4" [ref=e182]
+            - generic [ref=e183]: ▶ DJI_0002.mp4
+          - button "⌖ Re-tag location" [ref=e184]
+        - generic [ref=e185] [cursor=pointer]:
+          - button "DJI_0003.mp4 ▶ DJI_0003.mp4" [ref=e186]:
+            - img "DJI_0003.mp4" [ref=e189]
+            - generic [ref=e190]: ▶ DJI_0003.mp4
+          - button "⌖ Re-tag location" [ref=e191]
