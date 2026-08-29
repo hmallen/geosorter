@@ -18,7 +18,7 @@ import {
   trackStateAtTime,
   type LoadedVideoTrack,
 } from './flightTrack'
-import { buildFlightCatalog } from './flightGroups'
+import { buildFlightCatalog, selectionForCatalogFlight } from './flightGroups'
 import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
 import { effectiveFavorite, filterFavorites } from './favorites'
 import { parseHash, type UrlState, type UrlView } from './urlState'
@@ -285,10 +285,15 @@ export default function App() {
     [visible, bounds],
   )
 
-  // Clicking a single map marker opens that capture in the lightbox against the
-  // current viewport list (so prev/next walks the on-screen captures). A cluster
-  // click is handled inside MapView by zooming in — it never reaches here.
+  // Clicking a video marker opens its complete inferred flight, including members
+  // outside the settled viewport; non-flight captures retain the viewport-list
+  // navigation fallback. A cluster click zooms inside MapView and never reaches here.
   function openInLightbox(id: number) {
+    const flightSelection = selectionForCatalogFlight(flightCatalog, id)
+    if (flightSelection) {
+      setLightbox(flightSelection)
+      return
+    }
     const idx = panelFiles.findIndex((f) => f.properties.id === id)
     if (idx >= 0) {
       setLightbox({ files: panelFiles, index: idx, flight: null })

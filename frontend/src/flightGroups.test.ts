@@ -6,6 +6,7 @@ import {
   changeGranularity,
   groupFlightsByDate,
   initialGroupingFilterState,
+  selectionForCatalogFlight,
   selectionForFlight,
   setFlightSubgroups,
   toggleGroupingCategory,
@@ -194,6 +195,33 @@ describe('groupFlightsByDate', () => {
     expect(rows[1]).toMatchObject({ visibleCount: 2, totalCount: 3 })
     expect(rows[2]).toMatchObject({ flightPosition: 'first' })
     expect(rows[3]).toMatchObject({ flightPosition: 'last' })
+  })
+})
+
+describe('flight viewer selection', () => {
+  it('opens a map-selected member against the complete catalog flight', () => {
+    const files = [
+      feat(1, '2026-08-28T10:00:00-06:00', 10),
+      feat(2, '2026-08-28T10:00:11-06:00', 10),
+      feat(3, '2026-08-28T10:00:22-06:00', 10),
+    ]
+    const selection = selectionForCatalogFlight(buildFlightCatalog(files), 3)
+
+    expect(selection?.files.map((f) => f.properties.id)).toEqual([1, 2, 3])
+    expect(selection?.index).toBe(2)
+    expect(selection?.flight).toMatchObject({ key: 'flight:1' })
+  })
+
+  it('returns no flight selection for non-flight captures', () => {
+    const photo = feat(1, '2026-08-28T10:00:00-06:00', null, {
+      filename: 'DJI_0001.JPG',
+      media_type: 'photo',
+      codec: null,
+      gps_source: 'exif',
+      path: 'photos/1.jpg',
+    })
+
+    expect(selectionForCatalogFlight(buildFlightCatalog([photo]), photo.properties.id)).toBeNull()
   })
 })
 

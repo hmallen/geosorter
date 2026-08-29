@@ -380,13 +380,28 @@ export function buildFlightRowModel(groups: FlightDateGroup[], columns: number):
   return rows
 }
 
-export function selectionForFlight(flight: PanelFlightGroup, fileId: number): ViewerSelection {
+export function selectionForFlight(
+  flight: Pick<FlightGroup, 'key' | 'label' | 'members'>,
+  fileId: number,
+): ViewerSelection {
   const index = flight.members.findIndex((member) => member.properties.id === fileId)
   return {
     files: flight.members,
     index: index < 0 ? 0 : index,
     flight: { key: flight.key, label: flight.label },
   }
+}
+
+// Resolve a map-marker video through the full app-filtered catalog. Unlike the
+// viewport panel, the catalog retains members outside the settled map bounds, so
+// opening any member can preserve the complete inferred-flight context.
+export function selectionForCatalogFlight(
+  catalog: FlightCatalog,
+  fileId: number,
+): ViewerSelection | null {
+  const assignment = catalog.assignments.get(fileId)
+  const flight = assignment ? catalog.groups.get(assignment.key) : undefined
+  return flight ? selectionForFlight(flight, fileId) : null
 }
 
 export function initialGroupingFilterState(): GroupingFilterState {
