@@ -13,6 +13,7 @@ import TimelineScrubber from './components/TimelineScrubber'
 import { buildPlaces } from './locationFilter'
 import { dismissDuplicates, fetchTrack } from './api'
 import { trackBBox, trackStateAtTime } from './flightTrack'
+import { buildFlightIndex } from './flightGroups'
 import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
 import { effectiveFavorite, filterFavorites } from './favorites'
 import { parseHash, type UrlState, type UrlView } from './urlState'
@@ -63,6 +64,7 @@ function quarantineToFeature(item: QuarantineItem): LibraryFeature {
       capture_ts_local: null,
       media_type: item.media_type,
       codec: null,
+      duration_s: null,
       gps_source: 'none',
       capture_kind: null,
       frame_count: null,
@@ -245,6 +247,11 @@ export default function App() {
       tripBBox[3] + PAD,
     ])
   }, [features, favoritesOnly, favOverrides, dateRange, tripBBox])
+
+  // Infer flight identity over the entire app-filtered library BEFORE map bounds are
+  // applied. FileListPanel then shows only each group's in-view members, so panning
+  // cannot split or renumber a flight merely because an intermediate clip leaves view.
+  const flightIndex = useMemo(() => buildFlightIndex(visible), [visible])
 
   // Panel contents: every capture inside the current map viewport. A pure in-memory
   // filter over the already-loaded features — no /api refetch on pan/zoom. Memoized
@@ -630,6 +637,7 @@ export default function App() {
       )}
       <FileListPanel
         files={panelFiles}
+        flightIndex={flightIndex}
         onOpen={(files, i) => setLightbox({ files, index: i })}
         onRetag={
           isAdmin

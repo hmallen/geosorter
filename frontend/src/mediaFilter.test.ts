@@ -11,6 +11,7 @@ function props(over: Partial<FeatureProps>): FeatureProps {
     capture_ts_local: null,
     media_type: 'photo',
     codec: null,
+    duration_s: null,
     gps_source: 'exif',
     capture_kind: null,
     frame_count: null,

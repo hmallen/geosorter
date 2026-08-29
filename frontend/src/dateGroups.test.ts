@@ -20,6 +20,7 @@ function feat(
       capture_ts_local,
       media_type: 'photo',
       codec: null,
+      duration_s: null,
       gps_source: 'exif',
       capture_kind: null,
       frame_count: null,

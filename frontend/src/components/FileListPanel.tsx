@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { listThumb } from '../api'
 import { columnsForWidth } from '../gridWindow'
-import { groupFeatures, buildRowModel, type Granularity, type SortDir } from '../dateGroups'
+import { groupFeatures, buildRowModel, type SortDir } from '../dateGroups'
+import {
+  changeGroupMode,
+  groupFlightFeatures,
+  initialGroupingFilterState,
+  toggleGroupingCategory,
+  type FlightIndex,
+  type GroupMode,
+} from '../flightGroups'
 import { filterByCategories, MEDIA_CATEGORIES, type MediaCategory } from '../mediaFilter'
 import { useIsMobile } from '../useMediaQuery'
 import { clampFraction, nearestSnap, cycleSnap, SHEET_SNAPS } from '../sheet'
@@ -11,6 +19,9 @@ import LoadingImage from './LoadingImage'
 
 interface Props {
   files: LibraryFeature[]
+  // Flight assignments are inferred from the whole app-filtered library (before map
+  // bounds), so a viewport subset cannot split or renumber a flight while panning.
+  flightIndex: FlightIndex
   // The panel groups + filters its files, so the displayed order differs from the raw
   // viewport list. onOpen receives the EXACT displayed-ordered list it opened against
   // (so the lightbox prev/next walks what the user sees) plus the clicked index.
@@ -36,31 +47,33 @@ const CATEGORY_LABELS: Record<MediaCategory, string> = {
 // Estimated height of a group-header row (corrected by measureElement after paint).
 const HEADER_PX = 34
 
-export default function FileListPanel({ files, onOpen, onRetag }: Props) {
+export default function FileListPanel({ files, flightIndex, onOpen, onRetag }: Props) {
   // Below 1024px the panel is a bottom sheet over a full-screen map; at desktop width it
   // stays the right rail (m-implement-mobile-responsive-ui).
   const mobile = useIsMobile()
 
-  // Date-grouping granularity (default month, e.g. heading "April 2024") and the
-  // mutually-exclusive media-type filter (all four buckets enabled by default). Both are
-  // panel-local view state.
-  const [gran, setGran] = useState<Granularity>('month')
+  // Grouping + media categories remain panel-local. Entering Flight snapshots the
+  // current category selection and locks the panel to ordinary videos; leaving restores
+  // that exact snapshot (see flightGroups.changeGroupMode).
+  const [grouping, setGrouping] = useState(initialGroupingFilterState)
   // Date sort direction: descending (newest-first) by default, matching prior behavior.
   const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const [enabled, setEnabled] = useState<Set<MediaCategory>>(() => new Set(MEDIA_CATEGORIES))
   const toggleCategory = (c: MediaCategory) =>
-    setEnabled((prev) => {
-      const next = new Set(prev)
-      if (next.has(c)) next.delete(c)
-      else next.add(c)
-      return next
-    })
+    setGrouping((prev) => toggleGroupingCategory(prev, c))
 
-  // Apply the media filter, then group by date. The displayed list is the groups
+  // Apply the media filter, then group by date or inferred flight. The displayed list is the groups
   // flattened in heading order — that is what the lightbox must walk, so we key an
   // id→index map off it for the onOpen call.
-  const visibleFiles = useMemo(() => filterByCategories(files, enabled), [files, enabled])
-  const groups = useMemo(() => groupFeatures(visibleFiles, gran, sortDir), [visibleFiles, gran, sortDir])
+  const visibleFiles = useMemo(
+    () => filterByCategories(files, grouping.enabled),
+    [files, grouping.enabled],
+  )
+  const groups = useMemo(
+    () => grouping.mode === 'flight'
+      ? groupFlightFeatures(visibleFiles, flightIndex, sortDir)
+      : groupFeatures(visibleFiles, grouping.mode, sortDir),
+    [visibleFiles, flightIndex, grouping.mode, sortDir],
+  )
   const orderedFiles = useMemo(() => groups.flatMap((g) => g.files), [groups])
   // id→display-index lookup for the onOpen call. Assumes feature ids are unique within
   // the viewport (true for /api/library — each capture is one feature); a duplicate id
@@ -184,12 +197,12 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
     overscan: 4,
   })
 
-  // When the displayed set changes (granularity toggle or media filter), reset the
+  // When the displayed set changes (grouping toggle or media filter), reset the
   // scroll to the top so filtering down to fewer rows doesn't strand the user scrolled
   // past the (now shorter) content.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 })
-  }, [gran, enabled, sortDir])
+  }, [grouping.mode, grouping.enabled, sortDir])
 
   const rootClass = `panel ${mobile ? 'panel--sheet' : 'panel--rail'}`
   const rootStyle = mobile ? { height: `${sheetFrac * 100}vh` } : { width }
@@ -240,14 +253,14 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
       </div>
       <div className="panel-controls">
         <div className="seg" role="group" aria-label="Group by">
-          {(['day', 'month', 'year'] as Granularity[]).map((g) => (
+          {(['day', 'month', 'year', 'flight'] as GroupMode[]).map((g) => (
             <button
               key={g}
-              className={`seg-btn${gran === g ? ' seg-btn--active' : ''}`}
-              onClick={() => setGran(g)}
-              aria-pressed={gran === g}
+              className={`seg-btn${grouping.mode === g ? ' seg-btn--active' : ''}`}
+              onClick={() => setGrouping((prev) => changeGroupMode(prev, g))}
+              aria-pressed={grouping.mode === g}
             >
-              {g === 'day' ? 'Day' : g === 'month' ? 'Month' : 'Year'}
+              {g === 'day' ? 'Day' : g === 'month' ? 'Month' : g === 'year' ? 'Year' : 'Flight'}
             </button>
           ))}
         </div>
@@ -263,9 +276,11 @@ export default function FileListPanel({ files, onOpen, onRetag }: Props) {
           {MEDIA_CATEGORIES.map((c) => (
             <button
               key={c}
-              className={`chip${enabled.has(c) ? ' chip--on' : ''}`}
+              className={`chip${grouping.enabled.has(c) ? ' chip--on' : ''}`}
               onClick={() => toggleCategory(c)}
-              aria-pressed={enabled.has(c)}
+              aria-pressed={grouping.enabled.has(c)}
+              disabled={grouping.mode === 'flight'}
+              title={grouping.mode === 'flight' ? 'Flight grouping shows ordinary videos only' : undefined}
             >
               {CATEGORY_LABELS[c]}
             </button>

@@ -14,6 +14,7 @@ function feat(id: number, place: string | null, lon: number, lat: number): Libra
       capture_ts_local: null,
       media_type: 'photo',
       codec: null,
+      duration_s: null,
       gps_source: 'exif',
       capture_kind: null,
       frame_count: null,
