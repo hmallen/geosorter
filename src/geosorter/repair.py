@@ -27,6 +27,8 @@ This module is the backend of the map UI's Repair panel:
   pre-repair original stays in ``_repair/backups/`` as the safety copy.
 * :func:`discard_repair` — drop an unaccepted output (and its backup — the
   library original was never modified).
+* :func:`set_no_gps_visibility` — reversibly hide a broken capture from the
+  No-GPS placement backlog without moving or deleting any media.
 * :func:`delete_broken` — delete a broken capture from disk (a 0-byte file has
   nothing to recover) and prune its index rows. Re-probes on the server and
   REFUSES a file that probes healthy, so the endpoint can never delete good
@@ -357,6 +359,7 @@ class BrokenItem:
     size: int
     status: str  # 'zero-byte' | 'no-moov' | 'decode-error' | 'missing'
     error: str | None = None
+    hidden_from_no_gps: bool = False
 
 
 @dataclass
@@ -399,7 +402,7 @@ def scan_broken(cfg, *, progress=None, probe_fn=None) -> ScanReport:
     report = ScanReport(untrunc_available=find_untrunc(cfg.untrunc_path) is not None)
     try:
         rows = index.execute(
-            "SELECT id, filename, media_type, local_date, dest_path "
+            "SELECT id, filename, media_type, local_date, dest_path, no_gps_hidden "
             "FROM files WHERE status='quarantined' ORDER BY id"
         ).fetchall()
     finally:
@@ -408,14 +411,14 @@ def scan_broken(cfg, *, progress=None, probe_fn=None) -> ScanReport:
     # Pass 1 (serial, cheap stats): settle everything decidable without ffprobe
     # and collect the videos that need one.
     to_probe: list[tuple[BrokenItem, str]] = []
-    for file_id, filename, media_type, local_date, dest_path in rows:
+    for file_id, filename, media_type, local_date, dest_path, no_gps_hidden in rows:
         report.checked += 1
         path = _strip(dest_path)
         item = BrokenItem(
             file_id=file_id, filename=filename, media_type=media_type,
             date=_capture_date(local_date, dest_path), dest_path=dest_path,
             rel_path=pathing.library_rel_key(cfg.library_root, dest_path),
-            size=0, status="missing",
+            size=0, status="missing", hidden_from_no_gps=bool(no_gps_hidden),
         )
         if not os.path.exists(path):
             report.items.append(item)  # stale row — rescan's job; listed for visibility
@@ -922,7 +925,8 @@ def accept_repair(cfg, file_id: int, *, probe_fn=None) -> dict:
         sha = sha256_file(fixed)
         os.replace(fixed, _strip(dest_path))
         index.execute(
-            "UPDATE files SET sha256=?, codec=?, width=?, height=?, duration_s=? "
+            "UPDATE files SET sha256=?, codec=?, width=?, height=?, duration_s=?, "
+            "no_gps_hidden=0 "
             "WHERE id=?",
             (sha, probe.codec, probe.width, probe.height, probe.duration_s, file_id),
         )
@@ -973,6 +977,33 @@ def discard_repair(cfg, file_id: int) -> dict:
     _invalidate_rel(cfg, pathing.library_rel_key(cfg.library_root,
                                                  fixed_dir / work_name))
     return {"file_id": file_id, "removed": removed}
+
+
+def set_no_gps_visibility(cfg, file_id: int, hidden: bool) -> dict:
+    """Hide or restore one quarantined capture in the No-GPS placement backlog.
+
+    This is deliberately index-only: the media, companions, and repair work files
+    stay untouched. Hidden captures remain ``status='quarantined'`` and therefore
+    continue to participate in broken-file scans.
+    """
+    index = db.connect(cfg.index_db_path)
+    try:
+        db.init_index_schema(index)
+        row = index.execute(
+            "SELECT status FROM files WHERE id=?", (file_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"unknown file id {file_id}")
+        if row[0] != "quarantined":
+            raise ValueError("only quarantined files can be hidden from No GPS")
+        index.execute(
+            "UPDATE files SET no_gps_hidden=? WHERE id=?",
+            (int(hidden), file_id),
+        )
+        index.commit()
+    finally:
+        index.close()
+    return {"file_id": file_id, "hidden": hidden}
 
 
 def delete_broken(cfg, file_id: int, *, probe_fn=None) -> dict:

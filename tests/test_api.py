@@ -1527,6 +1527,7 @@ _MUTATING_ROUTES = [
     ("/api/stitch/1", None),
     ("/api/duplicates/dismiss", {"ids": [1]}),
     ("/api/favorite", {"file_id": 1, "favorite": True}),
+    ("/api/repair/no-gps-visibility", {"file_id": 1, "hidden": True}),
 ]
 
 

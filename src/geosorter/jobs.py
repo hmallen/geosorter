@@ -206,7 +206,7 @@ class RepairScanJobState:
 
     ``items`` is filled once, when the scan completes: each entry is the wire
     shape of one broken capture (``{id, filename, media_type, date, size, status,
-    error, path}``) the Repair panel lists.
+    error, path, hidden_from_no_gps}``) the Repair panel lists.
     """
 
     job_id: str
@@ -974,6 +974,7 @@ class JobManager:
                 "status": item.status,
                 "error": item.error,
                 "path": item.rel_path,
+                "hidden_from_no_gps": item.hidden_from_no_gps,
             }
             for item in report.items
         ]

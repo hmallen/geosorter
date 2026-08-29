@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch, trackUrl, fetchTrack, fetchDuplicates, dismissDuplicates, setFavorite } from './api'
+import { mediaUrl, thumbUrl, previewUrl, posterUrl, videoUrl, listThumb, fetchInbox, framesUrl, fetchFrames, stitchUrl, fetchLibrary, fetchQuarantine, placeSearch, trackUrl, fetchTrack, fetchDuplicates, dismissDuplicates, setFavorite, setRepairNoGpsVisibility } from './api'
 
 describe('media URL builders', () => {
   it('encodes each segment (spaces, commas) but keeps slashes', () => {
@@ -110,6 +110,41 @@ describe('fetchQuarantine', () => {
   it('throws on a non-OK response', async () => {
     const fetchFn = (async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch
     await expect(fetchQuarantine(fetchFn)).rejects.toThrow(/quarantine fetch failed: 500/)
+  })
+})
+
+describe('setRepairNoGpsVisibility', () => {
+  it('posts the requested reversible visibility state', async () => {
+    let calledUrl: string | undefined
+    let calledInit: RequestInit | undefined
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      calledUrl = url
+      calledInit = init
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ file_id: 7, hidden: true }),
+      } as Response
+    }) as unknown as typeof fetch
+
+    await expect(setRepairNoGpsVisibility(fetchFn, 7, true)).resolves.toEqual({
+      file_id: 7,
+      hidden: true,
+    })
+    expect(calledUrl).toBe('/api/repair/no-gps-visibility')
+    expect(calledInit?.method).toBe('POST')
+    expect(calledInit?.body).toBe(JSON.stringify({ file_id: 7, hidden: true }))
+  })
+
+  it('includes the server refusal reason in errors', async () => {
+    const fetchFn = (async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({ detail: { message: 'only quarantined files can be hidden' } }),
+    })) as unknown as typeof fetch
+    await expect(setRepairNoGpsVisibility(fetchFn, 7, true)).rejects.toThrow(
+      /409 — only quarantined files can be hidden/,
+    )
   })
 })
 

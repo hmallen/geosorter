@@ -257,6 +257,27 @@ export const repairDelete = (
   id: number,
 ): Promise<{ file_id: number; deleted: string[] }> => repairStep(fetchFn, 'delete', id)
 
+// Reversibly exclude/include a broken quarantined capture in the No-GPS backlog.
+// This changes only index visibility; the media remains untouched and repairable.
+export async function setRepairNoGpsVisibility(
+  fetchFn: typeof fetch,
+  id: number,
+  hidden: boolean,
+): Promise<{ file_id: number; hidden: boolean }> {
+  const resp = await fetchFn('/api/repair/no-gps-visibility', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_id: id, hidden }),
+  })
+  if (!resp.ok) {
+    const detail = await errorDetail(resp)
+    throw new Error(
+      `repair visibility update failed: ${resp.status}${detail ? ` — ${detail}` : ''}`,
+    )
+  }
+  return (await resp.json()) as { file_id: number; hidden: boolean }
+}
+
 // Offline forward place-name search: resolve a place/feature name to ranked
 // coordinate matches. A blank query short-circuits to [] (no request).
 export async function placeSearch(

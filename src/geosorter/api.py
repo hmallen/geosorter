@@ -31,7 +31,8 @@ Exposes the organized library over HTTP for the B7 frontend:
   clip with untrunc into ``_repair/fixed/`` for preview; the synchronous
   ``POST /api/repair/accept`` / ``discard`` / ``delete`` then swap it into the
   library, drop the attempt, or delete a (re-verified) broken file + its index
-  rows (see :mod:`geosorter.repair`).
+  rows. ``POST /api/repair/no-gps-visibility`` reversibly hides/restores a broken
+  row in the placement backlog (see :mod:`geosorter.repair`).
 * ``GET  /api/duplicates`` / ``POST /api/duplicates/dismiss`` — the pending
   re-import backlog (``relocate_duplicates = false``) and its synchronous drain
   (see :mod:`geosorter.duplicates`).
@@ -229,6 +230,13 @@ class RepairFileRequest(BaseModel):
     """Body of the synchronous repair steps (accept / discard / delete): one row id."""
 
     file_id: int
+
+
+class RepairNoGpsVisibilityRequest(BaseModel):
+    """Body of the reversible broken-file No-GPS visibility action."""
+
+    file_id: int
+    hidden: bool
 
 
 class DismissDuplicatesRequest(BaseModel):
@@ -621,7 +629,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
             rows = conn.execute(
                 "SELECT id, filename, media_type, local_date, dest_path, "
                 "capture_kind, frame_count "
-                "FROM files WHERE status='quarantined' ORDER BY id"
+                "FROM files WHERE status='quarantined' AND no_gps_hidden=0 "
+                "ORDER BY id"
             ).fetchall()
         finally:
             conn.close()
@@ -946,8 +955,8 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     def _repair_sync_guard(file_id: int) -> None:
         """409 when the destructive worker, or a repair of this file, is in flight.
 
-        The synchronous accept/discard/delete steps mutate library files and (for
-        accept/delete) the index — never under a live organize/undo/retag/rescan
+        The synchronous accept/discard/delete/visibility steps mutate library
+        files and/or the index — never under a live organize/undo/retag/rescan
         (same contract as duplicates/dismiss), and never while untrunc is still
         writing this very capture's work files.
         """
@@ -997,6 +1006,22 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         """Delete a broken capture from disk + prune its rows (server re-verifies)."""
         _repair_sync_guard(req.file_id)
         return _repair_sync_call(repair.delete_broken, req.file_id)
+
+    @app.post(
+        "/api/repair/no-gps-visibility", dependencies=[Depends(require_admin)]
+    )
+    def repair_no_gps_visibility(req: RepairNoGpsVisibilityRequest) -> dict:
+        """Hide/restore a broken capture in the No-GPS placement backlog."""
+        _repair_sync_guard(req.file_id)
+        try:
+            return repair.set_no_gps_visibility(cfg, req.file_id, req.hidden)
+        except ValueError as exc:
+            if "unknown file id" in str(exc):
+                raise HTTPException(status_code=404, detail="unknown file")
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(exc), "blocking_job_id": None},
+            )
 
     def _panorama_row(file_id: int):
         """Return the panorama primary's row, or raise 404 (unknown/non-panorama)."""

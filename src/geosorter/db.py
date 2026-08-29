@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 5  # v4->v5: duplicates + favorites tables (new tables only, no ALTERs)
+SCHEMA_VERSION = 6  # v5->v6: persistent No-GPS backlog visibility flag
 
 _INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS files (
     duration_s        REAL,
     sha256            TEXT NOT NULL,
     status            TEXT NOT NULL,                 -- 'organized'|'quarantined'
+    no_gps_hidden     INTEGER NOT NULL DEFAULT 0,    -- excluded from No-GPS backlog only
     batch_id          TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -241,6 +242,7 @@ _INDEX_MIGRATIONS: dict[str, str] = {
     "star_rating": "INTEGER",
     "stitch_status": "TEXT",
     "stitch_projection": "TEXT",
+    "no_gps_hidden": "INTEGER NOT NULL DEFAULT 0",
 }
 
 

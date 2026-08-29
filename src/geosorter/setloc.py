@@ -161,7 +161,7 @@ def _assign_one(index, library, geo, lat, lon, fid, extractor, progress, report,
         "UPDATE files SET geonameid=?, place_string=?, lat=?, lon=?, "
         "gps_source='manual', geocode_confidence=?, capture_ts_utc=?, "
         "capture_ts_local=?, local_date=?, tz_ambiguous=?, status='organized', "
-        "dest_path=?, filename=? WHERE id=?",
+        "no_gps_hidden=0, dest_path=?, filename=? WHERE id=?",
         (geo.geonameid, geo.place_string, lat, lon, geo.geocode_confidence,
          local.capture_ts_utc, local.capture_ts_local, local.local_date,
          int(local.tz_ambiguous), new_primary_dest,
