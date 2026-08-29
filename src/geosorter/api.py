@@ -420,8 +420,9 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         # in-place UPDATEs (retag.py moves lat/lon; jobs._mark_stitch_status flips
         # stitch_status / stitch_projection) leave both unchanged — so the key also
         # folds in a microdegree sum of lat/lon (any retag moves the coordinate), a
-        # stitch-status code sum, AND a stitch-projection code sum (a cache-hit
-        # backfill can change projection while status stays 'ok'), or a
+        # stitch-status code sum, a stitch-projection code sum (a cache-hit
+        # backfill can change projection while status stays 'ok'), AND a
+        # millisecond duration sum (the public flight-grouping input), or a
         # retag/stitch reload would wrongly 304 and the map would keep a stale marker
         # or route a hero to the wrong viewer. A favorite toggle is likewise an
         # in-place change (a favorites row, not a files row), so the key also folds
@@ -440,6 +441,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "WHEN 'ok' THEN 2 WHEN 'failed' THEN 3 ELSE 0 END) AS INTEGER), "
                 "CAST(total(CASE stitch_projection WHEN 'equirectangular' THEN 1 "
                 "WHEN 'flat' THEN 2 ELSE 0 END) AS INTEGER), "
+                "CAST(total(duration_s) * 1000 AS INTEGER), "
                 "(SELECT COUNT(*) FROM files f "
                 "JOIN favorites fv ON fv.sha256 = f.sha256 "
                 "WHERE f.status='organized' "
@@ -452,12 +454,12 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 "WHERE status='organized' AND lat IS NOT NULL AND lon IS NOT NULL"
             ).fetchone()
             max_id, count, max_created = (ver[0] or 0), ver[1], ver[2]
-            # The `lib4-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
-            # `properties` shape changes (v4: `is_favorite` was added) so a client
+            # The `lib5-` token is a PAYLOAD-SCHEMA version: bump it whenever the feature
+            # `properties` shape changes (v5: `duration_s` was added) so a client
             # holding a `no-cache`-revalidated response from the previous build gets a
             # one-time 200 with the new field instead of a 304 serving the old body.
-            etag = (f'W/"lib4-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}'
-                    f'-{ver[7]}-{ver[8]}"')
+            etag = (f'W/"lib5-{max_id}-{count}-{ver[3]}-{ver[4]}-{ver[5]}-{ver[6]}'
+                    f'-{ver[7]}-{ver[8]}-{ver[9]}"')
             inm = request.headers.get("if-none-match")
             if inm is not None and _etag_matches(inm, etag):
                 return Response(
@@ -470,7 +472,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                 )
             rows = conn.execute(
                 "SELECT id, filename, place_string, local_date, capture_ts_local, "
-                "media_type, codec, "
+                "media_type, codec, duration_s, "
                 "gps_source, capture_kind, frame_count, star_rating, stitch_status, "
                 "stitch_projection, dest_path, lat, lon, "
                 "EXISTS(SELECT 1 FROM favorites WHERE sha256 = files.sha256) "
@@ -500,6 +502,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
                     "capture_ts_local": r["capture_ts_local"],
                     "media_type": r["media_type"],
                     "codec": r["codec"],
+                    "duration_s": r["duration_s"],
                     "gps_source": r["gps_source"],
                     "capture_kind": r["capture_kind"],
                     "frame_count": r["frame_count"],

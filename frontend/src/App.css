@@ -441,6 +441,11 @@
   font-size: 12px;
 }
 
+.track-inline-warning {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
 /* Takeoff marker at the track's first GPS fix (manual-pin green family). */
 .track-start {
   width: 12px;
@@ -752,6 +757,32 @@
   border-radius: 6px;
 }
 
+/* Optional second grouping level. Kept as a checkbox so Day/Month/Year remain the
+   primary segmented choice and the flight behavior reads as an independent modifier. */
+.flight-subgroup-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.flight-subgroup-toggle:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.flight-subgroup-toggle input {
+  margin: 0;
+}
+
 /* Mutually-exclusive media-type filter chips (multi-select). */
 .chips {
   display: flex;
@@ -792,6 +823,96 @@
   background: var(--surface);
 }
 
+/* Nested flight header: a stronger raised banner than the outer date heading. Its
+   accent rail continues through the associated thumbnail rows below. */
+.flight-group-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 10px 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.25);
+}
+
+.flight-group-header strong {
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+/* Persistent playback context for a flight docked over the map. It stays outside the
+   virtualized grid so panning cannot make the active flight identity disappear; the
+   whole strip is the jump target, keeping it easy to hit in the mobile sheet too. */
+.current-flight {
+  width: 100%;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-text) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.current-flight:hover {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+
+.current-flight__copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.current-flight__copy strong {
+  font-size: 12px;
+  color: var(--accent-text);
+}
+
+.current-flight__copy small {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-flight__action {
+  flex: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.flight-group-header small {
+  color: var(--accent-text);
+  font-size: 11px;
+}
+
+.flight-group-header--active {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface-2));
+  border-color: var(--accent-text);
+}
+
 /* Scroll container for the virtualized thumbnail grid (react-virtual). The grid
    layout moved to .grid-row so only viewport-visible rows mount/request. */
 .grid {
@@ -823,6 +944,32 @@
   gap: 6px;
 }
 
+.grid-row--flight {
+  padding: 6px 7px;
+  background: color-mix(in srgb, var(--surface-2) 82%, var(--surface));
+  border-right: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+}
+
+.grid-row--active-flight {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  border-right-color: var(--accent-text);
+  border-left-color: var(--accent-text);
+}
+
+.grid-row--flight-first,
+.grid-row--flight-only {
+  padding-top: 8px;
+}
+
+.grid-row--flight-last,
+.grid-row--flight-only {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.28);
+}
+
 .thumb {
   display: flex;
   flex-direction: column;
@@ -832,6 +979,11 @@
   cursor: pointer;
   padding: 0;
   min-width: 0; /* let the column shrink so nowrap names can ellipsis-clamp */
+}
+
+.thumb--active .thumb-img {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
 }
 
 .thumb img {

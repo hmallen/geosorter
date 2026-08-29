@@ -10,6 +10,9 @@ export interface FeatureProps {
   capture_ts_local: string | null
   media_type: 'photo' | 'video'
   codec: string | null
+  // Video duration from metadata/ffprobe. Used with capture_ts_local to infer
+  // contiguous flight recordings; null for photos or unavailable video metadata.
+  duration_s: number | null
   gps_source: 'exif' | 'srt' | 'srt_partial' | 'inferred' | 'manual' | 'hyperlapse_frame' | 'none' | null
   capture_kind: 'hyperlapse' | 'panorama' | null // B10: special DJI capture units
   frame_count: number | null // # source frames for a hyperlapse/panorama render
@@ -39,6 +42,20 @@ export interface LibraryFeature {
 export interface LibraryFC {
   type: 'FeatureCollection'
   features: LibraryFeature[]
+}
+
+// A lightbox opened from a flight subgroup is scoped to that inferred flight instead
+// of the panel's entire flattened list. The files on ViewerSelection are the flight's
+// full app-filtered membership (not merely the thumbnails currently inside map bounds).
+export interface ViewerFlightContext {
+  key: string
+  label: string
+}
+
+export interface ViewerSelection {
+  files: LibraryFeature[]
+  index: number
+  flight: ViewerFlightContext | null
 }
 
 export interface FlightTrackSample {

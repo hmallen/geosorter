@@ -20,6 +20,7 @@ function feat(
       capture_ts_local,
       media_type: 'photo',
       codec: null,
+      duration_s: null,
       gps_source: 'exif',
       capture_kind: null,
       frame_count: null,
@@ -193,20 +194,22 @@ describe('buildRowModel', () => {
     // April has 3 files, March has 1; with 2 columns -> April: header + 2 thumb rows
     // (2 then 1), March: header + 1 thumb row.
     const rows = buildRowModel(groups, 2)
-    expect(rows.map((r) => r.kind)).toEqual(['header', 'thumbs', 'thumbs', 'header', 'thumbs'])
-    expect(rows[0]).toMatchObject({ kind: 'header', label: 'April 2024' })
+    expect(rows.map((r) => r.kind)).toEqual([
+      'date-header', 'thumbs', 'thumbs', 'date-header', 'thumbs',
+    ])
+    expect(rows[0]).toMatchObject({ kind: 'date-header', label: 'April 2024' })
     const thumbRow1 = rows[1]
     const thumbRow2 = rows[2]
     if (thumbRow1.kind !== 'thumbs' || thumbRow2.kind !== 'thumbs') throw new Error('expected thumbs')
     expect(thumbRow1.files.map((f) => f.properties.id)).toEqual([1, 2])
     expect(thumbRow2.files.map((f) => f.properties.id)).toEqual([3])
-    expect(rows[3]).toMatchObject({ kind: 'header', label: 'March 2024' })
+    expect(rows[3]).toMatchObject({ kind: 'date-header', label: 'March 2024' })
   })
 
   it('treats columns < 1 as 1', () => {
     const groups = groupFeatures([feat(1, '2024-04-01T10:00:00-06:00')], 'month')
     const rows = buildRowModel(groups, 0)
-    expect(rows.map((r) => r.kind)).toEqual(['header', 'thumbs'])
+    expect(rows.map((r) => r.kind)).toEqual(['date-header', 'thumbs'])
   })
 
   it('returns an empty array for no groups', () => {

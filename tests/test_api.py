@@ -34,14 +34,15 @@ def _probe_codec(path: Path) -> str:
 def _seed(conn, *, dest_path, filename, media_type, status, lat, lon, codec=None,
           gps_source="exif", capture_kind=None, frame_count=None, star_rating=None,
           stitch_status=None, stitch_projection=None,
-          capture_ts_local="2024-07-04T13:05:00-06:00", sha256="deadbeef"):
+          capture_ts_local="2024-07-04T13:05:00-06:00", duration_s=None,
+          sha256="deadbeef"):
     cur = conn.execute(
         "INSERT INTO files(geonameid, place_string, dest_path, filename, media_type, "
-        "local_date, capture_ts_local, lat, lon, codec, gps_source, sha256, status, "
+        "local_date, capture_ts_local, lat, lon, codec, duration_s, gps_source, sha256, status, "
         "capture_kind, frame_count, star_rating, stitch_status, stitch_projection) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (1, "Boulder, Colorado, United States", dest_path, filename, media_type,
-         "2024-07-04", capture_ts_local, lat, lon, codec, gps_source, sha256,
+         "2024-07-04", capture_ts_local, lat, lon, codec, duration_s, gps_source, sha256,
          status, capture_kind, frame_count, star_rating, stitch_status,
          stitch_projection),
     )
@@ -73,7 +74,8 @@ def client_and_lib(tmp_path):
     _seed(conn, dest_path=str(library / "_no-gps" / "q.JPG"), filename="q.JPG",
           media_type="photo", status="quarantined", lat=None, lon=None)
     _seed(conn, dest_path=str(library / "clips" / "v.mp4"), filename="v.mp4",
-          media_type="video", status="organized", lat=42.0, lon=-107.0, codec="h265")
+          media_type="video", status="organized", lat=42.0, lon=-107.0, codec="h265",
+          duration_s=61.25)
     conn.commit()
     conn.close()
     return TestClient(api.create_app(cfg)), library
@@ -243,6 +245,14 @@ def test_library_exposes_capture_ts_local(client_and_lib):
     assert feat["properties"]["capture_ts_local"] == "2024-07-04T13:05:00-06:00"
 
 
+def test_library_exposes_duration_s(client_and_lib):
+    client, _ = client_and_lib
+    fc = client.get("/api/library").json()
+    by_name = {f["properties"]["filename"]: f["properties"] for f in fc["features"]}
+    assert by_name["v.mp4"]["duration_s"] == 61.25
+    assert by_name["a.JPG"]["duration_s"] is None
+
+
 def test_library_is_gzipped_for_accepting_client(client_and_lib):
     # The /api/library JSON is gzip-compressed when the client accepts it (the
     # video route stays untouched — gzip is scoped to this route, not a global
@@ -338,7 +348,19 @@ def test_library_etag_changes_on_in_place_update(tmp_path):
     conn.close()
     reproj = client.get("/api/library", headers={"If-None-Match": etag3})
     assert reproj.status_code == 200  # stitch_projection flip is NOT a 304
-    assert reproj.headers["etag"] != etag3
+    etag4 = reproj.headers["etag"]
+    assert etag4 != etag3
+
+    # duration_s is exposed for client-side flight grouping. An in-place metadata
+    # refresh must not leave a revalidating browser stuck on the old interval.
+    conn = db.connect(index_db, integrity_check=False)
+    conn.execute("UPDATE files SET duration_s=42.125 WHERE filename='a.JPG'")
+    conn.commit()
+    conn.close()
+    reduration = client.get("/api/library", headers={"If-None-Match": etag4})
+    assert reduration.status_code == 200
+    assert reduration.headers["etag"] != etag4
+    assert reduration.json()["features"][0]["properties"]["duration_s"] == 42.125
 
 
 def test_video_codec_lookup_handles_long_path_prefix(tmp_path):
@@ -711,7 +733,7 @@ def test_library_etag_flips_on_favorite_toggle(tmp_path):
     client, _index_db, _library = _library_client(tmp_path)
     first = client.get("/api/library")
     etag1 = first.headers["etag"]
-    assert etag1.startswith('W/"lib4-')  # payload-schema token (v4: is_favorite)
+    assert etag1.startswith('W/"lib5-')  # payload-schema token (v5: duration_s)
     fid = first.json()["features"][0]["properties"]["id"]
     client.post("/api/favorite", json={"file_id": fid, "favorite": True})
     changed = client.get("/api/library", headers={"If-None-Match": etag1})

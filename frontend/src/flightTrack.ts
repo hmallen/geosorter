@@ -3,7 +3,12 @@
 
 import type { LineLayerSpecification } from 'maplibre-gl'
 import type { BBox } from './clusters'
-import type { AltitudeRef, FlightTrackSample } from './types'
+import type {
+  AltitudeRef,
+  FlightTrack,
+  FlightTrackSample,
+  LibraryFeature,
+} from './types'
 
 // Dark casing under a brand-teal line: readable on both the dark vector
 // basemap and bright satellite imagery (same rationale as the pin ring).
@@ -12,10 +17,11 @@ export const TRACK_CASING_LAYER: LineLayerSpecification = {
   type: 'line',
   source: 'flight-track',
   layout: { 'line-cap': 'round', 'line-join': 'round' },
+  filter: ['==', ['get', 'active'], true],
   paint: {
     'line-color': '#0f1116',
-    'line-width': 6,
-    'line-opacity': 0.7,
+    'line-width': 9,
+    'line-opacity': 0.9,
   },
 }
 
@@ -24,10 +30,99 @@ export const TRACK_LINE_LAYER: LineLayerSpecification = {
   type: 'line',
   source: 'flight-track',
   layout: { 'line-cap': 'round', 'line-join': 'round' },
+  filter: ['==', ['get', 'active'], true],
   paint: {
     'line-color': '#5eead4', // --accent-text teal
-    'line-width': 3,
+    'line-width': 5,
+    'line-opacity': 1,
   },
+}
+
+// Context tracks use an opaque light line, dark casing, and a dash pattern so they
+// remain legible over detailed satellite imagery while the solid active path is
+// still unmistakable.
+export const TRACK_INACTIVE_CASING_LAYER: LineLayerSpecification = {
+  id: 'flight-track-inactive-casing',
+  type: 'line',
+  source: 'flight-track',
+  layout: { 'line-cap': 'round', 'line-join': 'round' },
+  filter: ['==', ['get', 'active'], false],
+  paint: {
+    'line-color': '#0f1116',
+    'line-width': 7,
+    'line-opacity': 0.85,
+  },
+}
+
+export const TRACK_INACTIVE_LINE_LAYER: LineLayerSpecification = {
+  id: 'flight-track-inactive-line',
+  type: 'line',
+  source: 'flight-track',
+  layout: { 'line-cap': 'round', 'line-join': 'round' },
+  filter: ['==', ['get', 'active'], false],
+  paint: {
+    'line-color': '#cffafe',
+    'line-width': 3.5,
+    'line-opacity': 0.95,
+    'line-dasharray': [1.5, 1.1],
+  },
+}
+
+export interface LoadedVideoTrack extends FlightTrack {
+  fileId: number
+  filename: string
+}
+
+export interface TrackLoadResult {
+  tracks: LoadedVideoTrack[]
+  totalCount: number
+  unavailableCount: number
+}
+
+type TrackFetcher = (fileId: number) => Promise<FlightTrack>
+
+// Load only sidecar-backed members with a bounded worker pool. Result order follows
+// the flight's chronological file order even when requests finish out of order.
+export async function loadAvailableTracks(
+  files: LibraryFeature[],
+  fetcher: TrackFetcher,
+  concurrency = 4,
+): Promise<TrackLoadResult> {
+  const candidates = files.filter((file) => file.properties.has_track)
+  const loaded: Array<LoadedVideoTrack | undefined> = new Array(candidates.length)
+  let cursor = 0
+
+  const worker = async () => {
+    while (cursor < candidates.length) {
+      const slot = cursor
+      cursor += 1
+      const candidate = candidates[slot]
+      try {
+        const payload = await fetcher(candidate.properties.id)
+        if (payload.points.length < 2) continue
+        loaded[slot] = {
+          fileId: candidate.properties.id,
+          filename: candidate.properties.filename,
+          points: payload.points,
+          samples: payload.samples,
+          altitudeRef: payload.altitudeRef,
+        }
+      } catch {
+        // Partial flight paths are useful; unavailable members are reported by count.
+      }
+    }
+  }
+
+  const limit = Math.max(1, Math.floor(concurrency) || 1)
+  await Promise.all(
+    Array.from({ length: Math.min(limit, candidates.length) }, () => worker()),
+  )
+  const tracks = loaded.filter((track): track is LoadedVideoTrack => track !== undefined)
+  return {
+    tracks,
+    totalCount: files.length,
+    unavailableCount: files.length - tracks.length,
+  }
 }
 
 // Bounding box of a track for MapView's fitBounds. A degenerate track (0 or 1
@@ -60,6 +155,35 @@ export function trackLine(points: [number, number][]): {
     geometry: { type: 'LineString', coordinates: points },
     properties: {},
   }
+}
+
+export function trackCollection(
+  tracks: LoadedVideoTrack[],
+  activeFileId: number | null,
+): {
+  type: 'FeatureCollection'
+  features: Array<{
+    type: 'Feature'
+    geometry: { type: 'LineString'; coordinates: [number, number][] }
+    properties: { fileId: number; filename: string; active: boolean }
+  }>
+} {
+  return {
+    type: 'FeatureCollection',
+    features: tracks.map((track) => ({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: track.points },
+      properties: {
+        fileId: track.fileId,
+        filename: track.filename,
+        active: track.fileId === activeFileId,
+      },
+    })),
+  }
+}
+
+export function tracksBBox(tracks: LoadedVideoTrack[]): BBox | null {
+  return trackBBox(tracks.flatMap((track) => track.points))
 }
 
 // The drone's telemetry at one instant of the video clock: where it was, and how

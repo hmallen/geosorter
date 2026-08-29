@@ -12,7 +12,13 @@ import RepairPanel from './components/RepairPanel'
 import TimelineScrubber from './components/TimelineScrubber'
 import { buildPlaces } from './locationFilter'
 import { dismissDuplicates, fetchTrack } from './api'
-import { trackBBox, trackStateAtTime } from './flightTrack'
+import {
+  loadAvailableTracks,
+  tracksBBox,
+  trackStateAtTime,
+  type LoadedVideoTrack,
+} from './flightTrack'
+import { buildFlightCatalog, selectionForCatalogFlight } from './flightGroups'
 import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
 import { effectiveFavorite, filterFavorites } from './favorites'
 import { parseHash, type UrlState, type UrlView } from './urlState'
@@ -28,17 +34,16 @@ import { useStitchAll } from './useStitchAll'
 import { useAuthContext } from './useAuth'
 import { featuresInBounds } from './viewport'
 import type { BBox } from './clusters'
-import type { AltitudeRef, FlightTrackSample, LibraryFeature, QuarantineItem } from './types'
+import type { LibraryFeature, QuarantineItem, ViewerSelection } from './types'
 import './App.css'
 
-interface ActiveFlightTrack {
-  fileId: number
-  filename: string
-  points: [number, number][]
-  samples: FlightTrackSample[]
-  // Datum for the samples' altitudes (null when the sidecar carries none), held
-  // alongside them so the live readout can label the number it shows.
-  altitudeRef: AltitudeRef | null
+interface ActiveTrackSet {
+  contextKey: string
+  flight: boolean
+  label: string
+  tracks: LoadedVideoTrack[]
+  totalCount: number
+  unavailableCount: number
   currentTime: number
   follow: boolean
   pip: boolean
@@ -63,6 +68,7 @@ function quarantineToFeature(item: QuarantineItem): LibraryFeature {
       capture_ts_local: null,
       media_type: item.media_type,
       codec: null,
+      duration_s: null,
       gps_source: 'none',
       capture_kind: null,
       frame_count: null,
@@ -91,7 +97,7 @@ export default function App() {
   // The lightbox snapshots the file list it was opened against, so panning the map
   // (which live-updates panelFiles) can't shift its index onto a different file or
   // out of range while it is open.
-  const [lightbox, setLightbox] = useState<{ files: LibraryFeature[]; index: number } | null>(null)
+  const [lightbox, setLightbox] = useState<ViewerSelection | null>(null)
   // Location-filter panel: the distinct-place list (derived client-side) + the
   // panel open flag + the imperative map-fit target. `nonce` makes each pick a
   // distinct value so re-picking the same place re-fires MapView's fitBounds.
@@ -138,78 +144,97 @@ export default function App() {
   const [mapView, setMapView] = useState<UrlView | null>(initialUrl.view ?? null)
   // The active route stays owned by App so MapView, the PiP lightbox, and playback
   // synchronization share one source of truth without remounting the video.
-  const [track, setTrack] = useState<ActiveFlightTrack | null>(null)
-  const [trackLoadingId, setTrackLoadingId] = useState<number | null>(null)
-  const [trackError, setTrackError] = useState<{ fileId: number; message: string } | null>(null)
+  const [track, setTrack] = useState<ActiveTrackSet | null>(null)
+  const [trackLoadingKey, setTrackLoadingKey] = useState<string | null>(null)
+  const [trackError, setTrackError] = useState<{ contextKey: string; message: string } | null>(null)
   const trackRequest = useRef(0)
 
-  function fitTrack(points: [number, number][]) {
-    const bbox = trackBBox(points)
+  function fitTracks(tracks: LoadedVideoTrack[]) {
+    const bbox = tracksBBox(tracks)
     if (bbox) flyToBBox(bbox)
   }
 
-  // Fetch before entering PiP so a missing/broken sidecar leaves the full viewer
-  // intact with an inline error. Returning from expanded mode reuses the payload.
-  async function showTrack(f: LibraryFeature) {
-    if (track?.fileId === f.properties.id) {
+  // Fetch before entering PiP so wholly missing/broken sidecars leave the full viewer
+  // intact with an inline error. A flight context loads every usable member track with
+  // bounded concurrency; returning from expanded mode reuses the loaded collection.
+  async function showTrack() {
+    if (!lightbox) return
+    const current = lightbox.files[lightbox.index]
+    if (!current) return
+    const contextKey = lightbox.flight?.key ?? `file:${current.properties.id}`
+    if (track?.contextKey === contextKey) {
       setTrack((current) => (current ? { ...current, pip: true } : current))
       setTrackError(null)
-      fitTrack(track.points)
+      fitTracks(track.tracks)
       return
     }
     const request = ++trackRequest.current
-    setTrackLoadingId(f.properties.id)
+    setTrackLoadingKey(contextKey)
     setTrackError(null)
     try {
-      const payload = await fetchTrack(f.properties.id)
+      const candidates = lightbox.flight ? lightbox.files : [current]
+      const payload = await loadAvailableTracks(candidates, fetchTrack)
       if (request !== trackRequest.current) return
-      if (payload.points.length < 2) {
+      if (payload.tracks.length === 0) {
         setTrackError({
-          fileId: f.properties.id,
-          message: 'No usable GPS flight track was found in this video’s SRT sidecar.',
+          contextKey,
+          message: lightbox.flight
+            ? 'No usable GPS flight paths were found for this flight.'
+            : 'No usable GPS flight track was found in this video’s SRT sidecar.',
         })
         return
       }
       setTrack({
-        fileId: f.properties.id,
-        filename: f.properties.filename,
-        points: payload.points,
-        samples: payload.samples,
-        altitudeRef: payload.altitudeRef,
+        contextKey,
+        flight: lightbox.flight !== null,
+        label: lightbox.flight?.label ?? current.properties.filename,
+        tracks: payload.tracks,
+        totalCount: payload.totalCount,
+        unavailableCount: payload.unavailableCount,
         currentTime: 0,
         follow: false,
         pip: true,
       })
-      fitTrack(payload.points)
+      fitTracks(payload.tracks)
     } catch {
       if (request === trackRequest.current) {
         setTrackError({
-          fileId: f.properties.id,
-          message: 'The flight track could not be loaded. Please try again.',
+          contextKey,
+          message: lightbox.flight
+            ? 'The flight paths could not be loaded. Please try again.'
+            : 'The flight track could not be loaded. Please try again.',
         })
       }
     } finally {
-      if (request === trackRequest.current) setTrackLoadingId(null)
+      if (request === trackRequest.current) setTrackLoadingKey(null)
     }
   }
 
   function closeViewer() {
     trackRequest.current += 1
-    setTrackLoadingId(null)
+    setTrackLoadingKey(null)
     setTrackError(null)
     setTrack(null)
     setLightbox(null)
   }
 
-  const syncAvailable = (track?.samples.length ?? 0) >= 2
+  const viewerFileId = lightbox?.files[lightbox.index]?.properties.id ?? null
+  const viewerContextKey = lightbox
+    ? lightbox.flight?.key ?? (viewerFileId === null ? null : `file:${viewerFileId}`)
+    : null
+  const trackMatchesViewer = Boolean(track && track.contextKey === viewerContextKey)
+  const activeVideoTrack = trackMatchesViewer
+    ? track?.tracks.find((candidate) => candidate.fileId === viewerFileId) ?? null
+    : null
+  const syncAvailable = (activeVideoTrack?.samples.length ?? 0) >= 2
   // Position and altitude come from one resolve so the readout can never lag a
   // frame behind the token it sits next to.
   const activeTrackState = useMemo(
     () =>
-      track && syncAvailable
-        ? trackStateAtTime(track.samples, track.currentTime)
+      track && activeVideoTrack && syncAvailable
+        ? trackStateAtTime(activeVideoTrack.samples, track.currentTime)
         : null,
-    [track, syncAvailable],
+    [track, activeVideoTrack, syncAvailable],
   )
   // Kept as its own memo: MapView's follow effect keys on this array's identity,
   // so it must stay stable across renders that did not move the drone.
@@ -246,6 +271,11 @@ export default function App() {
     ])
   }, [features, favoritesOnly, favOverrides, dateRange, tripBBox])
 
+  // Infer flight identity over the entire app-filtered library BEFORE map bounds are
+  // applied. FileListPanel then shows only each group's in-view members, so panning
+  // cannot split or renumber a flight merely because an intermediate clip leaves view.
+  const flightCatalog = useMemo(() => buildFlightCatalog(visible), [visible])
+
   // Panel contents: every capture inside the current map viewport. A pure in-memory
   // filter over the already-loaded features — no /api refetch on pan/zoom. Memoized
   // so an unrelated re-render keeps a stable `files` identity for the virtualized
@@ -255,18 +285,23 @@ export default function App() {
     [visible, bounds],
   )
 
-  // Clicking a single map marker opens that capture in the lightbox against the
-  // current viewport list (so prev/next walks the on-screen captures). A cluster
-  // click is handled inside MapView by zooming in — it never reaches here.
+  // Clicking a video marker opens its complete inferred flight, including members
+  // outside the settled viewport; non-flight captures retain the viewport-list
+  // navigation fallback. A cluster click zooms inside MapView and never reaches here.
   function openInLightbox(id: number) {
+    const flightSelection = selectionForCatalogFlight(flightCatalog, id)
+    if (flightSelection) {
+      setLightbox(flightSelection)
+      return
+    }
     const idx = panelFiles.findIndex((f) => f.properties.id === id)
     if (idx >= 0) {
-      setLightbox({ files: panelFiles, index: idx })
+      setLightbox({ files: panelFiles, index: idx, flight: null })
       return
     }
     // The marker sits just outside the settled viewport bounds — open it solo.
     const f = features.find((ff) => ff.properties.id === id)
-    if (f) setLightbox({ files: [f], index: 0 })
+    if (f) setLightbox({ files: [f], index: 0, flight: null })
   }
 
   // No-GPS (quarantined) captures: the count badges the toolbar button and the list
@@ -291,7 +326,7 @@ export default function App() {
     // Files may have moved/left the library; a drawn track could now belong to
     // a re-filed capture, so drop it rather than risk a stale overlay.
     setTrack(null)
-    setTrackLoadingId(null)
+    setTrackLoadingKey(null)
     setTrackError(null)
     reload()
     reloadQuarantine()
@@ -369,7 +404,10 @@ export default function App() {
 
   // Solo lightbox for useUrlState's cap= restore: a shared link points at ONE
   // capture, not a viewport list. Stable identity — the restore effect depends on it.
-  const openCapture = useCallback((f: LibraryFeature) => setLightbox({ files: [f], index: 0 }), [])
+  const openCapture = useCallback(
+    (f: LibraryFeature) => setLightbox({ files: [f], index: 0, flight: null }),
+    [],
+  )
 
   // Restore-once of the load-time hash's place/cap + the debounced hash rewrite.
   useUrlState({
@@ -412,13 +450,14 @@ export default function App() {
         onMapClick={onMapClick}
         onBoundsChange={setBounds}
         flyTo={flyTo ?? undefined}
-        track={track?.points}
+        tracks={track?.tracks}
+        activeTrackId={activeVideoTrack?.fileId ?? null}
         initialView={initialUrl.view}
         onViewChange={setMapView}
         activeTrackPosition={activeTrackPosition}
         followTrack={Boolean(track?.pip && track.follow && activeTrackPosition)}
         activeTrackAltitude={activeTrackState?.altitude ?? null}
-        altitudeRef={track?.altitudeRef ?? null}
+        altitudeRef={activeVideoTrack?.altitudeRef ?? null}
       />
       {/* Under-toolbar chip slot: the flight-track chip plus the active-filter
           chips (date range, favorites) share one horizontal row so they can
@@ -429,7 +468,9 @@ export default function App() {
             <div className="track-chip">
               <span className="track-chip__label">
                 <span className="track-swatch" aria-hidden="true" />
-                Flight path — {track.filename}
+                {track.flight
+                  ? `Flight paths — ${track.tracks.length} of ${track.totalCount} videos`
+                  : `Flight path — ${track.label}`}
               </span>
               {syncAvailable ? (
                 <label className="track-follow">
@@ -446,6 +487,11 @@ export default function App() {
                 </label>
               ) : (
                 <span className="track-sync-warning">Timeline synchronization unavailable</span>
+              )}
+              {track.unavailableCount > 0 && (
+                <span className="track-sync-warning">
+                  {track.unavailableCount} path{track.unavailableCount === 1 ? '' : 's'} unavailable
+                </span>
               )}
             </div>
           )}
@@ -529,7 +575,7 @@ export default function App() {
             // the lightbox prev/next walks every quarantined capture instead of dead-ending.
             const feats = quarantineItems.map(quarantineToFeature)
             const idx = quarantineItems.findIndex((q) => q.id === item.id)
-            setLightbox({ files: feats, index: idx < 0 ? 0 : idx })
+            setLightbox({ files: feats, index: idx < 0 ? 0 : idx, flight: null })
           }}
           onPickOnMap={(ids) => {
             // The two placement modes are mutually exclusive: cancel a pending re-tag
@@ -623,14 +669,28 @@ export default function App() {
             const idx = panoramaTargetFeatures.findIndex(
               (p) => p.properties.id === f.properties.id,
             )
-            setLightbox({ files: panoramaTargetFeatures, index: idx < 0 ? 0 : idx })
+            setLightbox({
+              files: panoramaTargetFeatures,
+              index: idx < 0 ? 0 : idx,
+              flight: null,
+            })
           }}
           onClose={() => setShowStitch(false)}
         />
       )}
       <FileListPanel
         files={panelFiles}
-        onOpen={(files, i) => setLightbox({ files, index: i })}
+        flightCatalog={flightCatalog}
+        onOpen={setLightbox}
+        activeFlight={
+          track?.pip && track.flight
+            ? { key: track.contextKey, label: track.label }
+            : null
+        }
+        activeFileId={track?.pip && track.flight ? viewerFileId : null}
+        onRevealActiveFlight={
+          track?.pip && track.flight ? () => fitTracks(track.tracks) : undefined
+        }
         onRetag={
           isAdmin
             ? (file) => {
@@ -645,12 +705,28 @@ export default function App() {
         <Lightbox
           files={lightbox.files}
           index={lightbox.index}
+          flight={lightbox.flight}
           onIndex={(i) => {
-            trackRequest.current += 1
-            setTrack(null)
-            setTrackLoadingId(null)
-            setTrackError(null)
-            setLightbox((lb) => (lb ? { files: lb.files, index: i } : null))
+            if (lightbox.flight) {
+              const nextFileId = lightbox.files[i]?.properties.id
+              setTrack((current) => {
+                if (!current || current.contextKey !== lightbox.flight?.key) return current
+                const nextTrack = current.tracks.find(
+                  (candidate) => candidate.fileId === nextFileId,
+                )
+                return {
+                  ...current,
+                  currentTime: 0,
+                  follow: current.follow && (nextTrack?.samples.length ?? 0) >= 2,
+                }
+              })
+            } else {
+              trackRequest.current += 1
+              setTrack(null)
+              setTrackLoadingKey(null)
+              setTrackError(null)
+            }
+            setLightbox({ ...lightbox, index: i })
           }}
           onClose={closeViewer}
           stitchByFile={stitchByFile}
@@ -661,22 +737,24 @@ export default function App() {
           // quarantine preview / stale snapshot would persist a favorite the UI
           // could never resurface (see lightboxLive above).
           onToggleFavorite={isAdmin && lightboxLive ? toggleFavorite : undefined}
-          trackMode={Boolean(
-            track?.pip && track.fileId === lightbox.files[lightbox.index]?.properties.id,
-          )}
-          trackActive={track?.fileId === lightbox.files[lightbox.index]?.properties.id}
-          trackLoading={
-            trackLoadingId === lightbox.files[lightbox.index]?.properties.id
-          }
+          trackMode={Boolean(track?.pip && trackMatchesViewer)}
+          trackActive={trackMatchesViewer}
+          trackLoading={trackLoadingKey === viewerContextKey}
           trackError={
-            trackError?.fileId === lightbox.files[lightbox.index]?.properties.id
+            trackError?.contextKey === viewerContextKey
               ? trackError.message
+              : null
+          }
+          trackWarning={
+            trackMatchesViewer && track && track.unavailableCount > 0
+              ? `${track.unavailableCount} of ${track.totalCount} video path${
+                  track.unavailableCount === 1 ? '' : 's'
+                } unavailable.`
               : null
           }
           onPlaybackTime={(time) =>
             setTrack((current) =>
-              current &&
-              current.fileId === lightbox.files[lightbox.index]?.properties.id
+              current && current.contextKey === viewerContextKey
                 ? { ...current, currentTime: time }
                 : current,
             )

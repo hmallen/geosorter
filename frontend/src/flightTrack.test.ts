@@ -1,14 +1,47 @@
 import { describe, it, expect } from 'vitest'
 import {
+  TRACK_CASING_LAYER,
+  TRACK_INACTIVE_CASING_LAYER,
+  TRACK_INACTIVE_LINE_LAYER,
+  TRACK_LINE_LAYER,
   altitudeTitle,
   clampPipPosition,
   clampPipWidth,
   formatAltitude,
+  loadAvailableTracks,
   positionAtTime,
   trackBBox,
+  trackCollection,
   trackLine,
   trackStateAtTime,
+  tracksBBox,
 } from './flightTrack'
+import type { FlightTrack, LibraryFeature } from './types'
+
+function video(id: number, hasTrack = true): LibraryFeature {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [0, 0] },
+    properties: {
+      id,
+      filename: `DJI_${id}.MP4`,
+      place_string: null,
+      local_date: '2026-08-28',
+      capture_ts_local: `2026-08-28T10:00:${String(id).padStart(2, '0')}-06:00`,
+      media_type: 'video',
+      codec: 'h265',
+      duration_s: 1,
+      gps_source: 'srt',
+      capture_kind: null,
+      frame_count: null,
+      star_rating: null,
+      stitch_status: null,
+      stitch_projection: null,
+      has_track: hasTrack,
+      path: `clips/${id}.mp4`,
+    },
+  }
+}
 
 describe('trackBBox', () => {
   it('returns the [west, south, east, north] envelope of the points', () => {
@@ -37,6 +70,81 @@ describe('trackLine', () => {
       geometry: { type: 'LineString', coordinates: pts },
       properties: {},
     })
+  })
+})
+
+describe('multi-track geometry', () => {
+  const tracks = [
+    {
+      fileId: 1,
+      filename: 'one.mp4',
+      points: [[-105, 40], [-104, 41]] as [number, number][],
+      samples: [],
+      altitudeRef: null,
+    },
+    {
+      fileId: 2,
+      filename: 'two.mp4',
+      points: [[-103, 39], [-102, 42]] as [number, number][],
+      samples: [],
+      altitudeRef: null,
+    },
+  ]
+
+  it('marks only the current video active while keeping every path present', () => {
+    const collection = trackCollection(tracks, 2)
+    expect(collection.features).toHaveLength(2)
+    expect(collection.features.map((feature) => feature.properties.active))
+      .toEqual([false, true])
+  })
+
+  it('fits the envelope of all loaded flight paths', () => {
+    expect(tracksBBox(tracks)).toEqual([-105, 39, -102, 42])
+  })
+})
+
+describe('multi-track layer visibility', () => {
+  it('keeps inactive routes strongly cased and visually distinct from the active route', () => {
+    expect(TRACK_INACTIVE_CASING_LAYER.paint?.['line-width']).toBe(7)
+    expect(TRACK_INACTIVE_CASING_LAYER.paint?.['line-opacity']).toBeGreaterThanOrEqual(0.8)
+    expect(TRACK_INACTIVE_LINE_LAYER.paint?.['line-width']).toBe(3.5)
+    expect(TRACK_INACTIVE_LINE_LAYER.paint?.['line-opacity']).toBeGreaterThanOrEqual(0.9)
+    expect(TRACK_INACTIVE_LINE_LAYER.paint?.['line-dasharray']).toEqual([1.5, 1.1])
+    expect(TRACK_CASING_LAYER.paint?.['line-width']).toBeGreaterThan(
+      TRACK_INACTIVE_CASING_LAYER.paint?.['line-width'] as number,
+    )
+    expect(TRACK_LINE_LAYER.paint?.['line-width']).toBeGreaterThan(
+      TRACK_INACTIVE_LINE_LAYER.paint?.['line-width'] as number,
+    )
+  })
+})
+
+describe('loadAvailableTracks', () => {
+  it('keeps chronological input order, skips unavailable members, and bounds concurrency', async () => {
+    const files = [video(1), video(2), video(3), video(4, false)]
+    let active = 0
+    let maxActive = 0
+    const fetcher = async (id: number): Promise<FlightTrack> => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      try {
+        await new Promise((resolve) => setTimeout(resolve, id === 1 ? 8 : 2))
+        if (id === 2) throw new Error('missing')
+        return {
+          points: [[id, id], [id + 0.5, id + 0.5]],
+          samples: [],
+          altitudeRef: null,
+        }
+      } finally {
+        active -= 1
+      }
+    }
+
+    const result = await loadAvailableTracks(files, fetcher, 2)
+    expect(maxActive).toBeLessThanOrEqual(2)
+    expect(result.tracks.map((track) => track.fileId)).toEqual([1, 3])
+    expect(result.totalCount).toBe(4)
+    expect(result.unavailableCount).toBe(2)
   })
 })
 
