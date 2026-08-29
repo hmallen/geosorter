@@ -32,7 +32,7 @@ describe('runRepairScan', () => {
         items: [{
           id: 5, filename: 'DJI_0002.MP4', media_type: 'video',
           date: '2023-07-05', size: 0, status: 'zero-byte', error: null,
-          path: '_no-gps/2023-07-05/DJI_0002.MP4',
+          path: '_no-gps/2023-07-05/DJI_0002.MP4', hidden_from_no_gps: false,
         }],
       },
     ]

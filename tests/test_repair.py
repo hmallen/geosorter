@@ -173,6 +173,7 @@ def test_scan_broken_classifies(cfg_and_conn):
     # Organized rows are out of scope for the quarantine sweep.
     _seed(conn, dest_path=str(lib / "A" / "DJI_0009.MP4"), filename="DJI_0009.MP4",
           status="organized", codec="h264")
+    conn.execute("UPDATE files SET no_gps_hidden=1 WHERE id=?", (b_id,))
     conn.commit()
 
     def probe_fn(path):
@@ -190,6 +191,8 @@ def test_scan_broken_classifies(cfg_and_conn):
     assert by_id[m_id].status == "missing"
     assert by_id[b_id].rel_path == "_no-gps/2023-07-05/DJI_0002.MP4"
     assert by_id[b_id].date == "2023-07-05"  # folder name fills the NULL local_date
+    assert by_id[b_id].hidden_from_no_gps is True
+    assert by_id[z_id].hidden_from_no_gps is False
 
 
 # --------------------------------------------------------------------------- #
@@ -342,17 +345,20 @@ def test_accept_repair_swaps_and_updates_row(cfg_and_conn):
               / "_no-gps" / "2022-09-07" / "DJI_0771.jpg")
     poster.parent.mkdir(parents=True)
     poster.write_bytes(b"placeholder")
+    conn.execute("UPDATE files SET no_gps_hidden=1 WHERE id=?", (target_id,))
+    conn.commit()
 
     out = accept_repair(cfg, target_id, probe_fn=lambda path: OK_PROBE)
     assert out["path"] == rel
     assert broken.read_bytes() == b"repaired-video-data"
     assert not poster.exists()
     row = conn.execute(
-        "SELECT sha256, codec, width, height, duration_s FROM files WHERE id=?",
+        "SELECT sha256, codec, width, height, duration_s, no_gps_hidden "
+        "FROM files WHERE id=?",
         (target_id,),
     ).fetchone()
     assert row[0] != "deadbeef" and len(row[0]) == 64
-    assert tuple(row[1:]) == ("h264", 3840, 2160, 61.5)
+    assert tuple(row[1:]) == ("h264", 3840, 2160, 61.5, 0)
 
 
 def test_accept_repair_without_output(cfg_and_conn):
@@ -661,11 +667,11 @@ def repair_client(tmp_path, monkeypatch):
         ),
     )
     client = TestClient(api.create_app(cfg, job_manager=manager))
-    return client, healthy_id, empty_id
+    return client, healthy_id, empty_id, cfg, manager
 
 
 def test_api_repair_scan_flow(repair_client):
-    client, _healthy_id, empty_id = repair_client
+    client, _healthy_id, empty_id, _cfg, _manager = repair_client
     job_id = client.post("/api/repair/scan").json()["job_id"]
     state = _wait_done(client, f"/api/repair/scan/status/{job_id}")
     assert state["state"] == "done"
@@ -678,7 +684,7 @@ def test_api_repair_scan_flow(repair_client):
 
 
 def test_api_repair_run_without_untrunc_409(repair_client, monkeypatch):
-    client, healthy_id, empty_id = repair_client
+    client, healthy_id, empty_id, _cfg, _manager = repair_client
     monkeypatch.setattr(repair, "find_untrunc", lambda p: None)
     resp = client.post(
         "/api/repair/run",
@@ -689,7 +695,7 @@ def test_api_repair_run_without_untrunc_409(repair_client, monkeypatch):
 
 
 def test_api_repair_run_unknown_file_404(repair_client, monkeypatch):
-    client, healthy_id, _ = repair_client
+    client, healthy_id, _, _cfg, _manager = repair_client
     monkeypatch.setattr(repair, "find_untrunc", lambda p: "untrunc.exe")
     resp = client.post(
         "/api/repair/run", json={"file_id": 999, "reference_id": healthy_id}
@@ -698,14 +704,14 @@ def test_api_repair_run_unknown_file_404(repair_client, monkeypatch):
 
 
 def test_api_repair_delete_refuses_healthy(repair_client):
-    client, healthy_id, _ = repair_client
+    client, healthy_id, _, _cfg, _manager = repair_client
     resp = client.post("/api/repair/delete", json={"file_id": healthy_id})
     assert resp.status_code == 409
     assert "healthy" in resp.json()["detail"]["message"]
 
 
 def test_api_repair_delete_zero_byte(repair_client):
-    client, _, empty_id = repair_client
+    client, _, empty_id, _cfg, _manager = repair_client
     resp = client.post("/api/repair/delete", json={"file_id": empty_id})
     assert resp.status_code == 200
     assert resp.json()["deleted"] == ["DJI_0003.MP4"]
@@ -714,15 +720,83 @@ def test_api_repair_delete_zero_byte(repair_client):
     assert empty_id not in ids
 
 
+def test_api_repair_no_gps_visibility_hides_restores_and_still_scans(repair_client):
+    client, _, empty_id, _cfg, _manager = repair_client
+
+    hidden = client.post(
+        "/api/repair/no-gps-visibility",
+        json={"file_id": empty_id, "hidden": True},
+    )
+    assert hidden.status_code == 200
+    assert hidden.json() == {"file_id": empty_id, "hidden": True}
+    visible_ids = [
+        f["id"] for f in client.get("/api/quarantine").json()["features"]
+    ]
+    assert empty_id not in visible_ids
+
+    job_id = client.post("/api/repair/scan").json()["job_id"]
+    scan = _wait_done(client, f"/api/repair/scan/status/{job_id}")
+    item = next(item for item in scan["items"] if item["id"] == empty_id)
+    assert item["hidden_from_no_gps"] is True
+
+    restored = client.post(
+        "/api/repair/no-gps-visibility",
+        json={"file_id": empty_id, "hidden": False},
+    )
+    assert restored.status_code == 200
+    assert restored.json() == {"file_id": empty_id, "hidden": False}
+    visible_ids = [
+        f["id"] for f in client.get("/api/quarantine").json()["features"]
+    ]
+    assert empty_id in visible_ids
+
+
+def test_api_repair_no_gps_visibility_unknown_and_nonquarantined(repair_client):
+    client, _, _empty_id, cfg, _manager = repair_client
+    assert client.post(
+        "/api/repair/no-gps-visibility",
+        json={"file_id": 99999, "hidden": True},
+    ).status_code == 404
+
+    conn = db.connect(cfg.index_db_path, integrity_check=False)
+    organized_id = _seed(
+        conn,
+        dest_path=str(Path(cfg.library_root) / "A" / "organized.MP4"),
+        filename="organized.MP4",
+        status="organized",
+    )
+    conn.commit()
+    conn.close()
+    response = client.post(
+        "/api/repair/no-gps-visibility",
+        json={"file_id": organized_id, "hidden": True},
+    )
+    assert response.status_code == 409
+    assert "only quarantined" in response.json()["detail"]["message"]
+
+
+def test_api_repair_no_gps_visibility_uses_conflicting_job_guard(
+    repair_client, monkeypatch
+):
+    client, _, empty_id, _cfg, manager = repair_client
+    monkeypatch.setattr(manager, "active_destructive_job_id", lambda: "blocking-job")
+    response = client.post(
+        "/api/repair/no-gps-visibility",
+        json={"file_id": empty_id, "hidden": True},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["blocking_job_id"] == "blocking-job"
+
+
 def test_api_repair_accept_without_output_409(repair_client):
-    client, healthy_id, _ = repair_client
+    client, healthy_id, _, _cfg, _manager = repair_client
     resp = client.post("/api/repair/accept", json={"file_id": healthy_id})
     assert resp.status_code == 409
     assert "awaiting acceptance" in resp.json()["detail"]["message"]
 
 
 def test_api_repair_untrunc_probe(repair_client, monkeypatch):
-    client, _, _ = repair_client
+    client, _, _, _cfg, _manager = repair_client
     monkeypatch.setattr(repair, "find_untrunc", lambda p: None)
     assert client.get("/api/repair/untrunc").json() == {
         "available": False, "path": None,

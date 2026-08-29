@@ -95,6 +95,12 @@ def test_assign_single_quarantined_promotes(tmp_path):
     cfg, inbox, library = _setup(tmp_path)
     ids = _quarantine(cfg, inbox, {"DJI_0001.JPG": _md()})
     fid = ids["DJI_0001.JPG"]
+    conn = _index(cfg)
+    try:
+        conn.execute("UPDATE files SET no_gps_hidden=1 WHERE id=?", (fid,))
+        conn.commit()
+    finally:
+        conn.close()
 
     report = setloc.assign_locations(
         cfg, [fid], *BOULDER, extractor_factory=_factory({"DJI_0001.JPG": _md()})
@@ -110,7 +116,8 @@ def test_assign_single_quarantined_promotes(tmp_path):
     conn = _index(cfg)
     try:
         row = conn.execute(
-            "SELECT status, gps_source, lat, lon, place_string, local_date "
+            "SELECT status, gps_source, lat, lon, place_string, local_date, "
+            "no_gps_hidden "
             "FROM files WHERE id=?", (fid,)
         ).fetchone()
     finally:
@@ -120,6 +127,7 @@ def test_assign_single_quarantined_promotes(tmp_path):
     assert round(row[2], 3) == 40.015 and round(row[3], 3) == -105.27
     assert row[4] == "Boulder, Colorado, United States"
     assert row[5] == "2024-07-04"
+    assert row[6] == 0
 
 
 def test_assign_invalidates_derived_cache(tmp_path, monkeypatch):

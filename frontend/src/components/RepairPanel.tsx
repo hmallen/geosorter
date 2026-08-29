@@ -7,6 +7,7 @@ import {
   repairAccept,
   repairDelete,
   repairDiscard,
+  setRepairNoGpsVisibility,
   videoUrl,
 } from '../api'
 import {
@@ -58,7 +59,7 @@ export default function RepairPanel({ busy, onClose, onChanged }: Props) {
   const [items, setItems] = useState<RepairItem[]>([])
   const [untrunc, setUntrunc] = useState<{ available: boolean } | null>(null)
   const [flow, setFlow] = useState<FixFlow | null>(null)
-  const [pendingId, setPendingId] = useState<number | null>(null) // delete/accept in flight
+  const [pendingId, setPendingId] = useState<number | null>(null) // item mutation in flight
   const [actionError, setActionError] = useState<string | null>(null)
   // The scan is owned by the panel and re-run on each open; the ref stops the
   // strict-mode double-mount from starting two identical sweeps.
@@ -178,6 +179,27 @@ export default function RepairPanel({ busy, onClose, onChanged }: Props) {
     }
   }
 
+  async function setNoGpsVisibility(item: RepairItem, hidden: boolean): Promise<void> {
+    if (busy) return
+    setPendingId(item.id)
+    setActionError(null)
+    try {
+      await setRepairNoGpsVisibility(authFetch, item.id, hidden)
+      setItems((list) =>
+        list.map((current) =>
+          current.id === item.id
+            ? { ...current, hidden_from_no_gps: hidden }
+            : current,
+        ),
+      )
+      onChanged()
+    } catch (e) {
+      setActionError(String(e))
+    } finally {
+      setPendingId(null)
+    }
+  }
+
   const repairable = (item: RepairItem): boolean =>
     item.media_type === 'video' &&
     (item.status === 'no-moov' || item.status === 'decode-error') &&
@@ -251,6 +273,9 @@ export default function RepairPanel({ busy, onClose, onChanged }: Props) {
                     Stale entry — the file left the library (Rescan also clears these).
                   </span>
                 )}
+                {item.hidden_from_no_gps && (
+                  <span className="repair-hint">Hidden from the No-GPS placement list.</span>
+                )}
               </div>
               <div className="repair-item__actions">
                 {repairable(item) && (
@@ -263,6 +288,22 @@ export default function RepairPanel({ busy, onClose, onChanged }: Props) {
                     Repair…
                   </button>
                 )}
+                <button
+                  className="repair-btn"
+                  onClick={() => setNoGpsVisibility(item, !item.hidden_from_no_gps)}
+                  disabled={busy || pendingId !== null}
+                  title={
+                    item.hidden_from_no_gps
+                      ? 'Restore this capture to the No-GPS placement list'
+                      : 'Keep the file but remove it from the No-GPS placement list'
+                  }
+                >
+                  {pendingId === item.id
+                    ? 'Working…'
+                    : item.hidden_from_no_gps
+                      ? 'Show in No GPS'
+                      : 'Hide from No GPS'}
+                </button>
                 <button
                   className="repair-btn"
                   onClick={() => deleteItem(item)}

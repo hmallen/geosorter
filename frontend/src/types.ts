@@ -102,6 +102,7 @@ export interface RepairItem {
   status: 'zero-byte' | 'no-moov' | 'decode-error' | 'missing'
   error: string | null
   path: string // library-relative POSIX path (still under _no-gps/)
+  hidden_from_no_gps: boolean // excluded from placement backlog, still listed in Repair
 }
 
 // One healthy library video ranked as an untrunc reference for a broken capture
