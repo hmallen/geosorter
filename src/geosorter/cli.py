@@ -4,6 +4,7 @@ Setup / reference data:
 
 * ``init-config``         — write a starter ``geosorter.toml``.
 * ``set-admin-password``  — hash + store the web UI's admin password.
+* ``install-untrunc``     — download untrunc + wire it into the config (Repair panel).
 * ``bootstrap``           — load GeoNames reference data into the geonames DB.
 * ``version``             — print the package version.
 
@@ -37,7 +38,10 @@ from pathlib import Path
 import click
 import uvicorn
 
-from . import __version__, api, auth, config, db, derived, diagnose, geocoder, geonames_loader, pathing
+from . import (
+    __version__, api, auth, config, db, derived, diagnose, geocoder,
+    geonames_loader, pathing, repair,
+)
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
 from .organize import verify_library as _verify_library
@@ -52,7 +56,8 @@ _CONFIG_OPTION = click.option(
     "config_path",
     type=click.Path(dir_okay=False),
     default=None,
-    help="Path to geosorter.toml (overrides $GEOSORTER_CONFIG and the default).",
+    help="Path to geosorter.toml (overrides $GEOSORTER_CONFIG, ./geosorter.toml, "
+         "and the default).",
 )
 
 
@@ -98,6 +103,68 @@ def set_admin_password(config_path: str | None) -> None:
         raise click.ClickException("password must not be empty.")
     config.set_admin_password_hash(cfg_path, auth.hash_password(password))
     click.echo(f"Admin password set in {cfg_path}.")
+
+
+@cli.command(name="install-untrunc")
+@_CONFIG_OPTION
+@click.option(
+    "--dest",
+    type=click.Path(file_okay=False),
+    default=None,
+    help=r"Install directory (default: <data-dir>\tools\untrunc).",
+)
+@click.option(
+    "--force", is_flag=True,
+    help="Reinstall even when untrunc is already available.",
+)
+def install_untrunc_cmd(config_path: str | None, dest: str | None, force: bool) -> None:
+    """Download untrunc and wire it into the config (the Repair panel's rebuilder).
+
+    Fetches the latest official Windows build from github.com/anthwlock/untrunc,
+    unpacks it (exe + its ffmpeg DLLs) under the geosorter data dir, smoke-tests
+    the binary, and persists ``untrunc_path`` into the config file so the map
+    UI's Repair panel can rebuild truncated recordings. A no-op when untrunc is
+    already found (config path or PATH) unless ``--force``.
+    """
+    cfg = config.load(config_path)
+    existing = repair.find_untrunc(cfg.untrunc_path)
+    if existing is not None and not force:
+        click.echo(f"untrunc is already available: {existing}")
+        click.echo("Pass --force to download and reinstall anyway.")
+        return
+
+    click.echo("Installing untrunc (github.com/anthwlock/untrunc)…")
+    last = {"pct": -10}
+
+    def on_bytes(done: int, total: int) -> None:
+        if total <= 0:
+            return
+        pct = done * 100 // total
+        if pct >= last["pct"] + 10:
+            last["pct"] = pct
+            click.echo(f"  downloading… {pct}% of {total // (1 << 20)} MiB")
+
+    try:
+        result = repair.install_untrunc(dest, force=force, on_bytes=on_bytes)
+    except (RuntimeError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if result.reused:
+        click.echo(
+            f"Reused the existing install at {result.exe_path} "
+            "(pass --force to re-download)."
+        )
+    else:
+        tag = f" ({result.release_tag})" if result.release_tag else ""
+        click.echo(f"Installed {result.asset_name}{tag} -> {result.exe_path}")
+    if config.set_untrunc_path(config_path, str(result.exe_path)):
+        click.echo(
+            f"Wrote untrunc_path to {config.resolve_config_path(config_path)} — "
+            "the Repair panel can now rebuild truncated clips."
+        )
+    else:
+        click.echo("No config file exists yet; run `geosorter init-config`, then add:")
+        click.echo(f"  untrunc_path = '{result.exe_path}'")
 
 
 @cli.command()

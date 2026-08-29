@@ -18,6 +18,7 @@ import {
   RouteIcon,
   TimelineIcon,
   UndoIcon,
+  WrenchIcon,
 } from './icons'
 
 interface ToolbarProps {
@@ -46,6 +47,9 @@ interface ToolbarProps {
   // button; hidden for non-admins and when the backlog is empty (like No-GPS).
   onOpenDuplicates: () => void
   duplicatesCount: number
+  // Open the broken-capture repair panel (owned by App). Admin-only: it scans
+  // the quarantine for corrupt files and repairs/deletes them.
+  onOpenRepair: () => void
   // Toggle the timeline scrubber (date-range brush over the map).
   onToggleTimeline: () => void
   timelineOn: boolean
@@ -65,6 +69,7 @@ export default function Toolbar({
   onOpenStitch,
   onOpenDuplicates,
   duplicatesCount,
+  onOpenRepair,
   onToggleTimeline,
   timelineOn,
   onToggleFavorites,
@@ -199,6 +204,13 @@ export default function Toolbar({
               <button onClick={startRescan} disabled={busy} title="Rescan the library for on-disk changes">
                 <RescanIcon className="tb-ico" />
                 {rescanning ? 'Rescanning…' : 'Rescan'}
+              </button>
+              <button
+                onClick={onOpenRepair}
+                title="Scan for corrupt captures and repair or delete them"
+              >
+                <WrenchIcon className="tb-ico" />
+                Repair
               </button>
             </div>
             <span className="tb-sep" aria-hidden="true" />

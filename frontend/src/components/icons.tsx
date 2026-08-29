@@ -108,6 +108,14 @@ export function CopyIcon(props: IconProps) {
   )
 }
 
+export function WrenchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13.6 2.5a3.5 3.5 0 0 0-4.7 4.4L2.5 13.2a1.55 1.55 0 0 0 2.2 2.2L11 9a3.5 3.5 0 0 0 4.4-4.7L13 6.7l-2.2-.7-.7-2.2Z" />
+    </Icon>
+  )
+}
+
 export function PanoramaIcon(props: IconProps) {
   return (
     <Icon {...props}>

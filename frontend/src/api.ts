@@ -6,6 +6,7 @@ import type {
   LibraryFC,
   PlaceResult,
   QuarantineItem,
+  RepairCandidate,
 } from './types'
 import type { InboxGroup } from './inboxTree'
 
@@ -184,6 +185,77 @@ export async function setFavorite(
   if (!resp.ok) throw new Error(`favorite update failed: ${resp.status}`)
   return (await resp.json()) as { file_id: number; favorite: boolean }
 }
+
+// Read a FastAPI error body's detail (a bare string or {message}) so a 409's
+// human-readable reason reaches the panel instead of a bare status code.
+async function errorDetail(resp: Response): Promise<string | null> {
+  try {
+    const body = (await resp.json()) as { detail?: string | { message?: unknown } }
+    const d = body?.detail
+    if (typeof d === 'string') return d
+    if (d && typeof d.message === 'string') return d.message
+  } catch {
+    // no JSON body — fall back to the status-only message
+  }
+  return null
+}
+
+// untrunc availability (the Repair panel hides the repair action without it).
+export async function fetchUntrunc(
+  fetchFn: typeof fetch = fetch,
+): Promise<{ available: boolean; path: string | null }> {
+  const resp = await fetchFn('/api/repair/untrunc')
+  if (!resp.ok) throw new Error(`untrunc probe failed: ${resp.status}`)
+  return (await resp.json()) as { available: boolean; path: string | null }
+}
+
+// Ranked healthy reference clips for one broken capture (best match first).
+export async function fetchRepairReferences(
+  fetchFn: typeof fetch,
+  id: number,
+): Promise<RepairCandidate[]> {
+  const resp = await fetchFn(`/api/repair/references/${id}`)
+  if (!resp.ok) throw new Error(`repair references fetch failed: ${resp.status}`)
+  return ((await resp.json()) as { candidates: RepairCandidate[] }).candidates
+}
+
+// The synchronous repair steps (admin-guarded: thread authFetch). 409 carries the
+// server's refusal reason (conflicting job, failed verification, healthy file).
+async function repairStep<T>(
+  fetchFn: typeof fetch,
+  step: 'accept' | 'discard' | 'delete',
+  id: number,
+): Promise<T> {
+  const resp = await fetchFn(`/api/repair/${step}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_id: id }),
+  })
+  if (!resp.ok) {
+    const detail = await errorDetail(resp)
+    throw new Error(`repair ${step} failed: ${resp.status}${detail ? ` — ${detail}` : ''}`)
+  }
+  return (await resp.json()) as T
+}
+
+// Swap the verified repaired output onto the original file (backup is retained).
+export const repairAccept = (
+  fetchFn: typeof fetch,
+  id: number,
+): Promise<{ file_id: number; path: string }> => repairStep(fetchFn, 'accept', id)
+
+// Drop an unaccepted repair attempt (the library original was never modified).
+export const repairDiscard = (
+  fetchFn: typeof fetch,
+  id: number,
+): Promise<{ file_id: number; removed: string[] }> => repairStep(fetchFn, 'discard', id)
+
+// Delete a broken capture from disk + prune its index rows. The server re-probes
+// and refuses a healthy file, so a stale UI row can never delete good media.
+export const repairDelete = (
+  fetchFn: typeof fetch,
+  id: number,
+): Promise<{ file_id: number; deleted: string[] }> => repairStep(fetchFn, 'delete', id)
 
 // Offline forward place-name search: resolve a place/feature name to ranked
 // coordinate matches. A blank query short-circuits to [] (no request).

@@ -104,19 +104,25 @@ def run_rescan(cfg, *, dry_run: bool = False, progress=None) -> RescanReport:
 
 
 def _prune(index, file_id, primary_dest, companion_dests, batch_id, report) -> None:
+    prune_capture(index, file_id, primary_dest, companion_dests, batch_id)
+    report.pruned += 1
+
+
+def prune_capture(index, file_id, primary_dest, companion_dests, batch_id) -> None:
     """Delete one capture's index rows; drop the batch's codec tally if it empties.
 
     Removes the group's ``moves`` rows (keyed on the stored ``dest_path`` — the
     primary's plus each companion's) and the ``files`` row (cascading
     ``file_companions`` via the FK ``ON DELETE CASCADE``, with ``foreign_keys=ON``).
     Committed immediately so a crash leaves a consistent prefix of pruned captures.
+    Shared with :mod:`geosorter.repair`'s delete-broken flow, so a repair-panel
+    delete and a rescan prune leave identical index state.
     """
     dests = [primary_dest, *companion_dests]
     placeholders = ",".join("?" * len(dests))
     index.execute(f"DELETE FROM moves WHERE dest_path IN ({placeholders})", dests)
     index.execute("DELETE FROM files WHERE id=?", (file_id,))
     index.commit()
-    report.pruned += 1
 
     if batch_id is not None:
         remaining_moves = index.execute(
