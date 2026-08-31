@@ -195,6 +195,75 @@ export interface TrackState {
   altitude: number | null
 }
 
+export type TrackScrubPhase = 'start' | 'move' | 'end'
+
+export interface TrackScrubEvent {
+  phase: TrackScrubPhase
+  timeS: number
+}
+
+export interface ProjectedTrackSample {
+  x: number
+  y: number
+  timeS: number
+}
+
+// Convert a pointer position into the video timestamp at the closest point on
+// the projected telemetry route. MapView supplies screen-pixel coordinates so
+// "closest" matches the path the user sees regardless of zoom or bearing. At a
+// self-crossing (or while the drone is stationary), prefer the candidate nearest
+// the current video time so a continuous drag cannot jump to another pass.
+export function nearestTrackTime(
+  samples: ProjectedTrackSample[],
+  target: { x: number; y: number },
+  nearTime: number,
+): number | null {
+  if (samples.length === 0) return null
+  if (samples.length === 1) return samples[0].timeS
+
+  let bestDistance = Infinity
+  let bestTime = samples[0].timeS
+  const tieEpsilon = 1e-7
+
+  for (let index = 0; index < samples.length - 1; index += 1) {
+    const left = samples[index]
+    const right = samples[index + 1]
+    const dx = right.x - left.x
+    const dy = right.y - left.y
+    const lengthSquared = dx * dx + dy * dy
+    let ratio = 0
+
+    if (lengthSquared > Number.EPSILON) {
+      ratio = Math.min(
+        1,
+        Math.max(0, ((target.x - left.x) * dx + (target.y - left.y) * dy) / lengthSquared),
+      )
+    } else if (Number.isFinite(nearTime) && right.timeS !== left.timeS) {
+      // A stationary telemetry span has no spatial clue for its timestamp. Keep
+      // the current time when it lies inside the span, otherwise use its nearest
+      // temporal endpoint.
+      const low = Math.min(left.timeS, right.timeS)
+      const high = Math.max(left.timeS, right.timeS)
+      const clamped = Math.min(high, Math.max(low, nearTime))
+      ratio = (clamped - left.timeS) / (right.timeS - left.timeS)
+    }
+
+    const x = left.x + dx * ratio
+    const y = left.y + dy * ratio
+    const distance = (target.x - x) ** 2 + (target.y - y) ** 2
+    const time = left.timeS + (right.timeS - left.timeS) * ratio
+    const closerInTime = Math.abs(time - nearTime) < Math.abs(bestTime - nearTime)
+
+    if (distance < bestDistance - tieEpsilon ||
+        (Math.abs(distance - bestDistance) <= tieEpsilon && closerInTime)) {
+      bestDistance = distance
+      bestTime = time
+    }
+  }
+
+  return bestTime
+}
+
 // Interpolate between the two fixes bracketing a value. A null endpoint falls
 // back to the other one rather than interpolating toward nothing, so an isolated
 // gap in the altitude track holds the last known height instead of blanking.

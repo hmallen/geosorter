@@ -10,7 +10,7 @@ import {
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature, ViewerFlightContext } from '../types'
-import { nextFlightAutoplayIndex } from '../viewerPlayback'
+import { nextFlightAutoplayIndex, type PlaybackSeekRequest } from '../viewerPlayback'
 import FlatHero from './FlatHero'
 import LoadingImage from './LoadingImage'
 
@@ -45,6 +45,7 @@ interface Props {
   trackLoading: boolean
   trackError: string | null
   trackWarning: string | null
+  playbackSeek: PlaybackSeekRequest | null
   onPlaybackTime: (timeS: number) => void
   onExpand: () => void
 }
@@ -65,6 +66,7 @@ export default function Lightbox({
   trackLoading,
   trackError,
   trackWarning,
+  playbackSeek,
   onPlaybackTime,
   onExpand,
 }: Props) {
@@ -72,6 +74,7 @@ export default function Lightbox({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const pipRef = useRef<HTMLDivElement | null>(null)
   const playbackCallback = useRef(onPlaybackTime)
+  const resumeAfterTrackScrub = useRef<boolean | null>(null)
   const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
   const resize = useRef<{
     pointerId: number
@@ -157,6 +160,38 @@ export default function Lightbox({
   useEffect(() => {
     playbackCallback.current = onPlaybackTime
   }, [onPlaybackTime])
+
+  // Map-marker drag requests are commands rather than mirrored playback state:
+  // the token makes repeated seeks to the same timestamp observable without
+  // feeding ordinary video timeupdate events back into this effect.
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !trackMode || !playbackSeek || playbackSeek.fileId !== fileId) return
+
+    // MapLibre may emit dragstart and the first drag in one native callback,
+    // allowing React to commit only the newest command. Treat the first command
+    // observed in a scrub session as its start so pause/resume semantics survive
+    // that batching (and even a start/end pair with no intermediate move).
+    if (resumeAfterTrackScrub.current === null) {
+      resumeAfterTrackScrub.current = !video.paused && !video.ended
+      video.pause()
+    }
+
+    const duration = Number.isFinite(video.duration) ? video.duration : Infinity
+    const target = Math.min(duration, Math.max(0, playbackSeek.timeS))
+    video.currentTime = target
+    playbackCallback.current(target)
+
+    if (playbackSeek.phase === 'end') {
+      const resume = resumeAfterTrackScrub.current
+      resumeAfterTrackScrub.current = null
+      if (resume) void video.play().catch(() => undefined)
+    }
+  }, [fileId, playbackSeek, trackMode])
+
+  useEffect(() => {
+    resumeAfterTrackScrub.current = null
+  }, [fileId, trackMode])
 
   // Publish video.currentTime immediately for seeks/pause and at ~10 Hz while
   // playing. requestAnimationFrame is used only as a scheduler; the 100 ms gate
