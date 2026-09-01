@@ -9,6 +9,7 @@ import {
   clampPipWidth,
   formatAltitude,
   loadAvailableTracks,
+  nearestTrackTime,
   positionAtTime,
   trackBBox,
   trackCollection,
@@ -214,6 +215,45 @@ describe('trackStateAtTime', () => {
     ]
     expect(trackStateAtTime(gap, 2)?.altitude).toBe(90)
     expect(trackStateAtTime(gap, 4)?.altitude).toBe(110)
+  })
+})
+
+describe('nearestTrackTime', () => {
+  const straight = [
+    { x: 0, y: 0, timeS: 10 },
+    { x: 10, y: 0, timeS: 20 },
+  ]
+
+  it('interpolates along the nearest projected segment and clamps to its endpoints', () => {
+    expect(nearestTrackTime(straight, { x: 4, y: 3 }, 10)).toBe(14)
+    expect(nearestTrackTime(straight, { x: -5, y: 0 }, 10)).toBe(10)
+    expect(nearestTrackTime(straight, { x: 15, y: 0 }, 10)).toBe(20)
+  })
+
+  it('handles empty and single-sample telemetry', () => {
+    expect(nearestTrackTime([], { x: 0, y: 0 }, 0)).toBeNull()
+    expect(nearestTrackTime([{ x: 4, y: 5, timeS: 12 }], { x: 99, y: 99 }, 0)).toBe(12)
+  })
+
+  it('uses the current time to disambiguate a self-crossing route', () => {
+    const crossing = [
+      { x: -10, y: -10, timeS: 0 },
+      { x: 10, y: 10, timeS: 10 },
+      { x: -10, y: 10, timeS: 20 },
+      { x: 10, y: -10, timeS: 30 },
+    ]
+    expect(nearestTrackTime(crossing, { x: 0, y: 0 }, 4)).toBe(5)
+    expect(nearestTrackTime(crossing, { x: 0, y: 0 }, 24)).toBe(25)
+  })
+
+  it('preserves the nearby timestamp across a stationary segment', () => {
+    const stationary = [
+      { x: 0, y: 0, timeS: 10 },
+      { x: 0, y: 0, timeS: 20 },
+      { x: 10, y: 0, timeS: 30 },
+    ]
+    expect(nearestTrackTime(stationary, { x: 0, y: 0 }, 16)).toBe(16)
+    expect(nearestTrackTime(stationary, { x: 0, y: 0 }, 4)).toBe(10)
   })
 })
 

@@ -17,10 +17,12 @@ import {
   tracksBBox,
   trackStateAtTime,
   type LoadedVideoTrack,
+  type TrackScrubEvent,
 } from './flightTrack'
 import { buildFlightCatalog, selectionForCatalogFlight } from './flightGroups'
 import { filterByDateRange, formatRangeLabel, type DateRange } from './dateRange'
 import { effectiveFavorite, filterFavorites } from './favorites'
+import type { PlaybackSeekRequest } from './viewerPlayback'
 import { parseHash, type UrlState, type UrlView } from './urlState'
 import { useLibrary } from './useLibrary'
 import { useUrlState } from './useUrlState'
@@ -147,7 +149,9 @@ export default function App() {
   const [track, setTrack] = useState<ActiveTrackSet | null>(null)
   const [trackLoadingKey, setTrackLoadingKey] = useState<string | null>(null)
   const [trackError, setTrackError] = useState<{ contextKey: string; message: string } | null>(null)
+  const [playbackSeek, setPlaybackSeek] = useState<PlaybackSeekRequest | null>(null)
   const trackRequest = useRef(0)
+  const playbackSeekToken = useRef(0)
 
   function fitTracks(tracks: LoadedVideoTrack[]) {
     const bbox = tracksBBox(tracks)
@@ -163,12 +167,14 @@ export default function App() {
     if (!current) return
     const contextKey = lightbox.flight?.key ?? `file:${current.properties.id}`
     if (track?.contextKey === contextKey) {
+      setPlaybackSeek(null)
       setTrack((current) => (current ? { ...current, pip: true } : current))
       setTrackError(null)
       fitTracks(track.tracks)
       return
     }
     const request = ++trackRequest.current
+    setPlaybackSeek(null)
     setTrackLoadingKey(contextKey)
     setTrackError(null)
     try {
@@ -214,6 +220,7 @@ export default function App() {
     trackRequest.current += 1
     setTrackLoadingKey(null)
     setTrackError(null)
+    setPlaybackSeek(null)
     setTrack(null)
     setLightbox(null)
   }
@@ -242,6 +249,22 @@ export default function App() {
     () => activeTrackState?.position ?? null,
     [activeTrackState],
   )
+
+  function scrubTrack(event: TrackScrubEvent) {
+    if (!activeVideoTrack || !trackMatchesViewer) return
+    const fileId = activeVideoTrack.fileId
+    setTrack((current) =>
+      current && current.contextKey === viewerContextKey
+        ? { ...current, currentTime: event.timeS }
+        : current,
+    )
+    setPlaybackSeek({
+      token: ++playbackSeekToken.current,
+      fileId,
+      timeS: event.timeS,
+      phase: event.phase,
+    })
+  }
   // Panorama stitch tracking lives here (above the lightbox) so a ~7-min job's
   // progress survives the lightbox closing/reopening; reload on success so the hero
   // + stitch_status persist on the map and in the panel.
@@ -328,6 +351,7 @@ export default function App() {
     setTrack(null)
     setTrackLoadingKey(null)
     setTrackError(null)
+    setPlaybackSeek(null)
     reload()
     reloadQuarantine()
     reloadDuplicates()
@@ -455,6 +479,8 @@ export default function App() {
         initialView={initialUrl.view}
         onViewChange={setMapView}
         activeTrackPosition={activeTrackPosition}
+        activeTrackTime={track?.currentTime ?? null}
+        onTrackScrub={track?.pip && syncAvailable ? scrubTrack : undefined}
         followTrack={Boolean(track?.pip && track.follow && activeTrackPosition)}
         activeTrackAltitude={activeTrackState?.altitude ?? null}
         altitudeRef={activeVideoTrack?.altitudeRef ?? null}
@@ -707,6 +733,7 @@ export default function App() {
           index={lightbox.index}
           flight={lightbox.flight}
           onIndex={(i) => {
+            setPlaybackSeek(null)
             if (lightbox.flight) {
               const nextFileId = lightbox.files[i]?.properties.id
               setTrack((current) => {
@@ -752,6 +779,9 @@ export default function App() {
                 } unavailable.`
               : null
           }
+          playbackSeek={
+            playbackSeek?.fileId === viewerFileId ? playbackSeek : null
+          }
           onPlaybackTime={(time) =>
             setTrack((current) =>
               current && current.contextKey === viewerContextKey
@@ -759,11 +789,12 @@ export default function App() {
                 : current,
             )
           }
-          onExpand={() =>
+          onExpand={() => {
+            setPlaybackSeek(null)
             setTrack((current) =>
               current ? { ...current, pip: false, follow: false } : current,
             )
-          }
+          }}
         />
       )}
     </div>

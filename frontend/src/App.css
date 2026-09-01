@@ -498,7 +498,11 @@
   box-shadow: 0 0 0 2px var(--accent-text), 0 3px 9px rgba(0, 0, 0, 0.75);
   font-size: 15px;
   line-height: 1;
-  pointer-events: none;
+  /* The MapLibre marker owns drag handling; keep its visible token hit-testable
+     on mouse and touch while the out-of-flow altitude pill remains inert. */
+  pointer-events: auto;
+  touch-action: none;
+  cursor: inherit;
 }
 
 /* Placement/status banners sit below the toolbar. Toolbar publishes its live

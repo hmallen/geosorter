@@ -12,8 +12,12 @@ import {
   TRACK_INACTIVE_CASING_LAYER,
   TRACK_INACTIVE_LINE_LAYER,
   TRACK_LINE_LAYER,
+  nearestTrackTime,
   trackCollection,
   type LoadedVideoTrack,
+  type ProjectedTrackSample,
+  type TrackScrubEvent,
+  type TrackScrubPhase,
 } from '../flightTrack'
 import type { AltitudeRef, LibraryFeature } from '../types'
 
@@ -52,6 +56,10 @@ interface Props {
   // Interpolated video-clock position. Follow mode recenters periodically without
   // changing the user's zoom level.
   activeTrackPosition?: [number, number] | null
+  // Current clock value plus the reverse synchronization channel used when the
+  // active drone marker is dragged along its timed telemetry route.
+  activeTrackTime?: number | null
+  onTrackScrub?: (event: TrackScrubEvent) => void
   followTrack?: boolean
   // Altitude (metres) at that same instant, shown beside the position token.
   // Null when the sidecar carries no height — the token still renders.
@@ -72,6 +80,8 @@ export default function MapView({
   initialView,
   onViewChange,
   activeTrackPosition,
+  activeTrackTime,
+  onTrackScrub,
   followTrack = false,
   activeTrackAltitude,
   altitudeRef,
@@ -89,7 +99,9 @@ export default function MapView({
   const [bbox, setBbox] = useState<BBox>(WORLD)
   const [satellite, setSatellite] = useState(false)
   const [heatmap, setHeatmap] = useState(false)
+  const [trackDragging, setTrackDragging] = useState(false)
   const lastFollowAt = useRef(0)
+  const projectedTrack = useRef<ProjectedTrackSample[] | null>(null)
   const clusters = useMemo(() => clustersFor(index, bbox, view.zoom), [index, bbox, view.zoom])
   const heatData = useMemo(() => heatmapData(features), [features])
   const trackData = useMemo(
@@ -100,6 +112,16 @@ export default function MapView({
     () => tracks?.find((candidate) => candidate.fileId === activeTrackId) ?? null,
     [tracks, activeTrackId],
   )
+  const canScrubTrack = Boolean(onTrackScrub && activeTrack && activeTrack.samples.length >= 2)
+
+  const emitTrackScrub = useCallback((phase: TrackScrubPhase, lng: number, lat: number) => {
+    const map = mapRef.current
+    const samples = projectedTrack.current
+    if (!map || !samples || !onTrackScrub) return
+    const point = map.project([lng, lat])
+    const timeS = nearestTrackTime(samples, point, activeTrackTime ?? samples[0].timeS)
+    if (timeS !== null) onTrackScrub({ phase, timeS })
+  }, [activeTrackTime, onTrackScrub])
 
   const syncBounds = useCallback((map: MapLibreMap) => {
     const b = map.getBounds()
@@ -147,7 +169,7 @@ export default function MapView({
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !followTrack || !activeTrackPosition) return
+    if (!map || !followTrack || !activeTrackPosition || trackDragging) return
     const now = performance.now()
     if (now - lastFollowAt.current < 250) return
     lastFollowAt.current = now
@@ -157,7 +179,7 @@ export default function MapView({
       duration: 220,
       essential: true,
     })
-  }, [activeTrackPosition, followTrack])
+  }, [activeTrackPosition, followTrack, trackDragging])
 
   return (
     <Map
@@ -283,12 +305,36 @@ export default function MapView({
           longitude={activeTrackPosition[0]}
           latitude={activeTrackPosition[1]}
           anchor="center"
+          draggable={canScrubTrack}
+          style={canScrubTrack ? { cursor: trackDragging ? 'grabbing' : 'grab' } : undefined}
+          onDragStart={(event) => {
+            const map = mapRef.current
+            if (!map || !activeTrack || !onTrackScrub) return
+            projectedTrack.current = activeTrack.samples.map((sample) => {
+              const point = map.project([sample.lon, sample.lat])
+              return { x: point.x, y: point.y, timeS: sample.time_s }
+            })
+            setTrackDragging(true)
+            emitTrackScrub('start', event.lngLat.lng, event.lngLat.lat)
+          }}
+          onDrag={(event) => emitTrackScrub('move', event.lngLat.lng, event.lngLat.lat)}
+          onDragEnd={(event) => {
+            emitTrackScrub('end', event.lngLat.lng, event.lngLat.lat)
+            projectedTrack.current = null
+            setTrackDragging(false)
+          }}
         >
           {/* The anchor box stays exactly the token's size; the altitude badge
               is absolutely positioned out of flow so a wider readout can never
               nudge the glyph off the coordinate it marks. */}
           <div className="track-drone-anchor">
-            <div className="track-drone" title="Current drone position" aria-label="Current drone position">
+            <div
+              className="track-drone"
+              title={canScrubTrack ? 'Drag to seek video' : 'Current drone position'}
+              aria-label={canScrubTrack
+                ? 'Current drone position; drag to seek video'
+                : 'Current drone position'}
+            >
               <span aria-hidden="true">✦</span>
             </div>
             {activeTrackAltitude != null && (
