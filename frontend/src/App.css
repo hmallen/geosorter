@@ -1123,24 +1123,30 @@
   border-color: var(--border);
 }
 
-.pip-resize-handle {
+.pip-resize-bar {
   position: relative;
-  flex: 0 0 12px;
+  flex: 0 0 14px;
   width: 100%;
-  min-height: 12px;
+  min-height: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pip-resize-handle {
+  position: absolute;
+  bottom: 0;
+  width: 32px;
+  height: 100%;
   padding: 0;
   border: 0;
-  border-top: 1px solid var(--border);
   border-radius: 0;
-  background: var(--surface);
-  cursor: nwse-resize;
+  background: transparent;
   touch-action: none;
 }
 
 .pip-resize-handle::after {
   content: '';
   position: absolute;
-  right: 4px;
   bottom: 3px;
   width: 8px;
   height: 8px;
@@ -1150,6 +1156,25 @@
     linear-gradient(135deg, transparent 45%, var(--text-muted) 46%, var(--text-muted) 55%, transparent 56%)
     left top / 5px 5px no-repeat;
   opacity: 0.8;
+}
+
+.pip-resize-handle--left {
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.pip-resize-handle--left::after {
+  left: 4px;
+  transform: scaleX(-1);
+}
+
+.pip-resize-handle--right {
+  right: 0;
+  cursor: nwse-resize;
+}
+
+.pip-resize-handle--right::after {
+  right: 4px;
 }
 
 .pip-resize-handle:hover,

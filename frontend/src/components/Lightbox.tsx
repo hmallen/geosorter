@@ -4,8 +4,9 @@ import { captionInfo } from '../captionInfo'
 import {
   PIP_ASPECT_RATIO,
   clampPipPosition,
-  clampPipWidth,
   type PipPosition,
+  type PipResizeCorner,
+  resizePipFromCorner,
 } from '../flightTrack'
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
@@ -78,8 +79,11 @@ export default function Lightbox({
   const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
   const resize = useRef<{
     pointerId: number
+    corner: PipResizeCorner
     startX: number
     startY: number
+    startLeft: number
+    startTop: number
     startWidth: number
   } | null>(null)
   const [pipPosition, setPipPosition] = useState<PipPosition | null>(null)
@@ -307,14 +311,20 @@ export default function Lightbox({
     }
   }
 
-  const beginPipResize = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const beginPipResize = (
+    corner: PipResizeCorner,
+    e: React.PointerEvent<HTMLButtonElement>,
+  ) => {
     const pip = pipRef.current
     if (!pip) return
     const rect = pip.getBoundingClientRect()
     resize.current = {
       pointerId: e.pointerId,
+      corner,
       startX: e.clientX,
       startY: e.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
       startWidth: rect.width,
     }
     e.stopPropagation()
@@ -323,19 +333,16 @@ export default function Lightbox({
 
   const movePipResize = (e: React.PointerEvent<HTMLButtonElement>) => {
     const active = resize.current
-    const pip = pipRef.current
-    if (!active || active.pointerId !== e.pointerId || !pip) return
-    const deltaX = e.clientX - active.startX
-    const deltaFromY = (e.clientY - active.startY) * PIP_ASPECT_RATIO
-    const delta = Math.abs(deltaX) >= Math.abs(deltaFromY) ? deltaX : deltaFromY
-    const rect = pip.getBoundingClientRect()
-    setPipWidth(
-      clampPipWidth(
-        active.startWidth + delta,
-        { x: rect.left, y: rect.top },
-        { width: window.innerWidth, height: window.innerHeight },
-      ),
+    if (!active || active.pointerId !== e.pointerId) return
+    const next = resizePipFromCorner(
+      { x: active.startLeft, y: active.startTop, width: active.startWidth },
+      active.corner,
+      e.clientX - active.startX,
+      e.clientY - active.startY,
+      { width: window.innerWidth, height: window.innerHeight },
     )
+    setPipPosition(next.position)
+    setPipWidth(next.width)
   }
 
   const endPipResize = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -345,25 +352,40 @@ export default function Lightbox({
     }
   }
 
-  const resizePipByKeyboard = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+  const resizePipByKeyboard = (
+    corner: PipResizeCorner,
+    e: React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
     const pip = pipRef.current
     if (!pip) return
     const direction =
-      e.key === 'ArrowRight' || e.key === 'ArrowDown'
+      e.key === 'ArrowDown'
         ? 1
-        : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+        : e.key === 'ArrowUp'
           ? -1
-          : 0
+          : corner === 'right'
+            ? e.key === 'ArrowRight'
+              ? 1
+              : e.key === 'ArrowLeft'
+                ? -1
+                : 0
+            : e.key === 'ArrowLeft'
+              ? 1
+              : e.key === 'ArrowRight'
+                ? -1
+                : 0
     if (!direction) return
     e.preventDefault()
     const rect = pip.getBoundingClientRect()
-    setPipWidth(
-      clampPipWidth(
-        rect.width + direction * 24,
-        { x: rect.left, y: rect.top },
-        { width: window.innerWidth, height: window.innerHeight },
-      ),
+    const next = resizePipFromCorner(
+      { x: rect.left, y: rect.top, width: rect.width },
+      corner,
+      0,
+      (direction * 24) / PIP_ASPECT_RATIO,
+      { width: window.innerWidth, height: window.innerHeight },
     )
+    setPipPosition(next.position)
+    setPipWidth(next.width)
   }
 
   // Re-attach to an in-flight stitch on (re)open: if the library reports this
@@ -535,17 +557,22 @@ export default function Lightbox({
           )}
         </div>
         {trackMode && (
-          <button
-            type="button"
-            className="pip-resize-handle"
-            aria-label="Resize video window"
-            title="Drag to resize video window"
-            onPointerDown={beginPipResize}
-            onPointerMove={movePipResize}
-            onPointerUp={endPipResize}
-            onPointerCancel={endPipResize}
-            onKeyDown={resizePipByKeyboard}
-          />
+          <div className="pip-resize-bar">
+            {(['left', 'right'] as const).map((corner) => (
+              <button
+                key={corner}
+                type="button"
+                className={`pip-resize-handle pip-resize-handle--${corner}`}
+                aria-label={`Resize video window from bottom ${corner}`}
+                title={`Drag bottom ${corner} corner to resize video window`}
+                onPointerDown={(e) => beginPipResize(corner, e)}
+                onPointerMove={movePipResize}
+                onPointerUp={endPipResize}
+                onPointerCancel={endPipResize}
+                onKeyDown={(e) => resizePipByKeyboard(corner, e)}
+              />
+            ))}
+          </div>
         )}
 
         {stitchable && !frameZoom && onStartStitch && (
