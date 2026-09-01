@@ -7,6 +7,7 @@ import {
   altitudeTitle,
   clampPipPosition,
   clampPipWidth,
+  resizePipFromCorner,
   formatAltitude,
   loadAvailableTracks,
   nearestTrackTime,
@@ -307,5 +308,58 @@ describe('clampPipWidth', () => {
     expect(
       clampPipWidth(900, { x: 100, y: 500 }, { width: 1200, height: 800 }),
     ).toBeCloseTo(423.111, 3)
+  })
+})
+
+describe('resizePipFromCorner', () => {
+  const start = { x: 300, y: 100, width: 400 }
+  const viewport = { width: 1200, height: 800 }
+
+  it('anchors the left edge when resizing from the bottom right', () => {
+    expect(resizePipFromCorner(start, 'right', 80, 10, viewport)).toEqual({
+      position: { x: 300, y: 100 },
+      width: 480,
+    })
+  })
+
+  it('anchors the right edge when resizing from the bottom left', () => {
+    expect(resizePipFromCorner(start, 'left', -80, 10, viewport)).toEqual({
+      position: { x: 220, y: 100 },
+      width: 480,
+    })
+  })
+
+  it('shrinks inward from either corner', () => {
+    expect(resizePipFromCorner(start, 'right', -60, 0, viewport)).toEqual({
+      position: { x: 300, y: 100 },
+      width: 340,
+    })
+    expect(resizePipFromCorner(start, 'left', 60, 0, viewport)).toEqual({
+      position: { x: 360, y: 100 },
+      width: 340,
+    })
+  })
+
+  it('limits a bottom-left resize at the viewport left edge', () => {
+    expect(
+      resizePipFromCorner(
+        { x: 200, y: 100, width: 400 },
+        'left',
+        -1000,
+        0,
+        viewport,
+      ),
+    ).toEqual({
+      position: { x: 12, y: 100 },
+      width: 588,
+    })
+  })
+
+  it('uses downward movement to enlarge from both corners', () => {
+    expect(resizePipFromCorner(start, 'right', 0, 45, viewport).width).toBe(480)
+    expect(resizePipFromCorner(start, 'left', 0, 45, viewport)).toEqual({
+      position: { x: 220, y: 100 },
+      width: 480,
+    })
   })
 })

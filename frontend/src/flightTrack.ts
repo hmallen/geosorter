@@ -381,3 +381,51 @@ export function clampPipWidth(
   const effectiveMin = Math.min(PIP_MIN_WIDTH, maxWidth)
   return Math.min(maxWidth, Math.max(effectiveMin, width))
 }
+
+export type PipResizeCorner = 'left' | 'right'
+
+export interface PipResizeStart {
+  x: number
+  y: number
+  width: number
+}
+
+// Resize from either bottom corner. The opposite side remains anchored, so the
+// left grip moves the window's left edge while the right grip keeps its existing
+// behaviour. Vertical movement changes width through the video's aspect ratio.
+export function resizePipFromCorner(
+  start: PipResizeStart,
+  corner: PipResizeCorner,
+  deltaX: number,
+  deltaY: number,
+  viewport: RectSize,
+  margin = 12,
+): { position: PipPosition; width: number } {
+  const horizontalDelta = corner === 'left' ? -deltaX : deltaX
+  const verticalDelta = deltaY * PIP_ASPECT_RATIO
+  const delta =
+    Math.abs(horizontalDelta) >= Math.abs(verticalDelta)
+      ? horizontalDelta
+      : verticalDelta
+
+  if (corner === 'right') {
+    return {
+      position: { x: start.x, y: start.y },
+      width: clampPipWidth(start.width + delta, start, viewport, margin),
+    }
+  }
+
+  const anchoredRight = start.x + start.width
+  // Mirror the fixed right edge into clampPipWidth's fixed-left coordinate system.
+  const mirroredX = viewport.width - anchoredRight
+  const width = clampPipWidth(
+    start.width + delta,
+    { x: mirroredX, y: start.y },
+    viewport,
+    margin,
+  )
+  return {
+    position: { x: anchoredRight - width, y: start.y },
+    width,
+  }
+}
