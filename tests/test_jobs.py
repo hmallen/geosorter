@@ -428,6 +428,37 @@ def test_submit_assign_runs_and_completes():
     assert st.total == 3  # the selected-capture count, set at submit, for the progress UI
 
 
+def test_submit_assign_queues_behind_another_assign():
+    first_started = threading.Event()
+    release_first = threading.Event()
+    calls = []
+
+    def slow_first_assign(cfg, file_ids, lat, lon, *, progress):
+        calls.append(list(file_ids))
+        if file_ids == [1]:
+            first_started.set()
+            release_first.wait(2.0)
+        progress(f"  {file_ids[0]}.JPG")
+        return AssignReport(assigned=len(file_ids))
+
+    mgr = JobManager(None, assign_fn=slow_first_assign)
+    first_id = mgr.submit_assign([1], 39.7, -104.9)
+    assert first_started.wait(1.0)
+
+    # A second location choice is accepted immediately but cannot mutate the library
+    # until the first assignment releases the single destructive worker.
+    second_id = mgr.submit_assign([2], 40.0, -105.0)
+    second_pending = mgr.assign_status(second_id)
+    assert second_pending is not None
+    assert second_pending.state == "pending"
+    assert calls == [[1]]
+
+    release_first.set()
+    assert _wait_assign(mgr, first_id).state == "done"
+    assert _wait_assign(mgr, second_id).state == "done"
+    assert calls == [[1], [2]]
+
+
 def test_assign_status_unknown_returns_none():
     mgr = JobManager(None, assign_fn=lambda *a, **k: AssignReport())
     assert mgr.assign_status("does-not-exist") is None

@@ -372,6 +372,8 @@ export default function App() {
   const {
     assign,
     assigning,
+    queuedCount,
+    queuedFileIds,
     placing: assignPlacing,
     count: assignCount,
     beginAssign,
@@ -589,12 +591,17 @@ export default function App() {
           ) : (
             'Assigning location…'
           )}
+          {queuedCount > 0 && (
+            <span>
+              {queuedCount} assignment{queuedCount === 1 ? '' : 's'} queued
+            </span>
+          )}
         </div>
       )}
       {showNoGps && (
         <QuarantinePanel
           items={quarantineItems}
-          busy={assigning}
+          queuedFileIds={queuedFileIds}
           onClose={() => setShowNoGps(false)}
           onView={(item) => {
             // Open the WHOLE no-GPS list (as view-only features) at the clicked item, so

@@ -257,8 +257,9 @@ class JobManager:
     ``organize_fn``/``undo_fn``/``retag_fn`` are injectable for tests; they default
     to the real :func:`geosorter.organize.run_organize` /
     :func:`geosorter.undo.run_undo` / :func:`geosorter.retag.retag_file`. The single
-    ``max_workers=1`` executor is shared by all three job kinds, so organize, undo,
-    and re-tag can never run concurrently against the same library/index.
+    ``max_workers=1`` executor is shared by the destructive job kinds, so organize,
+    undo, re-tag, assign-location, and rescan can never run concurrently against the
+    same library/index.
     """
 
     def __init__(self, cfg, *, organize_fn=run_organize, undo_fn=run_undo,
@@ -581,13 +582,15 @@ class JobManager:
     def submit_assign(self, file_ids, lat: float, lon: float) -> str:
         """Queue a bulk assign of ``file_ids`` to ``(lat, lon)`` and return its id.
 
-        Raises :class:`WorkerBusy` if another destructive job already holds the worker.
+        Assign-location jobs may queue behind another assign-location job. Raises
+        :class:`WorkerBusy` when a different destructive job holds the worker, keeping
+        the existing cross-kind safety guard intact.
         """
         job_id = uuid.uuid4().hex
         ids = list(file_ids)
         with self._lock:
             busy = self._active_destructive_job()
-            if busy is not None:
+            if busy is not None and busy not in self._assign_jobs:
                 raise WorkerBusy(busy)
             self._assign_jobs[job_id] = AssignJobState(job_id=job_id, total=len(ids))
         self._executor.submit(self._run_assign, job_id, ids, lat, lon)
