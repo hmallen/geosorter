@@ -1626,6 +1626,15 @@
   outline-offset: 1px;
 }
 
+.quarantine-item--queued .quarantine-thumb {
+  opacity: 0.55;
+}
+
+.quarantine-queued {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
 /* Multi-select mode toggle bar above the grid. */
 .quarantine-modebar {
   display: flex;

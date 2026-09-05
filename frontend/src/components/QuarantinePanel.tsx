@@ -5,7 +5,9 @@ import type { PlaceResult, QuarantineItem } from '../types'
 
 interface Props {
   items: QuarantineItem[]
-  busy: boolean // a destructive job is running -> disable the assign actions
+  // Captures already submitted to the assignment worker. They remain visible until
+  // the quarantine feed reloads, but cannot be selected for a duplicate submission.
+  queuedFileIds: ReadonlySet<number>
   onClose: () => void
   // Preview one capture's media in the lightbox (browse mode thumbnail click).
   onView: (item: QuarantineItem) => void
@@ -20,7 +22,7 @@ interface Props {
 // place-name search match. Promotes them out of quarantine to organized.
 export default function QuarantinePanel({
   items,
-  busy,
+  queuedFileIds,
   onClose,
   onView,
   onPickOnMap,
@@ -36,16 +38,20 @@ export default function QuarantinePanel({
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
 
-  const allSelected = items.length > 0 && selected.size === items.length
+  const availableIds = items.filter((item) => !queuedFileIds.has(item.id)).map((item) => item.id)
+  const queuedItemCount = items.length - availableIds.length
+  const allSelected = availableIds.length > 0 && availableIds.every((id) => selected.has(id))
+
   const toggle = (id: number, on: boolean) =>
     setSelected((prev) => {
+      if (queuedFileIds.has(id)) return prev
       const next = new Set(prev)
       if (on) next.add(id)
       else next.delete(id)
       return next
     })
   const toggleAll = (on: boolean) =>
-    setSelected(on ? new Set(items.map((i) => i.id)) : new Set())
+    setSelected(on ? new Set(availableIds) : new Set())
 
   async function doSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -61,7 +67,7 @@ export default function QuarantinePanel({
     }
   }
 
-  const ids = [...selected]
+  const ids = [...selected].filter((id) => !queuedFileIds.has(id))
   function assignToPlace(m: PlaceResult) {
     if (!ids.length) return
     const label = m.place_string ?? m.name
@@ -102,7 +108,9 @@ export default function QuarantinePanel({
               onChange={(e) => toggleAll(e.target.checked)}
             />
             <span>
-              Select all ({items.length} capture{items.length === 1 ? '' : 's'})
+              {queuedItemCount > 0
+                ? `Select all (${availableIds.length} available, ${queuedItemCount} queued)`
+                : `Select all (${items.length} capture${items.length === 1 ? '' : 's'})`}
             </span>
           </label>
 
@@ -111,12 +119,14 @@ export default function QuarantinePanel({
               <div
                 key={it.id}
                 className={`quarantine-item${
-                  selected.has(it.id) ? ' quarantine-item--selected' : ''
-                }`}
+                  selected.has(it.id) && !queuedFileIds.has(it.id)
+                    ? ' quarantine-item--selected' : ''
+                }${queuedFileIds.has(it.id) ? ' quarantine-item--queued' : ''}`}
               >
                 <input
                   type="checkbox"
-                  checked={selected.has(it.id)}
+                  checked={selected.has(it.id) && !queuedFileIds.has(it.id)}
+                  disabled={queuedFileIds.has(it.id)}
                   onChange={(e) => toggle(it.id, e.target.checked)}
                   aria-label={`Select ${it.filename}`}
                 />
@@ -124,9 +134,15 @@ export default function QuarantinePanel({
                   type="button"
                   className="quarantine-thumb-btn"
                   onClick={() =>
-                    multiSelect ? toggle(it.id, !selected.has(it.id)) : onView(it)
+                    multiSelect && !queuedFileIds.has(it.id)
+                      ? toggle(it.id, !selected.has(it.id))
+                      : onView(it)
                   }
-                  title={multiSelect ? 'Click to select' : 'Click to view'}
+                  title={
+                    queuedFileIds.has(it.id)
+                      ? 'Location assignment queued'
+                      : multiSelect ? 'Click to select' : 'Click to view'
+                  }
                 >
                   <LoadingImage
                     className="quarantine-thumb"
@@ -136,6 +152,9 @@ export default function QuarantinePanel({
                 </button>
                 <span className="quarantine-name">{it.filename}</span>
                 {it.date && <span className="quarantine-date">{it.date}</span>}
+                {queuedFileIds.has(it.id) && (
+                  <span className="quarantine-queued">Location queued</span>
+                )}
               </div>
             ))}
           </div>
@@ -143,7 +162,7 @@ export default function QuarantinePanel({
           <div className="quarantine-actions">
             <button
               onClick={() => onPickOnMap(ids)}
-              disabled={busy || ids.length === 0}
+              disabled={ids.length === 0}
               title="Click a point on the map to assign it to the selected captures"
             >
               Set location on map ({ids.length})
@@ -168,7 +187,7 @@ export default function QuarantinePanel({
                 <li key={m.geonameid}>
                   <button
                     onClick={() => assignToPlace(m)}
-                    disabled={busy || ids.length === 0}
+                    disabled={ids.length === 0}
                     title={
                       ids.length === 0 ? 'Select captures first' : 'Assign to this place'
                     }
