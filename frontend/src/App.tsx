@@ -10,6 +10,9 @@ import StitchPanel from './components/StitchPanel'
 import DuplicatesPanel from './components/DuplicatesPanel'
 import RepairPanel from './components/RepairPanel'
 import TimelineScrubber from './components/TimelineScrubber'
+import MarkersPanel from './components/MarkersPanel'
+import { useVideoMarkers } from './useVideoMarkers'
+import type { VideoMarker } from './videoMarkers'
 import { buildPlaces } from './locationFilter'
 import { dismissDuplicates, fetchTrack } from './api'
 import {
@@ -107,6 +110,7 @@ export default function App() {
   // Trips panel: auto-derived trips over the library (pure trips.buildTrips);
   // picking one applies its date range as the app-level filter + fits the camera.
   const [showTrips, setShowTrips] = useState(false)
+  const [showMarkers, setShowMarkers] = useState(false)
   // Unstitched-panorama panel: a library-wide list of which panorama sets still want a
   // 360 stitch (the toolbar shows only the count).
   const [showStitch, setShowStitch] = useState(false)
@@ -298,6 +302,22 @@ export default function App() {
   // applied. FileListPanel then shows only each group's in-view members, so panning
   // cannot split or renumber a flight merely because an intermediate clip leaves view.
   const flightCatalog = useMemo(() => buildFlightCatalog(visible), [visible])
+  const fullFlightCatalog = useMemo(() => buildFlightCatalog(features), [features])
+
+  function openVideoMarker(marker: VideoMarker) {
+    const feature = features.find((f) => f.properties.id === marker.file_id)
+    if (!feature) return
+    const selection = selectionForCatalogFlight(fullFlightCatalog, marker.file_id)
+      ?? { files: [feature], index: 0, flight: null }
+    trackRequest.current++
+    setTrack(null)
+    setTrackError(null)
+    setTrackLoadingKey(null)
+    setLightbox(selection)
+    setPlaybackSeek({ kind: 'marker', token: ++playbackSeekToken.current,
+      fileId: marker.file_id, timeS: marker.time_s, paused: true })
+    setShowMarkers(false)
+  }
 
   // Panel contents: every capture inside the current map viewport. A pure in-memory
   // filter over the already-loaded features — no /api refetch on pan/zoom. Memoized
@@ -421,6 +441,10 @@ export default function App() {
         : undefined,
     [lightboxFile, features],
   )
+  const videoMarkers = useVideoMarkers(
+    lightboxLive?.properties.media_type === 'video' ? lightboxLive.properties.id : null,
+    features, authFetch,
+  )
   // Effective favorite state for the heart: the live feature's server truth with
   // any optimistic override winning on top.
   const lightboxIsFavorite = useMemo(() => {
@@ -461,6 +485,7 @@ export default function App() {
         noGpsCount={quarantineCount}
         onOpenLocations={() => setShowLocations((v) => !v)}
         onOpenTrips={() => setShowTrips((v) => !v)}
+        onOpenMarkers={() => { videoMarkers.reload(); setShowMarkers((v) => !v) }}
         onOpenStitch={() => setShowStitch((v) => !v)}
         onOpenDuplicates={() => setShowDuplicates((v) => !v)}
         duplicatesCount={duplicatesCount}
@@ -675,6 +700,9 @@ export default function App() {
           }}
         />
       )}
+      {showMarkers && <MarkersPanel markers={videoMarkers.all} features={features}
+        loading={videoMarkers.loading} error={videoMarkers.error} onRetry={videoMarkers.reload}
+        onClose={() => setShowMarkers(false)} onPick={openVideoMarker} />}
       {showTimeline && (
         <TimelineScrubber
           features={features}
@@ -736,6 +764,13 @@ export default function App() {
       />
       {lightbox && (
         <Lightbox
+          markers={videoMarkers.markers}
+          markersAvailable={Boolean(lightboxLive?.properties.media_type === 'video')}
+          canEditMarkers={isAdmin && Boolean(lightboxLive)}
+          markerError={lightboxLive ? videoMarkers.currentError : null}
+          onRetryMarkers={() => void videoMarkers.retryCurrent()}
+          onSaveMarker={lightboxLive ? videoMarkers.save : undefined}
+          onDeleteMarker={lightboxLive ? videoMarkers.remove : undefined}
           files={lightbox.files}
           index={lightbox.index}
           flight={lightbox.flight}

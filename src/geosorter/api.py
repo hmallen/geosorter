@@ -38,6 +38,8 @@ Exposes the organized library over HTTP for the B7 frontend:
   (see :mod:`geosorter.duplicates`).
 * ``POST /api/favorite`` — toggle a content-hash favorite; ``/api/library``
   features carry the resulting ``is_favorite`` flag.
+* ``GET/POST /api/video-markers`` and ``PATCH/DELETE /api/video-markers/{id}``
+  — shared content-hash timestamp annotations; reads are public, writes admin-only.
 * ``GET  /api/inbox/list`` — the inbox as a selectable capture-group tree.
 * ``GET  /api/place-search?q=`` — forward GeoNames search for assign-by-name.
 * ``POST /api/stitch/{id}`` / ``GET /api/stitch/status/{job}`` — panorama hero
@@ -87,7 +89,7 @@ from starlette.staticfiles import StaticFiles
 
 from . import (
     auth, config, db, derived, duplicates, geocoder, inbox, pathing, repair,
-    srt_parser,
+    srt_parser, video_markers,
 )
 from .jobs import JobManager, WorkerBusy
 
@@ -254,6 +256,20 @@ class FavoriteRequest(BaseModel):
 
     file_id: int
     favorite: bool
+
+
+class VideoMarkerFields(BaseModel):
+    time_s: float = Field(ge=0, allow_inf_nan=False)
+    note: str = Field(default='', max_length=10000)
+
+
+class VideoMarkerCreate(VideoMarkerFields):
+    file_id: int
+
+
+class VideoMarkerPatch(BaseModel):
+    time_s: float = Field(default=0, ge=0, allow_inf_nan=False)
+    note: str = Field(default='', max_length=10000)
 
 
 class LoginRequest(BaseModel):
@@ -758,6 +774,47 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
         finally:
             conn.close()
         return {"file_id": req.file_id, "favorite": req.favorite}
+
+    @app.get("/api/video-markers")
+    def get_video_markers(file_id: int | None = None) -> dict:
+        conn = _index()
+        try:
+            return {"markers": video_markers.list_markers(conn, file_id)}
+        finally:
+            conn.close()
+
+    @app.post("/api/video-markers", dependencies=[Depends(require_admin)], status_code=201)
+    def create_video_marker(req: VideoMarkerCreate) -> dict:
+        conn = _index()
+        try:
+            return video_markers.save(conn, req.file_id, req.time_s, req.note)
+        finally:
+            conn.close()
+
+    @app.patch("/api/video-markers/{marker_id}", dependencies=[Depends(require_admin)])
+    def update_video_marker(marker_id: int, req: VideoMarkerPatch) -> dict:
+        conn = _index()
+        try:
+            row = video_markers.marker_video(conn, marker_id)
+            old = conn.execute("SELECT * FROM video_markers WHERE id=?", (marker_id,)).fetchone()
+            return video_markers.save(
+                conn, row["id"],
+                req.time_s if 'time_s' in req.model_fields_set else old['time_s'],
+                req.note if 'note' in req.model_fields_set else old['note'], marker_id,
+            )
+        finally:
+            conn.close()
+
+    @app.delete("/api/video-markers/{marker_id}", dependencies=[Depends(require_admin)], status_code=204)
+    def delete_video_marker(marker_id: int) -> Response:
+        conn = _index()
+        try:
+            video_markers.marker_video(conn, marker_id)
+            conn.execute("DELETE FROM video_markers WHERE id=?", (marker_id,))
+            conn.commit()
+            return Response(status_code=204)
+        finally:
+            conn.close()
 
     @app.get("/api/place-search")
     def place_search(q: str = "") -> dict:

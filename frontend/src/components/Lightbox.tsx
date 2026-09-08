@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { collageUrl, fetchFrames, posterUrl, previewUrl, stitchUrl, thumbUrl, videoUrl } from '../api'
+import { collageUrl, fetchFrames, previewUrl, stitchUrl, thumbUrl } from '../api'
 import { captionInfo } from '../captionInfo'
 import {
   PIP_ASPECT_RATIO,
@@ -11,7 +11,9 @@ import {
 import { resolvePanoViewer } from '../panoViewer'
 import type { StitchState } from '../stitchJob'
 import type { LibraryFeature, ViewerFlightContext } from '../types'
-import { nextFlightAutoplayIndex, type PlaybackSeekRequest } from '../viewerPlayback'
+import { applyMarkerSeek, nextFlightAutoplayIndex, type PlaybackSeekRequest } from '../viewerPlayback'
+import type { MarkerDraft, VideoMarker } from '../videoMarkers'
+import VideoPlayer from './VideoPlayer'
 import FlatHero from './FlatHero'
 import LoadingImage from './LoadingImage'
 
@@ -20,6 +22,13 @@ import LoadingImage from './LoadingImage'
 const PanoSphere = lazy(() => import('./PanoSphere'))
 
 interface Props {
+  markers: VideoMarker[]
+  markersAvailable: boolean
+  canEditMarkers: boolean
+  markerError: string | null
+  onRetryMarkers: () => void
+  onSaveMarker?: (draft: MarkerDraft, id?: number) => Promise<void>
+  onDeleteMarker?: (id: number) => Promise<void>
   files: LibraryFeature[]
   index: number
   flight: ViewerFlightContext | null
@@ -52,6 +61,7 @@ interface Props {
 }
 
 export default function Lightbox({
+  markers, markersAvailable, canEditMarkers, markerError, onRetryMarkers, onSaveMarker, onDeleteMarker,
   files,
   index,
   flight,
@@ -76,6 +86,7 @@ export default function Lightbox({
   const pipRef = useRef<HTMLDivElement | null>(null)
   const playbackCallback = useRef(onPlaybackTime)
   const resumeAfterTrackScrub = useRef<boolean | null>(null)
+  const appliedMarkerToken = useRef<number | null>(null)
   const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
   const resize = useRef<{
     pointerId: number
@@ -85,6 +96,7 @@ export default function Lightbox({
     startLeft: number
     startTop: number
     startWidth: number
+    chromeHeight: number
   } | null>(null)
   const [pipPosition, setPipPosition] = useState<PipPosition | null>(null)
   const [pipWidth, setPipWidth] = useState<number | null>(null)
@@ -170,7 +182,15 @@ export default function Lightbox({
   // feeding ordinary video timeupdate events back into this effect.
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !trackMode || !playbackSeek || playbackSeek.fileId !== fileId) return
+    if (!video || !playbackSeek || playbackSeek.fileId !== fileId) return
+    if (playbackSeek.kind === 'marker') {
+      if (appliedMarkerToken.current === playbackSeek.token) return
+      return applyMarkerSeek(video, playbackSeek.timeS, playbackSeek.paused, (time) => {
+        appliedMarkerToken.current = playbackSeek.token
+        playbackCallback.current(time)
+      })
+    }
+    if (!trackMode) return
 
     // MapLibre may emit dragstart and the first drag in one native callback,
     // allowing React to commit only the newest command. Treat the first command
@@ -274,8 +294,10 @@ export default function Lightbox({
       })
     }
     place()
+    const observer = new ResizeObserver(place)
+    observer.observe(pip)
     window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
+    return () => { observer.disconnect(); window.removeEventListener('resize', place) }
   }, [trackMode])
 
   const beginPipDrag = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -326,6 +348,7 @@ export default function Lightbox({
       startLeft: rect.left,
       startTop: rect.top,
       startWidth: rect.width,
+      chromeHeight: rect.height - rect.width / PIP_ASPECT_RATIO,
     }
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -340,6 +363,8 @@ export default function Lightbox({
       e.clientX - active.startX,
       e.clientY - active.startY,
       { width: window.innerWidth, height: window.innerHeight },
+      12,
+      active.chromeHeight,
     )
     setPipPosition(next.position)
     setPipWidth(next.width)
@@ -383,6 +408,8 @@ export default function Lightbox({
       0,
       (direction * 24) / PIP_ASPECT_RATIO,
       { width: window.innerWidth, height: window.innerHeight },
+      12,
+      rect.height - rect.width / PIP_ASPECT_RATIO,
     )
     setPipPosition(next.position)
     setPipWidth(next.width)
@@ -530,15 +557,19 @@ export default function Lightbox({
               </Suspense>
             )
           ) : f.properties.media_type === 'video' ? (
-            <video
+            <VideoPlayer
               key={f.properties.id}
-              ref={videoRef}
-              src={videoUrl(f.properties.path)}
-              poster={posterUrl(f.properties.path)}
-              controls
-              autoPlay
-              playsInline
+              videoRef={videoRef}
+              path={f.properties.path}
+              initiallyPaused={playbackSeek?.kind === 'marker' && playbackSeek.paused}
               onEnded={advanceAfterPlayback}
+              markers={markers}
+              markersAvailable={markersAvailable}
+              canEditMarkers={canEditMarkers}
+              markerError={markerError}
+              onRetryMarkers={onRetryMarkers}
+              onSaveMarker={onSaveMarker}
+              onDeleteMarker={onDeleteMarker}
             />
           ) : isPanorama ? (
             // Instant raw-tile collage placeholder: shown immediately while the

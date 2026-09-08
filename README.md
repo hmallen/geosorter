@@ -169,6 +169,21 @@ The **Process Inbox** panel scans the configured inbox and lets you import every
 capture or only selected capture groups. Progress is shown in the toolbar, and the
 library refreshes when the job finishes.
 
+In an organized video, **Add marker** pauses at the current position and opens a
+timestamp-and-note editor. Enter seconds, `MM:SS`, or `HH:MM:SS` (fractional seconds
+are supported), optionally add a note, and select **Save**. The video resumes only
+if it was playing before the editor opened. Markers appear on the seek bar and in
+the player's **Markers** list, where administrators can edit or delete them.
+The same controls work in the flight-map video window and fullscreen.
+
+The toolbar's **Markers** browser searches saved timestamps across the entire
+library, including videos outside the current map or filters. Selecting a marker
+opens its video paused at that timestamp, retaining the full flight's navigation.
+Markers are shared library annotations: everyone can view them; changes require
+an admin login when a password is configured. Identical video content shares its
+markers, which survive moves and re-imports. Notes are stored in the local index
+database, so include that database in backups.
+
 ## Admin password and network access
 
 The app is fully open when no admin password is configured. To make management

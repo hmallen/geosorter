@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 6  # v5->v6: persistent No-GPS backlog visibility flag
+SCHEMA_VERSION = 7  # v6->v7: content-hash video markers
 
 _INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -117,6 +117,16 @@ CREATE TABLE IF NOT EXISTS favorites (
     sha256 TEXT PRIMARY KEY,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS video_markers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256 TEXT NOT NULL,
+    time_s REAL NOT NULL CHECK(time_s >= 0),
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_video_markers_hash_time ON video_markers(sha256, time_s, id);
 
 CREATE TABLE IF NOT EXISTS schema_version (
     version    INTEGER NOT NULL,

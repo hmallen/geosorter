@@ -1241,6 +1241,54 @@
   max-height: none;
 }
 
+/* One player owns the video and its controls in expanded, PiP and fullscreen. */
+.video-player { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; background: #080b10; color: #f2f5fa; }
+.video-player > video { flex: 1 1 auto; width: 100%; min-height: 0; object-fit: contain; }
+.video-controls { flex: 0 0 auto; padding: 8px 12px; background: #151c26; font-size: 13px; }
+.video-controls button, .video-controls select, .marker-dialog button { min-height: 32px; padding: 4px 9px; border: 1px solid #526176; border-radius: 5px; background: #253145; color: #fff; cursor: pointer; }
+.video-controls button:disabled { opacity: .5; cursor: default; }
+.video-controls :focus-visible, .marker-dialog :focus-visible { outline: 2px solid #72d8ff; outline-offset: 2px; }
+.video-controls-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.video-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.video-volume { width: 65px; }
+.video-timeline { padding: 0 8px; }
+.video-timeline > input { display: block; width: 100%; margin: 0; height: 24px; accent-color: #72d8ff; touch-action: none; }
+.video-marker-ticks { position: relative; height: 24px; margin: 0 7px; }
+.video-controls .video-marker-tick { position: absolute; top: 0; transform: translateX(-50%); padding: 0; width: 22px; min-height: 24px; color: #ffc76c; background: transparent; border: 0; }
+.video-marker-tick:focus-visible { z-index: 1; }
+.marker-list { list-style: none; padding: 0; margin: 8px 0; }
+.marker-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid #52617666; padding: 8px 0; }
+.marker-list .marker-jump { display: flex; gap: 10px; text-align: left; flex: 1 1 160px; min-width: 0; background: transparent; color: inherit; border: 0; }
+.marker-jump time { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #72d8ff; }
+.marker-jump span { overflow-wrap: anywhere; white-space: pre-wrap; }
+.video-marker-list { max-height: min(22vh, 200px); overflow-y: auto; }
+.marker-delete-confirm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.markers-panel { z-index: 35; }
+.marker-groups { overflow-y: auto; padding: 0 14px 14px; }
+.marker-groups h3 { font-size: 14px; margin: 16px 0 4px; overflow-wrap: anywhere; }
+.marker-dialog { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; box-sizing: border-box; padding: 24px; border: 1px solid #526176; border-radius: 12px; background: #151c26; color: #f2f5fa; }
+.marker-dialog::backdrop { background: #000a; }
+.marker-dialog h2 { margin: 0 0 20px; font-size: 20px; }
+.marker-dialog label { display: flex; flex-direction: column; gap: 6px; margin: 14px 0 6px; }
+.marker-dialog input, .marker-dialog textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #526176; border-radius: 5px; background: #080b10; color: #fff; font: inherit; }
+.marker-dialog small { color: #b8c5d8; }
+.marker-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.video-controls [role="alert"], .marker-dialog [role="alert"] { color: #ffb8aa; }
+.lightbox--pip .lightbox-media { aspect-ratio: auto; }
+.lightbox--pip .video-player { height: auto; }
+.lightbox--pip .video-player > video { height: auto; aspect-ratio: 16 / 9; flex: 0 0 auto; }
+.lightbox--pip .lightbox-body { max-height: calc(100dvh - 24px); overflow-y: auto; }
+.lightbox--pip .video-controls { padding: 6px 8px; }
+.video-player:fullscreen { position: relative; width: 100vw; height: 100dvh; max-height: none; }
+.video-player:fullscreen > video,
+.lightbox--pip .video-player:fullscreen > video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; }
+.video-player:fullscreen > .video-controls { position: absolute; inset: auto 0 0; max-height: 60%; overflow-y: auto; background: #151c26e8; transition: opacity .2s ease; }
+.video-player--controls-hidden:fullscreen { cursor: none; }
+.video-player--controls-hidden:fullscreen > .video-controls { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .video-player:fullscreen > .video-controls { transition: none; }
+}
+
 .lightbox-nav {
   display: flex;
   gap: 12px;
