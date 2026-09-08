@@ -315,6 +315,15 @@ describe('resizePipFromCorner', () => {
   const start = { x: 300, y: 100, width: 400 }
   const viewport = { width: 1200, height: 800 }
 
+  it('reserves the measured controls and marker-list height at either corner', () => {
+    for (const corner of ['left', 'right'] as const) {
+      const result = resizePipFromCorner(start, corner, corner === 'left' ? -900 : 900, 0, viewport, 12, 400)
+      expect(result.width / (16 / 9) + 400 + result.position.y).toBeLessThanOrEqual(788)
+      expect(corner === 'left' ? result.position.x + result.width : result.position.x)
+        .toBe(corner === 'left' ? 700 : 300)
+    }
+  })
+
   it('anchors the left edge when resizing from the bottom right', () => {
     expect(resizePipFromCorner(start, 'right', 80, 10, viewport)).toEqual({
       position: { x: 300, y: 100 },

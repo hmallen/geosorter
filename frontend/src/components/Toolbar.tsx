@@ -22,6 +22,7 @@ import {
 } from './icons'
 
 interface ToolbarProps {
+  onOpenMarkers: () => void
   // Whether the viewer is an admin (m-implement-view-only-admin-auth). When false the
   // management actions are hidden and only the view-only controls (Locations, the
   // inbox badge) plus the Log-in control render.
@@ -59,6 +60,7 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({
+  onOpenMarkers,
   admin,
   onDone,
   stitchTargets,
@@ -225,6 +227,7 @@ export default function Toolbar({
             <RouteIcon className="tb-ico" />
             Trips
           </button>
+          <button onClick={onOpenMarkers} title="Browse saved video timestamps"><PinIcon className="tb-ico" />Markers</button>
           <button
             className={timelineOn ? 'tb-toggle--on' : undefined}
             onClick={onToggleTimeline}

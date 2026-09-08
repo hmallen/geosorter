@@ -373,9 +373,10 @@ export function clampPipWidth(
   position: PipPosition,
   viewport: RectSize,
   margin = 12,
+  chromeHeight = PIP_CHROME_HEIGHT,
 ): number {
   const maxByWidth = viewport.width - position.x - margin
-  const availableVideoHeight = viewport.height - position.y - margin - PIP_CHROME_HEIGHT
+  const availableVideoHeight = viewport.height - position.y - margin - chromeHeight
   const maxByHeight = availableVideoHeight * PIP_ASPECT_RATIO
   const maxWidth = Math.max(0, Math.min(maxByWidth, maxByHeight))
   const effectiveMin = Math.min(PIP_MIN_WIDTH, maxWidth)
@@ -400,6 +401,7 @@ export function resizePipFromCorner(
   deltaY: number,
   viewport: RectSize,
   margin = 12,
+  chromeHeight = PIP_CHROME_HEIGHT,
 ): { position: PipPosition; width: number } {
   const horizontalDelta = corner === 'left' ? -deltaX : deltaX
   const verticalDelta = deltaY * PIP_ASPECT_RATIO
@@ -411,7 +413,7 @@ export function resizePipFromCorner(
   if (corner === 'right') {
     return {
       position: { x: start.x, y: start.y },
-      width: clampPipWidth(start.width + delta, start, viewport, margin),
+      width: clampPipWidth(start.width + delta, start, viewport, margin, chromeHeight),
     }
   }
 
@@ -423,6 +425,7 @@ export function resizePipFromCorner(
     { x: mirroredX, y: start.y },
     viewport,
     margin,
+    chromeHeight,
   )
   return {
     position: { x: anchoredRight - width, y: start.y },

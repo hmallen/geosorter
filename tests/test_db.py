@@ -204,8 +204,8 @@ def test_migrate_v1_to_v2_adds_columns_losslessly(tmp_path):
             _B9A_NEW_COLUMNS | _B13_NEW_COLUMN | _V4_NEW_COLUMN | _V6_NEW_COLUMN
         ) <= _columns(conn, "files")
         # migrate_index_schema stamps the CURRENT SCHEMA_VERSION once every target
-        # column is present, so an old v1 DB jumps straight to the latest (now 6).
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        # column is present, so an old v1 DB jumps straight to the latest.
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         # the pre-existing row survives, new columns read as NULL
         row = conn.execute(
             "SELECT sha256, capture_kind, frame_count, star_rating, stitch_status FROM files"
@@ -222,7 +222,7 @@ def test_migrate_v1_to_v2_is_idempotent(tmp_path):
         db.init_index_schema(conn)
         db.init_index_schema(conn)  # second run must be a clean no-op
         assert _B9A_NEW_COLUMNS <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         # exactly one schema_version row (no duplicate stamping)
         assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 1
     finally:
@@ -240,7 +240,7 @@ def test_migrate_v2_to_v3_adds_stitch_status_losslessly(tmp_path):
         db.init_index_schema(conn)  # runs the v2->v3 migration on the existing DB
 
         assert _B13_NEW_COLUMN <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         # the pre-existing panorama row survives, stitch_status reads as NULL
         row = conn.execute(
             "SELECT sha256, capture_kind, frame_count, stitch_status FROM files"
@@ -262,7 +262,7 @@ def test_migrate_v3_to_v4_adds_stitch_projection_losslessly(tmp_path):
         db.init_index_schema(conn)  # runs the v3->v4 migration on the existing DB
 
         assert _V4_NEW_COLUMN <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         # the pre-existing panorama row survives, stitch_projection reads as NULL
         row = conn.execute(
             "SELECT sha256, capture_kind, stitch_status, stitch_projection FROM files"
@@ -280,7 +280,7 @@ def test_fresh_install_is_current_with_new_columns(tmp_path):
         assert (
             _B9A_NEW_COLUMNS | _B13_NEW_COLUMN | _V4_NEW_COLUMN | _V6_NEW_COLUMN
         ) <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         assert conn.execute(
             "SELECT dflt_value FROM pragma_table_info('files') "
             "WHERE name='no_gps_hidden'"
@@ -335,7 +335,7 @@ def test_migrate_v4_to_v5_creates_new_tables(tmp_path):
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert {"duplicates", "favorites"} <= names
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         # the pre-existing row survives untouched
         assert conn.execute("SELECT sha256 FROM files").fetchone()[0] == "fed789"
     finally:
@@ -358,7 +358,7 @@ def test_migrate_v5_to_v6_adds_no_gps_hidden_losslessly(tmp_path):
         db.init_index_schema(conn)
 
         assert _V6_NEW_COLUMN <= _columns(conn, "files")
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == db.SCHEMA_VERSION
         assert conn.execute(
             "SELECT filename, no_gps_hidden FROM files"
         ).fetchone() == ("q.jpg", 0)
