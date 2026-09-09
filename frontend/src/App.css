@@ -1249,7 +1249,9 @@
 .video-controls button:disabled { opacity: .5; cursor: default; }
 .video-controls :focus-visible, .marker-dialog :focus-visible { outline: 2px solid #72d8ff; outline-offset: 2px; }
 .video-controls-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.video-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.video-time { display: inline-grid; flex: 0 0 auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.video-time > span { grid-area: 1 / 1; }
+.video-time-size { visibility: hidden; }
 .video-volume { width: 65px; }
 .video-timeline { padding: 0 8px; }
 .video-timeline > input { display: block; width: 100%; margin: 0; height: 24px; accent-color: #72d8ff; touch-action: none; }

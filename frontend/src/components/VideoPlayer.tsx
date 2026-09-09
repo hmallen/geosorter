@@ -230,7 +230,11 @@ export default function VideoPlayer({ videoRef, path, initiallyPaused, onEnded, 
       </div>
       <div className="video-controls-row">
         <button onClick={togglePlay} aria-label={paused ? 'Play video' : 'Pause video'}>{paused ? '▶' : '❚❚'}</button>
-        <time className="video-time">{formatMarkerTime(time)} / {formatMarkerTime(duration)}</time>
+        <time className="video-time">
+          {/* Reserve the longest label for this video, including all millisecond digits. */}
+          <span className="video-time-size" aria-hidden="true">{`${formatMarkerTime(duration).split('.')[0]}.000 / ${formatMarkerTime(duration).split('.')[0]}.000`}</span>
+          <span>{formatMarkerTime(time)} / {formatMarkerTime(duration)}</span>
+        </time>
         <button onClick={() => { if (videoRef.current) videoRef.current.muted = !muted }} aria-label={muted ? 'Unmute video' : 'Mute video'}>{muted ? 'Unmute' : 'Mute'}</button>
         <input className="video-volume" aria-label="Volume" type="range" min={0} max={1} step="0.05" value={muted ? 0 : volume}
           onChange={(e) => { if (videoRef.current) { videoRef.current.volume = Number(e.target.value); videoRef.current.muted = false } }} />
