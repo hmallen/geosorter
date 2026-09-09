@@ -25,8 +25,8 @@ export function formatMarkerTime(seconds: number): string {
   const ms = Math.round(Math.max(0, Number.isFinite(seconds) ? seconds : 0) * 1000)
   const h = Math.floor(ms / 3600000)
   const m = Math.floor(ms / 60000) % 60
-  const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0').replace(/\.?0+$/, '')
-  return `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${s.padStart(2, '0')}`
+  const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0')
+  return `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${s}`
 }
 
 export const sortMarkers = (markers: VideoMarker[]) =>

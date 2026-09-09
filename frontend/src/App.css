@@ -1248,11 +1248,13 @@
 .video-controls button, .video-controls select, .marker-dialog button { min-height: 32px; padding: 4px 9px; border: 1px solid #526176; border-radius: 5px; background: #253145; color: #fff; cursor: pointer; }
 .video-controls button:disabled { opacity: .5; cursor: default; }
 .video-controls :focus-visible, .marker-dialog :focus-visible { outline: 2px solid #72d8ff; outline-offset: 2px; }
-.video-controls-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.video-controls-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.video-controls-row > button, .video-controls-row > select { min-height: 28px; padding: 2px 6px; font-size: 12px; }
+.video-controls-row > .video-icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px; padding: 0; }
 .video-time { display: inline-grid; flex: 0 0 auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .video-time > span { grid-area: 1 / 1; }
 .video-time-size { visibility: hidden; }
-.video-volume { width: 65px; }
+.video-volume { width: 56px; margin: 0; }
 .video-timeline { padding: 0 8px; }
 .video-timeline > input { display: block; width: 100%; margin: 0; height: 24px; accent-color: #72d8ff; touch-action: none; }
 .video-marker-ticks { position: relative; height: 24px; margin: 0 7px; }

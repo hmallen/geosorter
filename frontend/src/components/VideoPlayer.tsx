@@ -199,7 +199,7 @@ export default function VideoPlayer({ videoRef, path, initiallyPaused, onEnded, 
     }}>
     <video ref={videoRef} src={videoUrl(path)} poster={posterUrl(path)} autoPlay={!initiallyPaused} playsInline
       tabIndex={0} aria-label="Video playback" onEnded={() => { setPaused(true); onEnded() }}
-      onPlay={() => setPaused(false)} onPause={() => setPaused(true)}
+      onClick={togglePlay} onPlay={() => setPaused(false)} onPause={() => setPaused(true)}
       onTimeUpdate={() => setTime(videoRef.current?.currentTime ?? 0)}
       onSeeked={() => setTime(videoRef.current?.currentTime ?? 0)}
       onLoadedMetadata={() => { const value = videoRef.current?.duration ?? 0; setDuration(Number.isFinite(value) ? value : 0) }}
@@ -229,19 +229,24 @@ export default function VideoPlayer({ videoRef, path, initiallyPaused, onEnded, 
           onKeyUp={endScrub} onChange={(e) => seek(Number(e.target.value))} />
       </div>
       <div className="video-controls-row">
-        <button onClick={togglePlay} aria-label={paused ? 'Play video' : 'Pause video'}>{paused ? '▶' : '❚❚'}</button>
+        <button className="video-icon-button" onClick={togglePlay} aria-label={paused ? 'Play video' : 'Pause video'} title={paused ? 'Play' : 'Pause'}>{paused ? '▶' : '❚❚'}</button>
         <time className="video-time">
           {/* Reserve the longest label for this video, including all millisecond digits. */}
-          <span className="video-time-size" aria-hidden="true">{`${formatMarkerTime(duration).split('.')[0]}.000 / ${formatMarkerTime(duration).split('.')[0]}.000`}</span>
+          <span className="video-time-size" aria-hidden="true">{`${formatMarkerTime(duration)} / ${formatMarkerTime(duration)}`}</span>
           <span>{formatMarkerTime(time)} / {formatMarkerTime(duration)}</span>
         </time>
-        <button onClick={() => { if (videoRef.current) videoRef.current.muted = !muted }} aria-label={muted ? 'Unmute video' : 'Mute video'}>{muted ? 'Unmute' : 'Mute'}</button>
+        <button className="video-icon-button" onClick={() => { if (videoRef.current) videoRef.current.muted = !muted }} aria-label={muted ? 'Unmute video' : 'Mute video'} title={muted ? 'Unmute' : 'Mute'}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+            {muted ? <path d="m17 9 6 6m0-6-6 6" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13" />}
+          </svg>
+        </button>
         <input className="video-volume" aria-label="Volume" type="range" min={0} max={1} step="0.05" value={muted ? 0 : volume}
           onChange={(e) => { if (videoRef.current) { videoRef.current.volume = Number(e.target.value); videoRef.current.muted = false } }} />
         <select aria-label="Playback speed" value={speed} onChange={(e) => { if (videoRef.current) videoRef.current.playbackRate = Number(e.target.value) }}>
           {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
         </select>
-        <button onClick={() => void toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen video'}>⛶</button>
+        <button className="video-icon-button" onClick={() => void toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen video'} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>⛶</button>
         {markersAvailable && <>
           {canEditMarkers && onSaveMarker && <button onClick={() => beginEditor()} disabled={!duration}>＋ Add marker</button>}
           <button aria-expanded={showMarkers} onClick={() => setShowMarkers((v) => !v)}>Markers ({markers.length})</button>
