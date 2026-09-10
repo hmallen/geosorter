@@ -284,6 +284,10 @@ def migrate_index_schema(conn: sqlite3.Connection) -> None:
 
 def init_index_schema(conn: sqlite3.Connection) -> None:
     """Create the index-DB tables (idempotent) and migrate to the current version."""
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name='schema_version'").fetchone():
+        version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        if version is not None and version > SCHEMA_VERSION:
+            raise ValueError("This catalog requires a newer version of GeoSorter.")
     conn.executescript(_INDEX_SCHEMA)
     _stamp_version(conn)
     migrate_index_schema(conn)

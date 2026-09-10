@@ -509,7 +509,9 @@ def test_install_untrunc_downloads_flattens_and_verifies(tmp_path):
     assert result.exe_path.read_bytes() == b"binary!"
     assert (tmp_path / "tools" / "AVCODEC-57.DLL").is_file()  # DLLs beside the exe
     assert not (tmp_path / "tools" / "untrunc_x64.zip").exists()  # archive cleaned
-    assert verified == [result.exe_path]
+    assert len(verified) == 1
+    assert verified[0].name == result.exe_path.name
+    assert verified[0].parent.name.startswith("untrunc-stage-")
     assert progress and result.release_tag == "latest"
 
 
@@ -545,6 +547,28 @@ def test_install_untrunc_force_redownloads_over_existing(tmp_path):
     )
     assert result.reused is False
     assert result.exe_path.read_bytes() == b"binary!"  # replaced, not reused
+
+
+def test_install_untrunc_failed_verification_keeps_old_install(tmp_path):
+    dest = tmp_path / "tools"
+    dest.mkdir()
+    (dest / "untrunc.exe").write_bytes(b"working")
+    (dest / "library.dll").write_bytes(b"old dependency")
+    payload = _fake_zip_bytes("untrunc_x64/untrunc.exe")
+    def reject(exe):
+        raise RuntimeError("missing DLL")
+    with pytest.raises(RuntimeError, match="missing DLL"):
+        install_untrunc(
+            dest, force=True,
+            fetch_json=lambda url: {"tag_name": "test", "assets": [{
+                "name": "untrunc_x64.zip", "size": len(payload),
+                "browser_download_url": "https://example.invalid/z",
+            }]},
+            fetch_to_file=lambda url, d, progress: d.write_bytes(payload),
+            verify=reject,
+        )
+    assert (dest / "untrunc.exe").read_bytes() == b"working"
+    assert (dest / "library.dll").read_bytes() == b"old dependency"
 
 
 def test_install_untrunc_without_exe_in_zip_fails(tmp_path):

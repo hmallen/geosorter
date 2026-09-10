@@ -12,6 +12,9 @@ manually, not in the test suite.
 from __future__ import annotations
 
 import shutil
+import hashlib
+import json
+import re
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -226,6 +229,20 @@ def load(
 def _download_file(
     url: str, target: Path, *, resume: bool = True, progress: ProgressFn | None = None
 ) -> Path:
+    receipt = target.with_suffix(target.suffix + ".complete.json")
+    if resume and target.exists() and receipt.exists():
+        try:
+            saved = json.loads(receipt.read_text())
+            with target.open("rb") as source:
+                digest = hashlib.file_digest(source, "sha256").hexdigest()
+            if saved == {"url": url, "sha256": digest}:
+                if progress:
+                    progress(target.name, target.stat().st_size, target.stat().st_size)
+                return target
+        except (OSError, ValueError):
+            pass
+        target.unlink(missing_ok=True)
+    receipt.unlink(missing_ok=True)
     headers: dict[str, str] = {}
     existing = target.stat().st_size if target.exists() else 0
     if resume and existing:
@@ -233,17 +250,23 @@ def _download_file(
     with httpx.stream(
         "GET", url, headers=headers, follow_redirects=True, timeout=60.0
     ) as resp:
-        if resp.status_code == 416:  # range not satisfiable -> already complete
-            return target
+        if resp.status_code == 416 and resume:
+            return _download_file(url, target, resume=False, progress=progress)
         resp.raise_for_status()
 
         # Only treat the response as a resume if the server actually honoured the
         # Range request AND resumed from our exact offset. A 200 (Range ignored)
         # or a mismatched Content-Range means we must restart the file from
         # scratch — appending would corrupt it.
-        partial = resp.status_code == 206 and resp.headers.get(
-            "Content-Range", ""
-        ).startswith(f"bytes {existing}-")
+        range_match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", resp.headers.get("Content-Range", ""))
+        partial = (resume and resp.status_code == 206 and range_match is not None
+                   and int(range_match[1]) == existing
+                   and int(range_match[2]) >= existing
+                   and int(range_match[3]) > int(range_match[2]))
+        if resp.status_code == 206 and not partial:
+            if not resume:
+                raise ValueError("Server returned an invalid partial download. Please retry.")
+            return _download_file(url, target, resume=False, progress=progress)
 
         downloaded = existing if partial else 0
         mode = "ab" if partial else "wb"
@@ -251,12 +274,19 @@ def _download_file(
         # total stays 0 (unknown) when Content-Length is absent (chunked), so the
         # progress callback shows raw bytes rather than a bogus percentage.
         total = (int(length) + downloaded) if length is not None else 0
+        if partial:
+            total = int(range_match[3])
         with open(target, mode) as fh:
             for chunk in resp.iter_bytes(65536):
                 fh.write(chunk)
                 downloaded += len(chunk)
                 if progress:
                     progress(target.name, downloaded, total)
+        if total and downloaded != total:
+            raise ValueError("Download ended before all bytes arrived. Please retry.")
+    with target.open("rb") as source:
+        digest = hashlib.file_digest(source, "sha256").hexdigest()
+    receipt.write_text(json.dumps({"url": url, "sha256": digest}), encoding="utf-8")
     return target
 
 
@@ -268,6 +298,7 @@ def download(
     resume: bool = True,
     progress: ProgressFn | None = None,
     features: bool = False,
+    phase_progress: Callable[[str], None] | None = None,
 ) -> Path:
     """Download the GeoNames source files into ``dest_dir`` and extract cities500.
 
@@ -295,17 +326,25 @@ def download(
         _download_file(base_url + fname, dest / fname, resume=resume, progress=progress)
 
     zip_path = dest / "cities500.zip"
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extract("cities500.txt", dest)
-    # Drop the archive so it does not coexist with the extracted .txt (the
-    # disk pre-flight only budgets for one copy).
-    zip_path.unlink(missing_ok=True)
+    def extract(archive, member):
+        if phase_progress:
+            phase_progress("extracting")
+        for attempt in range(2):
+            try:
+                with zipfile.ZipFile(archive) as zf:
+                    zf.extract(member, dest)
+                return
+            except zipfile.BadZipFile:
+                archive.unlink(missing_ok=True)
+                archive.with_suffix(archive.suffix + ".complete.json").unlink(missing_ok=True)
+                if attempt:
+                    raise
+                _download_file(base_url + archive.name, archive, resume=False, progress=progress)
+    extract(zip_path, "cities500.txt")
 
     if features:
         feat_zip = dest / _FEATURES_REMOTE
         _download_file(base_url + _FEATURES_REMOTE, feat_zip, resume=resume, progress=progress)
-        with zipfile.ZipFile(feat_zip) as zf:
-            zf.extract("allCountries.txt", dest)
-        feat_zip.unlink(missing_ok=True)
+        extract(feat_zip, "allCountries.txt")
 
     return dest

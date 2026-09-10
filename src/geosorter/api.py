@@ -88,7 +88,7 @@ from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from . import (
-    auth, config, db, derived, duplicates, geocoder, inbox, pathing, repair,
+    __version__, auth, config, db, derived, duplicates, geocoder, inbox, pathing, repair,
     srt_parser, video_markers,
 )
 from .jobs import JobManager, WorkerBusy
@@ -338,7 +338,7 @@ def _relpath(dest_path: str, *roots: Path) -> str:
     return stripped.name
 
 
-def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> FastAPI:
+def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None, token_store=None) -> FastAPI:
     """Build the FastAPI app bound to one :class:`~geosorter.config.Config`.
 
     ``job_manager`` is injectable for tests (e.g. a :class:`~geosorter.jobs.JobManager`
@@ -367,7 +367,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     # config -> `require_admin` is a no-op and the whole app stays open (today's
     # loopback-dev behaviour, and what every existing test relies on). `tokens` holds
     # the live bearer tokens issued by /api/login (in-memory; reset on restart).
-    tokens = auth.TokenStore()
+    tokens = token_store if token_store is not None else auth.TokenStore()
     auth_configured = bool(cfg.admin_password_hash)
     # Failed-login throttle: after a burst of consecutive wrong passwords from one
     # address, /api/login answers 429 for a cooldown instead of letting an online
@@ -398,7 +398,7 @@ def create_app(cfg, *, spa_dir: Path | str | None = None, job_manager=None) -> F
     finally:
         _startup_conn.close()
 
-    app = FastAPI(title="geosorter", version="0.1.0")
+    app = FastAPI(title="geosorter", version=__version__)
 
     def _safe_path(relpath: str) -> Path:
         """Resolve a request path under the library or raise (traversal guard)."""

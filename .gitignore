@@ -43,6 +43,7 @@ pytmp-geosorter/
 
 # Playwright MCP browser-run artifacts (console logs, page snapshots, screenshots)
 .playwright-mcp/
+.playwright-cli/
 
 # graphify transient artifacts — the top-level graph outputs (graph.json,
 # GRAPH_REPORT.md, manifest.json, ...) are tracked; the AST cache and dated
@@ -52,3 +53,8 @@ graphify-out/20*/
 
 # pytest scratch basetemps (never commit — may hold large real media)
 pytmp-*/
+
+# Desktop candidate builds and isolated browser QA (never ship user data).
+/output/release-build/
+/output/releases/
+/output/desktop-qa/

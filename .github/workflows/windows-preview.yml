@@ -1,0 +1,60 @@
+name: Windows preview candidate
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths: ['src/**', 'frontend/**', 'tests/**', 'packaging/**', 'pyproject.toml', 'uv.lock', '.github/workflows/windows-preview.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: uv sync --frozen --group release
+      - run: npm --prefix frontend ci
+      - name: Prepare pinned media tools for tests
+        shell: pwsh
+        run: |
+          uv run --group release python packaging/build_release.py --prepare-tools-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Join-Path $env:GITHUB_WORKSPACE 'output/release-build/tools/exiftool' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Join-Path $env:GITHUB_WORKSPACE 'output/release-build/tools/ffmpeg/bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Verify media tools execute
+        run: uv run python -c "import json; from geosorter.desktop import dependency_checks; checks = dependency_checks(); print(json.dumps(checks, indent=2)); assert all(check['ok'] for check in checks), 'Required media tools failed their execution checks'"
+      - run: uv run pytest -q
+      - run: npm --prefix frontend run test
+      - run: npm --prefix frontend run lint
+      - run: uv run --group release python packaging/build_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GeoSorter-windows-preview-candidate
+          path: output/releases/*
+          if-no-files-found: error
+  draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GeoSorter-windows-preview-candidate
+          path: artifacts
+      - name: Create draft candidate release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" artifacts/* --draft --prerelease --title "GeoSorter $RELEASE_TAG Windows preview candidate" --notes-file packaging/RELEASE_NOTES.md

@@ -40,7 +40,7 @@ import uvicorn
 
 from . import (
     __version__, api, auth, config, db, derived, diagnose, geocoder,
-    geonames_loader, pathing, repair,
+    pathing, repair,
 )
 from .metadata import ExifToolVersionError, MetadataExtractor
 from .organize import BatchReport, run_organize
@@ -197,39 +197,18 @@ def bootstrap(
     """
     cfg = config.load(config_path)
 
-    # Decide the spatial-index mode: honour config, but fall back to columnar
-    # if the SQLite R-tree module is unavailable on this platform.
-    effective = cfg.spatial_index
-    if effective == "rtree":
-        probe = db.connect(cfg.geonames_db_path, integrity_check=False)
-        try:
-            if not db.probe_rtree(probe):
-                effective = "columnar"
-                click.echo("R-tree module unavailable; using columnar index.")
-        finally:
-            probe.close()
-
-    # Resolve the source directory.
-    if from_dir:
-        src = Path(from_dir)
-    elif no_download:
+    from .bootstrap import run as run_bootstrap
+    if no_download and not from_dir:
         raise click.UsageError("--no-download requires --from <dir>.")
-    else:
-        cache = config.default_data_dir() / "geonames-src"
-        click.echo("Downloading GeoNames data from geonames.org ...")
 
-        def _progress(name: str, done: int, total: int) -> None:
-            pct = f"{done * 100 // total}%" if total else f"{done} bytes"
-            click.echo(f"  {name}: {pct}", nl=False)
-            click.echo("\r", nl=False)
+    def progress(phase, current, done, total):
+        detail = f"{done * 100 // total}%" if total else (f"{done} bytes" if done else "")
+        click.echo(f"{phase}: {current} {detail}")
 
-        src = geonames_loader.download(cache, progress=_progress, features=features)
-        click.echo("")
-
-    counts = geonames_loader.load(
-        cfg.geonames_db_path, src, spatial_index=effective, features=features
-    )
-    config.update_spatial_index(config_path, effective)
+    counts = run_bootstrap(cfg, config_path=config.resolve_config_path(config_path),
+                           source=Path(from_dir) if from_dir else None,
+                           features=features, progress=progress)
+    effective = counts["spatial_index"]
 
     feature_note = f", {counts['features']} features" if "features" in counts else ""
     click.echo(
@@ -804,6 +783,15 @@ def _resolve_host(host: str | None) -> tuple[str, bool]:
     if host is None:
         return "127.0.0.1", False
     return host, host not in _LOOPBACK
+
+
+@cli.command()
+@_CONFIG_OPTION
+@click.option("--settings", is_flag=True, help="Open Settings & Help.")
+def desktop(config_path: str | None, settings: bool) -> None:
+    """Open the Windows desktop application and first-run setup."""
+    from .desktop_launcher import run
+    run(config_path, settings=settings)
 
 
 @cli.command()
