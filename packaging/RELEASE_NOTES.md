@@ -1,5 +1,7 @@
 Windows preview candidate for GeoSorter first-run setup.
 
+- Version 0.2.1 fixes video-repair downloads on fresh Windows installations by
+  loading the bundled trusted certificates alongside the Windows certificate store.
 - Open GeoSorter from the Start Menu or extract the ZIP and run GeoSorter.exe.
 - Choose separate incoming and organized-library folders, then prepare city data.
 - Setup never imports media automatically. Use Review inbox when ready.

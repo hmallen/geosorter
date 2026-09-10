@@ -19,6 +19,24 @@ The app stays running when the browser closes. Quit waits for active jobs; no
 media operation is forcibly terminated. Relaunching opens the existing instance.
 Application updates are installed manually from the releases page.
 
+### Video repair certificate error in 0.2.0
+
+If Extras reports `CERTIFICATE_VERIFY_FAILED: unable to get local issuer
+certificate`, install preview 0.2.1 or later, reopen GeoSorter, and retry Video
+repair setup. Quit GeoSorter through the interface or tray before installing the
+update. Your existing configuration and library are preserved.
+
+The corrected downloader explicitly loads the bundled certifi CA certificates
+alongside Windows/custom trust roots for both the release lookup and ZIP download.
+Certificate-chain and hostname verification remain enabled. The packaged smoke
+check verifies that this CA bundle can be loaded. Tests cover an empty native
+root store and rejection of untrusted certificates; a live GitHub release download
+and executable check also passed using the bundled roots alone.
+
+If the error persists in 0.2.1, check Windows date/time and whether a company proxy
+or security product requires its approved root certificate in the Windows trust
+store. Do not turn off certificate verification to work around the error.
+
 ## Developer commands
 
 ```powershell

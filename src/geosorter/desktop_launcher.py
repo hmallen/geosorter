@@ -265,6 +265,12 @@ def main():
         tkinter.Tcl().eval("info patchlevel")
         from .desktop import dependency_checks
         results = dependency_checks()
+        from .repair import _download_context
+        try:
+            context = _download_context()
+            results.append({"name": "download certificates", "ok": bool(context.get_ca_certs()), "message": "Ready"})
+        except (OSError, ValueError) as exc:
+            results.append({"name": "download certificates", "ok": False, "message": str(exc)})
         output = Path(sys.argv[sys.argv.index("--smoke-test") + 1])
         output.write_text(json.dumps(results, indent=2), encoding="utf-8")
         raise SystemExit(0 if all(check["ok"] for check in results) else 1)
