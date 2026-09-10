@@ -21,7 +21,70 @@ place.
 
 <img src="docs/images/geosorter-locations.png" alt="geosorter Locations panel" width="380">
 
-## Requirements
+## Install and run on Windows
+
+The Windows x64 desktop preview includes the Python runtime, built web interface,
+ExifTool, FFmpeg, and ffprobe. You do not need to install Python, uv, Node.js, or
+these media tools separately to use a packaged build.
+
+See [Releases](https://github.com/hmallen/geosorter/releases) for available builds.
+Preview packages come in two forms:
+
+- **Installer:** run `GeoSorter-<version>-windows-x64-Setup.exe`, then open
+  **GeoSorter** from the Start menu or the optional desktop shortcut.
+- **ZIP:** extract the entire `GeoSorter-<version>-windows-x64.zip` archive, then
+  run `GeoSorter.exe` inside the extracted `GeoSorter` folder. Keep the accompanying
+  files and folders together.
+
+GeoSorter starts its local server and opens your default browser automatically.
+The desktop launcher currently supports Windows only; other systems can use the
+[source installation](#install-from-source) and manual server below.
+
+### First launch
+
+1. Select **Set up a new library**.
+2. Choose your **Incoming media** folder and an empty **Organized library** folder.
+   The folders must be separate; neither can contain the other. Use **Create folder
+   at this path** if you need a new destination, then **Save folders & continue**.
+3. Select **Download & prepare place data** to download and index city and region
+   names. This step requires an internet connection.
+4. Select **Review inbox** to inspect incoming captures and start an import, or
+   **Open library** to browse. Setup saves your choices and prepares data; it does
+   not import or move your media automatically.
+
+If you already use GeoSorter, select **Use existing GeoSorter configuration** and
+choose your original `geosorter.toml` to retain its catalog, annotations, and media.
+A populated media folder without its GeoSorter catalog cannot be adopted as a new
+library. Connect any missing drives before continuing.
+
+### Everyday use and updates
+
+Open GeoSorter from its shortcut or extracted executable whenever you want to use
+it. Launching it again reopens the running instance. Closing the browser tab leaves
+GeoSorter running; use **Settings & Help → Quit GeoSorter** or **Quit** on its
+system tray icon to stop it. If work is active, choose **Quit when finished**.
+
+**Settings & Help** lets you change the incoming folder while idle, check connections
+and tools, and export diagnostics. Under **Extras**, you can download detailed
+parks, peaks, and lakes, locate an optional Hugin installation for panorama
+stitching, or install video repair support. Library relocation is not available in
+this preview.
+
+Updates are manual: quit GeoSorter and wait for active work to finish, then install
+the newer preview or extract its ZIP into a new folder. Settings and the catalog
+are stored in per-user application data and are shared by the installer and ZIP.
+The ZIP is not a self-contained portable library. Updating or uninstalling the
+application preserves your settings, catalog, and media.
+
+Preview status, known limitations, and build/release instructions are tracked in
+[`docs/windows-preview-release.md`](docs/windows-preview-release.md).
+
+The map uses hosted OpenFreeMap tiles. Organizing and browsing cached media are local,
+but displaying the basemap requires an internet connection.
+
+## Install from source
+
+### Requirements
 
 - Python 3.13 or newer
 - [uv](https://docs.astral.sh/uv/) for the recommended Python workflow
@@ -33,23 +96,9 @@ place.
 ExifTool, `ffmpeg`, and `ffprobe` must be available on `PATH`. Hugin can be on
 `PATH` or configured with `hugin_bin_dir`.
 
-The map uses hosted OpenFreeMap tiles. Organizing and browsing cached media are local,
-but displaying the basemap requires an internet connection.
+### Build and launch
 
-## Install
-
-Windows desktop preview development and release instructions are in
-[`docs/windows-preview-release.md`](docs/windows-preview-release.md). The desktop
-launcher provides guided first-run setup and opens the interface automatically:
-
-```bash
-uv run geosorter desktop
-```
-
-Build the frontend first when running from source. Installer and ZIP candidates
-bundle their own runtime and media tools; see the release checklist before sharing.
-
-From a clone of this repository:
+From a clone of this repository, install dependencies and build the interface:
 
 ```bash
 uv sync
@@ -60,7 +109,28 @@ npm --prefix frontend run build
 The frontend build is written to `src/geosorter/webui`, where the Python server can
 serve it on the same origin as the API.
 
-## Configure
+On Windows, start the desktop launcher and follow the first-launch steps above:
+
+```bash
+uv run geosorter desktop
+```
+
+To open an existing configuration explicitly:
+
+```powershell
+uv run geosorter desktop --config "C:\path\to\geosorter.toml"
+```
+
+Desktop launch uses `--config`, then its saved desktop selection, then the platform
+user configuration path. It does **not** discover `./geosorter.toml` or use
+`GEOSORTER_CONFIG`. Use the explicit command above when switching from a
+repository-local configuration. **Settings & Help → Configuration location** shows
+the active desktop configuration path.
+
+The following manual configuration and bootstrap commands are for command-line
+use or running the server directly. Desktop setup handles these steps for you.
+
+## Configure for command-line use
 
 Create a starter configuration:
 
@@ -85,7 +155,8 @@ See [`geosorter.example.toml`](geosorter.example.toml) for cache tiers, duplicat
 handling, GPS inference, panorama settings, HEVC proxy warming, and other optional
 settings.
 
-Configuration is resolved in this order:
+Ordinary CLI commands (including `serve`, but excluding `desktop`) resolve
+configuration in this order:
 
 1. `--config PATH`
 2. `GEOSORTER_CONFIG`
@@ -103,7 +174,7 @@ uv run geosorter organize --dry-run
 The local `geosorter.toml` is ignored by Git because it normally contains personal
 paths.
 
-## Bootstrap place data
+## Bootstrap place data from the command line
 
 Before the first import, download and index the GeoNames city/admin data:
 
@@ -120,7 +191,10 @@ uv run geosorter bootstrap --features
 `--features` downloads the much larger GeoNames `allCountries` dataset. Bootstrap is
 normally a one-time operation.
 
-## Organize media
+## Organize media from the command line
+
+Desktop users can import through **Review inbox** or **Process Inbox**. To import
+from a source installation's command line, use the commands below.
 
 Start with the read-only diagnostics and dry run:
 
@@ -151,15 +225,20 @@ capture can supply an inferred location when it falls within
 `inference_max_gap_minutes`; otherwise the capture remains available in the
 interface's No-GPS workflow.
 
-## Run the interface
+## Run the server manually
 
-Start the local server:
+For command-line or non-Windows use, configure and bootstrap as described above,
+then start the local server:
 
 ```bash
 uv run geosorter serve
 ```
 
-Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal running;
+press `Ctrl+C` there to stop the server. `serve` does not provide the desktop setup,
+native folder dialogs, tray icon, or **Settings & Help** controls.
+
+## Browse and manage the library
 
 The main interface provides:
 
@@ -220,6 +299,10 @@ proxy.
 
 ## Useful maintenance commands
 
+These commands use the source installation. Prefix each with `uv run` when running
+from the repository. If you normally use the desktop app, pass the configuration
+path shown in **Settings & Help** so the CLI operates on the same library.
+
 | Command | Purpose |
 | --- | --- |
 | `geosorter diagnose-inbox` | Explain why each inbox file would organize, quarantine, or remain in place without changing anything |
@@ -241,7 +324,8 @@ uv run geosorter verify-library --config geosorter.toml
 
 ## Development
 
-Run the backend and Vite development server in separate terminals:
+Complete the source installation and CLI configuration/bootstrap above, then run
+the backend and Vite development server in separate terminals:
 
 ```bash
 uv run geosorter serve
