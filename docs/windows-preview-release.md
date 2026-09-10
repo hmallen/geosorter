@@ -53,6 +53,12 @@ fresh `output/release-build/tools` directory when changing dependencies; the bui
 refuses to combine old and new tool trees. Retain the downloads cache.
 Do not copy development configuration, catalogs, or real media into a bundle.
 
+The Windows workflow prepares the pinned ExifTool and FFmpeg distributions before
+backend tests, adds their folders to the job's PATH, and checks that each tool
+executes. Python dependencies alone do not install these executables. The later
+bundle build reuses the same verified files. To prepare them locally without a full
+build, run `uv run --group release python packaging/build_release.py --prepare-tools-only`.
+
 Desktop launch uses an explicit configuration, then the saved desktop selection,
 then the platform user configuration directory. It ignores shell/cwd config
 discovery. Ordinary CLI commands retain their existing precedence. Both installer

@@ -71,19 +71,8 @@ def licenses(bundle):
     return packages
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--download-only", action="store_true")
-    parser.add_argument("--iscc", type=Path)
-    args = parser.parse_args()
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        list(pool.map(download, MANIFEST["artifacts"]))
-    if args.download_only:
-        return
-    if os.name != "nt":
-        raise RuntimeError("Build Windows releases on Windows.")
-    if (Path(sys.base_prefix) / "conda-meta").exists():
-        raise RuntimeError("Build with standard CPython, not a Conda-backed virtual environment (native DLL collection differs).")
+def prepare_tools():
+    """Extract the pinned complete tool distributions for tests and packaging."""
     for item in MANIFEST["artifacts"]:
         if item["name"] not in ("ffmpeg", "exiftool"):
             continue
@@ -118,6 +107,30 @@ def main():
         actual_files = {p.relative_to(dest) for p in dest.rglob("*") if p.is_file()}
         if actual_files != expected_files:
             raise RuntimeError(f"Unexpected files in {dest}. Build into a fresh tools directory.")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--download-only", action="store_true")
+    mode.add_argument("--prepare-tools-only", action="store_true",
+                      help="Download, verify and extract runtime tools without building the application.")
+    parser.add_argument("--iscc", type=Path)
+    args = parser.parse_args()
+    artifacts = [item for item in MANIFEST["artifacts"]
+                 if not args.prepare_tools_only or item["name"] in ("ffmpeg", "exiftool")]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(download, artifacts))
+    if args.download_only:
+        return
+    if os.name != "nt":
+        raise RuntimeError("Build Windows releases on Windows.")
+    prepare_tools()
+    if args.prepare_tools_only:
+        print(f"Runtime tools prepared: {BUILD / 'tools'}")
+        return
+    if (Path(sys.base_prefix) / "conda-meta").exists():
+        raise RuntimeError("Build with standard CPython, not a Conda-backed virtual environment (native DLL collection differs).")
     subprocess.run([shutil.which("npm.cmd"), "--prefix", "frontend", "ci"], cwd=ROOT, check=True)
     subprocess.run([shutil.which("npm.cmd"), "--prefix", "frontend", "run", "build"], cwd=ROOT, check=True)
     sources = source_inventory()
