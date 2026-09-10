@@ -24,6 +24,7 @@ import type { AltitudeRef, LibraryFeature } from '../types'
 const WORLD: BBox = [-180, -85, 180, 85]
 
 interface Props {
+  onAvailabilityChange?: (available: boolean) => void
   features: LibraryFeature[]
   // Clicking a single capture marker reports its file id so App can open it in the
   // lightbox. A cluster click is handled internally (zoom to expand) and never fires
@@ -70,6 +71,7 @@ interface Props {
 }
 
 export default function MapView({
+  onAvailabilityChange,
   features,
   onMarkerClick,
   onMapClick,
@@ -194,11 +196,13 @@ export default function MapView({
         })
       }
       onLoad={(e: MapEvent) => {
+        onAvailabilityChange?.(true)
         const map = e.target
         mapRef.current = map
         setMapObj(map) // arms the moveend-listener effect above
         syncBounds(map)
       }}
+      onError={() => onAvailabilityChange?.(false)}
       onClick={(e: MapLayerMouseEvent) => onMapClick?.(e.lngLat.lng, e.lngLat.lat)}
       cursor={onMapClick ? 'crosshair' : undefined}
       mapStyle={satellite ? SATELLITE_STYLE : VECTOR_STYLE}

@@ -38,6 +38,17 @@ but displaying the basemap requires an internet connection.
 
 ## Install
 
+Windows desktop preview development and release instructions are in
+[`docs/windows-preview-release.md`](docs/windows-preview-release.md). The desktop
+launcher provides guided first-run setup and opens the interface automatically:
+
+```bash
+uv run geosorter desktop
+```
+
+Build the frontend first when running from source. Installer and ZIP candidates
+bundle their own runtime and media tools; see the release checklist before sharing.
+
 From a clone of this repository:
 
 ```bash

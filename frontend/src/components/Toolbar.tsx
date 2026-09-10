@@ -22,6 +22,8 @@ import {
 } from './icons'
 
 interface ToolbarProps {
+  onDesktopSettings?: () => void
+  reviewInbox?: boolean
   onOpenMarkers: () => void
   // Whether the viewer is an admin (m-implement-view-only-admin-auth). When false the
   // management actions are hidden and only the view-only controls (Locations, the
@@ -60,6 +62,8 @@ interface ToolbarProps {
 }
 
 export default function Toolbar({
+  onDesktopSettings,
+  reviewInbox = false,
   onOpenMarkers,
   admin,
   onDone,
@@ -88,7 +92,7 @@ export default function Toolbar({
   // runs once on mount and the Process Inbox panel opens pre-populated instead of
   // showing a "Scanning inbox…" delay each time.
   const { groups, loading: inboxLoading, error: inboxError, load: loadInbox } = useInboxList()
-  const [picking, setPicking] = useState(false)
+  const [picking, setPicking] = useState(reviewInbox)
 
   useEffect(() => {
     if (admin) loadInbox()
@@ -172,6 +176,7 @@ export default function Toolbar({
           geosorter
         </span>
         <span className="tb-sep" aria-hidden="true" />
+        {onDesktopSettings && <button onClick={onDesktopSettings}>Settings &amp; Help</button>}
         {admin && (
           <>
             <div className="tb-group">

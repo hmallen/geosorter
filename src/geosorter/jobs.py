@@ -305,6 +305,39 @@ class JobManager:
         # JobState so it never leaks into the serialized status response.
         self._job_started: dict[str, float] = {}
         self._lock = threading.Lock()
+        self._task_lock = threading.RLock()
+        self._futures = set()
+
+    def active_jobs(self) -> list[dict]:
+        """Snapshot all pools, including the warm jobs spawned by completed imports."""
+        with self._lock:
+            active = [{"job_id": job.job_id, "kind": name.removeprefix("_").removesuffix("_jobs"),
+                     "state": job.state}
+                    for name in ("_jobs", "_undo_jobs", "_retag_jobs", "_assign_jobs", "_rescan_jobs",
+                                 "_stitch_jobs", "_warm_jobs", "_repair_scan_jobs", "_repair_jobs")
+                    for job in getattr(self, name).values() if job.state in ("pending", "running")]
+
+            with self._task_lock:
+                if not active and any(not future.done() for future in self._futures):
+                    active.append({"job_id": "workers", "kind": "finishing", "state": "running"})
+            return active
+
+    def _submit_task(self, pool, callback, *args, **kwargs):
+        with self._task_lock:
+            future = pool.submit(callback, *args, **kwargs)
+            self._futures.add(future)
+            def finished(done):
+                with self._task_lock:
+                    self._futures.discard(done)
+            future.add_done_callback(finished)
+            return future
+
+    def shutdown(self) -> None:
+        # Imports can enqueue warming at completion: drain that producer first.
+        self._executor.shutdown(wait=True)
+        self._stitch_pool.shutdown(wait=True)
+        self._repair_pool.shutdown(wait=True)
+        self._warm_pool.shutdown(wait=True)
 
     def submit(self, selected_primaries: set[str] | None = None) -> str:
         """Queue a new organize job and return its UUID job id.
@@ -326,7 +359,7 @@ class JobManager:
                 raise WorkerBusy(busy)
             self._jobs[job_id] = JobState(job_id=job_id)
             self._cancels[job_id] = threading.Event()
-        self._executor.submit(self._run, job_id, selected_primaries)
+        self._submit_task(self._executor, self._run, job_id, selected_primaries)
         return job_id
 
     def status(self, job_id: str) -> JobState | None:
@@ -496,7 +529,7 @@ class JobManager:
                 raise WorkerBusy(busy)
             self._undo_jobs[job_id] = UndoJobState(job_id=job_id)
             self._cancels[job_id] = threading.Event()
-        self._executor.submit(self._run_undo, job_id, batch_id)
+        self._submit_task(self._executor, self._run_undo, job_id, batch_id)
         return job_id
 
     def undo_status(self, job_id: str) -> UndoJobState | None:
@@ -544,7 +577,7 @@ class JobManager:
             if busy is not None:
                 raise WorkerBusy(busy)
             self._retag_jobs[job_id] = RetagJobState(job_id=job_id)
-        self._executor.submit(self._run_retag, job_id, file_id, lat, lon)
+        self._submit_task(self._executor, self._run_retag, job_id, file_id, lat, lon)
         return job_id
 
     def retag_status(self, job_id: str) -> RetagJobState | None:
@@ -593,7 +626,7 @@ class JobManager:
             if busy is not None and busy not in self._assign_jobs:
                 raise WorkerBusy(busy)
             self._assign_jobs[job_id] = AssignJobState(job_id=job_id, total=len(ids))
-        self._executor.submit(self._run_assign, job_id, ids, lat, lon)
+        self._submit_task(self._executor, self._run_assign, job_id, ids, lat, lon)
         return job_id
 
     def assign_status(self, job_id: str) -> AssignJobState | None:
@@ -636,7 +669,7 @@ class JobManager:
             if busy is not None:
                 raise WorkerBusy(busy)
             self._rescan_jobs[job_id] = RescanJobState(job_id=job_id)
-        self._executor.submit(self._run_rescan, job_id)
+        self._submit_task(self._executor, self._run_rescan, job_id)
         return job_id
 
     def rescan_status(self, job_id: str) -> RescanJobState | None:
@@ -698,7 +731,7 @@ class JobManager:
         preserve = self._read_stitch_status(file_id) == "ok"
         if not preserve:
             self._mark_stitch_status(file_id, "pending")
-        self._stitch_pool.submit(
+        self._submit_task(self._stitch_pool,
             self._run_stitch, job_id, file_id,
             force=force, projection=projection, preserve=preserve,
         )
@@ -894,7 +927,7 @@ class JobManager:
         job_id = uuid.uuid4().hex
         with self._lock:
             self._warm_jobs[job_id] = WarmJobState(job_id=job_id, batch_id=batch_id)
-        self._warm_pool.submit(self._run_warm, job_id, batch_id)
+        self._submit_task(self._warm_pool, self._run_warm, job_id, batch_id)
         return job_id
 
     def warm_status(self, job_id: str) -> WarmJobState | None:
@@ -939,7 +972,7 @@ class JobManager:
                     return jid
             job_id = uuid.uuid4().hex
             self._repair_scan_jobs[job_id] = RepairScanJobState(job_id=job_id)
-        self._repair_pool.submit(self._run_repair_scan, job_id)
+        self._submit_task(self._repair_pool, self._run_repair_scan, job_id)
         return job_id
 
     def repair_scan_status(self, job_id: str) -> RepairScanJobState | None:
@@ -997,7 +1030,7 @@ class JobManager:
             self._repair_jobs[job_id] = RepairJobState(
                 job_id=job_id, file_id=file_id, reference_id=reference_id
             )
-        self._repair_pool.submit(self._run_repair, job_id, file_id, reference_id)
+        self._submit_task(self._repair_pool, self._run_repair, job_id, file_id, reference_id)
         return job_id
 
     def repair_status(self, job_id: str) -> RepairJobState | None:

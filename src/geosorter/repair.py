@@ -48,6 +48,9 @@ import json
 import os
 import re
 import shutil
+import tempfile
+import hashlib
+import uuid
 import subprocess
 import threading
 import time
@@ -232,29 +235,54 @@ def install_untrunc(dest_dir: Path | str | None = None, *, force: bool = False,
 
     release = fetch_json(UNTRUNC_RELEASE_API)
     asset = select_untrunc_asset(release.get("assets", []))
-    dest.mkdir(parents=True, exist_ok=True)
-    archive = dest / str(asset["name"])
-    fetch_to_file(str(asset["browser_download_url"]), archive, on_bytes)
-
-    exe: Path | None = None
-    try:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="untrunc-stage-", dir=dest.parent) as temporary:
+        stage = Path(temporary)
+        archive = stage / "download.zip"
+        fetch_to_file(str(asset["browser_download_url"]), archive, on_bytes)
+        if asset.get("size") and archive.stat().st_size != int(asset["size"]):
+            raise RuntimeError("The video repair download was incomplete. Please retry.")
+        expected = str(asset.get("digest", ""))
+        if expected.startswith("sha256:"):
+            with archive.open("rb") as source:
+                if hashlib.file_digest(source, "sha256").hexdigest() != expected[7:]:
+                    raise RuntimeError("The video repair download checksum did not match. Please retry.")
+        exe: Path | None = None
+        names = set()
         with zipfile.ZipFile(archive) as z:
             for info in z.infolist():
                 if info.is_dir():
                     continue
                 # Flatten the zip's untrunc_x64/ folder; taking only the basename
                 # also makes any zip-slip path in the archive inert.
-                target = dest / Path(info.filename).name
+                name = Path(info.filename).name
+                if name.lower() in names or name.lower() == "download.zip":
+                    raise RuntimeError("The video repair archive contains conflicting filenames.")
+                names.add(name.lower())
+                target = stage / name
                 with z.open(info) as src, open(target, "wb") as out:
                     shutil.copyfileobj(src, out)
                 if target.name.lower() == "untrunc.exe":
                     exe = target
-    finally:
         archive.unlink(missing_ok=True)
-
-    if exe is None:
-        raise RuntimeError(f"{asset['name']} did not contain untrunc.exe")
-    verify(exe)
+        if exe is None:
+            raise RuntimeError(f"{asset['name']} did not contain untrunc.exe")
+        verify(exe)
+        backup = dest.with_name(dest.name + ".previous")
+        if backup.exists():
+            # Preserve a previous recovery copy; never remove an unknown directory.
+            backup = dest.with_name(dest.name + ".previous-" + uuid.uuid4().hex[:12])
+        moved_old = False
+        try:
+            if dest.exists():
+                dest.rename(backup)
+                moved_old = True
+            stage.rename(dest)
+        except OSError:
+            if moved_old and not dest.exists():
+                backup.rename(dest)
+            raise
+    exe = dest / exe.name
     return InstallResult(
         exe_path=exe, asset_name=str(asset["name"]),
         size=int(asset.get("size", 0)), release_tag=str(release.get("tag_name", "")),

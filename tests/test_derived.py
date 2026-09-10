@@ -980,6 +980,9 @@ def test_evict_local_cache_tolerates_vanished_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "stat", flaky_stat)
     res = derived.evict_local_cache(cache_root, max_gb=1.5 / 1024)  # no crash
+    # Restore the real stat before asserting physical existence (Python 3.13's
+    # exists() calls stat, which the test deliberately made fail above).
+    monkeypatch.setattr(Path, "stat", real_stat)
     # f0 was never collected (stat raised); f1/f2 (2 MiB) evict down toward 1.5 MiB.
     assert files[0].exists()  # the "vanished"-at-stat file was simply skipped
     assert res.deleted >= 1

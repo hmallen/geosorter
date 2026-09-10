@@ -85,7 +85,7 @@ function quarantineToFeature(item: QuarantineItem): LibraryFeature {
   }
 }
 
-export default function App() {
+export default function App({ onDesktopSettings, reviewInbox = false }: { onDesktopSettings?: () => void; reviewInbox?: boolean }) {
   // Admin gate (m-implement-view-only-admin-auth): isAdmin is true when no password
   // is configured (open app) or the user has logged in. The management controls below
   // are passed down only when isAdmin, so a view-only viewer never sees them.
@@ -99,6 +99,7 @@ export default function App() {
   // Current map viewport bounds, lifted from MapView (null until the map's first
   // onLoad). The side panel always lists the captures inside these bounds.
   const [bounds, setBounds] = useState<BBox | null>(null)
+  const [mapAvailable, setMapAvailable] = useState(true)
   // The lightbox snapshots the file list it was opened against, so panning the map
   // (which live-updates panelFiles) can't shift its index onto a different file or
   // out of range while it is open.
@@ -324,8 +325,8 @@ export default function App() {
   // so an unrelated re-render keeps a stable `files` identity for the virtualized
   // grid, and so a pan that doesn't move the settled bounds doesn't re-filter.
   const panelFiles = useMemo(
-    () => (bounds ? featuresInBounds(visible, bounds) : []),
-    [visible, bounds],
+    () => (onDesktopSettings && (!bounds || !mapAvailable) ? visible : bounds ? featuresInBounds(visible, bounds) : []),
+    [visible, bounds, mapAvailable, onDesktopSettings],
   )
 
   // Clicking a video marker opens its complete inferred flight, including members
@@ -478,6 +479,8 @@ export default function App() {
   return (
     <div className="app">
       <Toolbar
+        onDesktopSettings={onDesktopSettings}
+        reviewInbox={reviewInbox}
         admin={isAdmin}
         onDone={handleChanged}
         stitchTargets={panoramaTargets}
@@ -495,7 +498,9 @@ export default function App() {
         onToggleFavorites={() => setFavoritesOnly((v) => !v)}
         favoritesOn={favoritesOnly}
       />
+      {onDesktopSettings && !mapAvailable && <div className="desktop-map-note" role="status">The map background is unavailable. You can still browse your media in the file list.</div>}
       <MapView
+        onAvailabilityChange={onDesktopSettings ? setMapAvailable : undefined}
         features={visible}
         onMarkerClick={placing ? undefined : openInLightbox}
         onMapClick={onMapClick}
