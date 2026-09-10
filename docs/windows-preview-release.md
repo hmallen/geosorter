@@ -19,6 +19,24 @@ The app stays running when the browser closes. Quit waits for active jobs; no
 media operation is forcibly terminated. Relaunching opens the existing instance.
 Application updates are installed manually from the releases page.
 
+### Detailed-place installation status in 0.2.2
+
+Extras now shows **Detailed places are installed and ready to use** and a disabled
+**Installed** button when parks, peaks and lakes exist in the active place database.
+This also recognizes data prepared with older previews, survives restart and other
+Extras jobs, and does not require another download after updating. Repeated setup
+requests return without starting another job or rebuilding library resources.
+
+An empty detailed-place source is reported as a failed installation and remains
+retryable; a failed refresh leaves previously installed data and its status intact.
+City-only refreshes preserve existing detailed places. CLI bootstrap remains
+available for deliberate data refreshes.
+
+Validation: 736 backend tests passed (4 skipped), 361 frontend tests passed, lint
+and production build passed with existing warnings. Browser checks verified the
+completion transition, disabled repeat action, and persistence after refresh;
+desktop and narrow layouts were visually inspected with synthetic place fixtures.
+
 ### Video repair certificate error in 0.2.0
 
 If Extras reports `CERTIFICATE_VERIFY_FAILED: unable to get local issuer

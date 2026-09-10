@@ -35,7 +35,7 @@ export interface DesktopStatus {
   job: DesktopJob | null
   active_jobs: { job_id: string; kind: string; state: string }[]
   auth_required: boolean
-  extras: { hugin: boolean; hugin_message?: string | null; untrunc: boolean }
+  extras: { hugin: boolean; hugin_message?: string | null; untrunc: boolean; detailed_places: boolean }
 }
 
 export async function desktopRequest<T>(route: string, body?: unknown): Promise<T> {

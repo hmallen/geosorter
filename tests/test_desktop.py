@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import threading
 from pathlib import Path
@@ -143,6 +144,100 @@ def test_bootstrap_failure_preserves_database(paths, monkeypatch):
         bootstrap.run(cfg, source=FIXTURES)
     assert cfg.geonames_db_path.read_bytes() == original
     assert bootstrap.ready(cfg.geonames_db_path)
+
+
+@pytest.fixture
+def detailed_source(paths):
+    source = paths / "place-source"
+    shutil.copytree(FIXTURES, source)
+    shutil.copy2(source / "allCountries_sample.txt", source / "allCountries.txt")
+    return source
+
+
+def test_detailed_places_completion_survives_other_jobs_and_restart(paths, detailed_source):
+    c = controller(paths, bootstrap_fn=lambda cfg, **kw: bootstrap.run(
+        cfg, source=detailed_source, features=kw["features"]))
+    configure(c, paths)
+    bootstrap.run(c.cfg, source=FIXTURES)
+    assert not c.snapshot()["extras"]["detailed_places"]
+    c.start_job("features")
+    c.worker.join(10)
+    assert c.job["state"] == "done"
+    assert c.snapshot()["extras"]["detailed_places"]
+    library, worker, job = c.library, c.worker, dict(c.job)
+    web = client(c)
+    login_desktop(web, c)
+    response = web.post("/api/desktop/jobs", json={"kind": "features"})
+    assert response.status_code == 200
+    assert response.json() == {"already_installed": True}
+    assert c.library is library and c.worker is worker and c.job == job
+    # The latest setup job is a different Extra; completion must follow the DB.
+    c.job = {"job_id": "other", "kind": "untrunc", "state": "done", "phase": "done"}
+    c._persist_job()
+    finish(c)
+    reopened = controller(paths)
+    try:
+        assert reopened.snapshot()["extras"]["detailed_places"]
+        assert reopened.start_job("features") == {"already_installed": True}
+        assert reopened.job["kind"] == "untrunc"
+    finally:
+        finish(reopened)
+
+
+def test_existing_detailed_database_recognized_without_setup_history(paths, detailed_source):
+    c = controller(paths)
+    configure(c, paths)
+    geonames_loader.load(c.cfg.geonames_db_path, detailed_source, features=True)
+    try:
+        c.recheck()
+        assert c.job is None
+        assert c.snapshot()["extras"]["detailed_places"]
+    finally:
+        finish(c)
+
+
+def test_empty_detailed_download_fails_and_can_retry(paths, detailed_source):
+    feature_file = detailed_source / "allCountries.txt"
+    valid = feature_file.read_bytes()
+    feature_file.write_text("")
+    c = controller(paths, bootstrap_fn=lambda cfg, **kw: bootstrap.run(
+        cfg, source=detailed_source, features=kw["features"]))
+    configure(c, paths)
+    bootstrap.run(c.cfg, source=FIXTURES)
+    original = c.cfg.geonames_db_path.read_bytes()
+    c.start_job("features")
+    c.worker.join(10)
+    assert c.job["state"] == "error"
+    assert "no usable" in c.job["message"]
+    assert not c.snapshot()["extras"]["detailed_places"]
+    assert c.cfg.geonames_db_path.read_bytes() == original
+    feature_file.write_bytes(valid)
+    c.start_job("features")
+    c.worker.join(10)
+    assert c.job["state"] == "done"
+    assert c.snapshot()["extras"]["detailed_places"]
+    finish(c)
+
+
+def test_failed_detailed_refresh_preserves_installed_status(paths, detailed_source):
+    cfg = config.load()
+    bootstrap.run(cfg, source=detailed_source, features=True)
+    original = cfg.geonames_db_path.read_bytes()
+    (detailed_source / "allCountries.txt").write_text("")
+    with pytest.raises(ValueError, match="no usable"):
+        bootstrap.run(cfg, source=detailed_source, features=True)
+    assert cfg.geonames_db_path.read_bytes() == original
+    assert bootstrap.features_ready(cfg.geonames_db_path)
+    bootstrap.run(cfg, source=FIXTURES)
+    assert bootstrap.features_ready(cfg.geonames_db_path)  # city refresh retains details
+
+
+def test_missing_or_invalid_detailed_database_is_not_installed(paths):
+    missing = paths / "missing.db"
+    assert not bootstrap.features_ready(missing)
+    assert not missing.exists()
+    missing.write_bytes(b"invalid database")
+    assert not bootstrap.features_ready(missing)
 
 
 def test_duplicate_job_and_quit_drain(paths):

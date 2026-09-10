@@ -4,4 +4,4 @@ Phase 0a foundations: configuration, the SQLite index + GeoNames databases,
 and the GeoNames cities bootstrap loader.
 """
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"

@@ -1,5 +1,8 @@
 Windows preview candidate for GeoSorter first-run setup.
 
+- Version 0.2.2 shows when detailed places are installed and prevents repeat
+  downloads. Existing detailed-place databases are recognized without downloading
+  again, including after restarting GeoSorter or installing another optional tool.
 - Version 0.2.1 fixes video-repair downloads on fresh Windows installations by
   loading the bundled trusted certificates alongside the Windows certificate store.
 - Open GeoSorter from the Start Menu or extract the ZIP and run GeoSorter.exe.

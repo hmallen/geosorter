@@ -179,6 +179,7 @@ class DesktopController:
                     "job": self.job, "active_jobs": self.active(),
                     "auth_required": bool(cfg and cfg.admin_password_hash),
                     "extras": {"hugin": self.hugin_ready, "hugin_message": self.hugin_message,
+                               "detailed_places": bool(geo and bootstrap.features_ready(cfg.geonames_db_path)),
                                "untrunc": bool(cfg and repair.find_untrunc(cfg.untrunc_path))}}
 
     def authorize(self, request):
@@ -257,6 +258,8 @@ class DesktopController:
             self.ensure_idle()
             if not self.cfg or not self.cfg.library_root:
                 raise ValueError("Choose your folders first.")
+            if kind == "features" and bootstrap.ready(self.cfg.geonames_db_path) and bootstrap.features_ready(self.cfg.geonames_db_path):
+                return {"already_installed": True}
             self.unload()
             self.job = {"job_id": uuid.uuid4().hex, "kind": kind, "state": "pending",
                         "phase": "preparing", "current": "", "done": 0, "total": 0, "message": None}

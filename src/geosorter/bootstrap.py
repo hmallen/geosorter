@@ -24,6 +24,26 @@ def ready(path: Path) -> bool:
         return False
 
 
+def features_ready(path: Path) -> bool:
+    """Detect installed detailed places, including databases from older previews.
+
+    Read the active database rather than the latest job or a browser flag: another
+    optional-tool job, a restart, or a failed staging refresh must not lose this.
+    """
+    if not path.is_file():
+        return False
+    codes = sorted(geonames_loader.DEFAULT_FEATURE_CODES)
+    placeholders = ",".join("?" for _ in codes)
+    try:
+        with closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as conn:
+            return conn.execute(
+                "SELECT 1 FROM geonames WHERE feature_class IN ('L', 'T', 'H') "
+                f"AND feature_code IN ({placeholders}) LIMIT 1", codes,
+            ).fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
 def run(cfg, *, config_path=None, source: Path | None = None, features=False, progress=None) -> dict:
     def report(phase, current="", done=0, total=0):
         if progress:
@@ -62,6 +82,8 @@ def run(cfg, *, config_path=None, source: Path | None = None, features=False, pr
         report("indexing")
         counts = geonames_loader.load(stage, source, spatial_index=effective, features=features)
         report("validating")
+        if features and not features_ready(stage):
+            raise ValueError("Detailed place data contains no usable parks, peaks or lakes. Please retry.")
         with closing(sqlite3.connect(stage)) as conn:
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or not ready(stage):
                 raise ValueError("Downloaded place data failed validation. Please retry.")
